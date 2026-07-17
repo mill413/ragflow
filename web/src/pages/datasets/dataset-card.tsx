@@ -37,8 +37,13 @@ export function DatasetCard({
       }
       sharedBadge={
         <SharedBadge>
-          {dataset.workspace_name || dataset.nickname}
-          {dataset.creator_name ? ` · ${dataset.creator_name}` : ''}
+          {dataset.workspace_type === 'team'
+            ? t('knowledgeList.teamWorkspace', {
+                name: dataset.workspace_name || dataset.nickname,
+              })
+            : t('knowledgeList.personalWorkspace', {
+                name: dataset.creator_name || dataset.nickname,
+              })}
         </SharedBadge>
       }
       onClick={navigateToDataset(dataset.id)}
