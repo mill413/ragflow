@@ -236,7 +236,7 @@ class UserServiceMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         # find tenants
         usr = user_list[0]
-        tenants = TenantService.get_joined_tenants_by_user_id(usr.id)
+        tenants = TenantService.list_accessible_by_user_id(usr.id)
         tenant_ids = [m["tenant_id"] for m in tenants]
         # filter permitted kb and owned kb
         return KnowledgebaseService.get_all_kb_by_tenant_ids(tenant_ids, usr.id)
@@ -251,7 +251,7 @@ class UserServiceMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         # find tenants
         usr = user_list[0]
-        tenants = TenantService.get_joined_tenants_by_user_id(usr.id)
+        tenants = TenantService.list_accessible_by_user_id(usr.id)
         tenant_ids = [m["tenant_id"] for m in tenants]
         # filter permitted agents and owned agents
         res = UserCanvasService.get_all_agents_by_tenant_ids(tenant_ids, usr.id)
@@ -264,7 +264,7 @@ class UserServiceMgr:
             raise UserNotFoundError(email)
         user: Any = users[0]
 
-        tenants: list[dict[str, Any]] = UserTenantService.get_tenants_by_user_id(user.id)
+        tenants: list[dict[str, Any]] = UserTenantService.list_memberships_by_user_id(user.id)
         return tenants
 
 

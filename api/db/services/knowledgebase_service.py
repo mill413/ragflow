@@ -511,7 +511,7 @@ class KnowledgebaseService(CommonService):
         if kb.permission != TenantPermission.TEAM.value:
             return False
 
-        joined_tenants = TenantService.get_joined_tenants_by_user_id(user_id)
+        joined_tenants = TenantService.list_accessible_by_user_id(user_id)
         return any(tenant["tenant_id"] == kb.tenant_id for tenant in joined_tenants)
 
     @classmethod

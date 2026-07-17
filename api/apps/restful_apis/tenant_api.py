@@ -156,7 +156,7 @@ async def rm(tenant_id):
 @login_required
 def tenant_list():
     try:
-        users = UserTenantService.get_tenants_by_user_id(current_user.id)
+        users = UserTenantService.list_memberships_by_user_id(current_user.id)
         for user in users:
             user["delta_seconds"] = delta_seconds(str(user["update_date"]))
         return get_json_result(data=users)

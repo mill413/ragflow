@@ -397,7 +397,7 @@ def _load_agents_app(monkeypatch, *, target="rest"):
 
     class _StubTenantService:
         @staticmethod
-        def get_joined_tenants_by_user_id(_tenant_id):
+        def list_accessible_by_user_id(_tenant_id):
             return []
 
     class _StubUserService:
@@ -509,7 +509,7 @@ def _assert_bad_request(res, expected_substring):
 def test_agents_crud_unit_branches(monkeypatch):
     module = _load_agents_app(monkeypatch)
 
-    monkeypatch.setattr(module.TenantService, "get_joined_tenants_by_user_id", lambda _tenant_id: [])
+    monkeypatch.setattr(module.TenantService, "list_accessible_by_user_id", lambda _tenant_id: [])
     monkeypatch.setattr(
         module,
         "request",

@@ -404,7 +404,7 @@ def list_datasets(tenant_id: str, args: dict):
     if ext_fields.get("owner_ids", []):
         tenant_ids = ext_fields["owner_ids"]
     else:
-        tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
+        tenants = TenantService.list_accessible_by_user_id(tenant_id)
         tenant_ids = [m["tenant_id"] for m in tenants]
     kbs, total = KnowledgebaseService.get_list(tenant_ids, tenant_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
     users = UserService.get_by_ids([m["tenant_id"] for m in kbs])
@@ -591,7 +591,7 @@ def list_tags(dataset_id: str, tenant_id: str):
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
         return False, "No authorization."
 
-    tenants = UserTenantService.get_tenants_by_user_id(tenant_id)
+    tenants = UserTenantService.list_memberships_by_user_id(tenant_id)
     tags = []
     for tenant in tenants:
         tags += settings.retriever.all_tags(tenant["tenant_id"], [dataset_id])

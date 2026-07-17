@@ -809,7 +809,7 @@ def _load_agent_api_module(monkeypatch):
     )
 
     user_service_mod = ModuleType("api.db.services.user_service")
-    user_service_mod.TenantService = SimpleNamespace(get_joined_tenants_by_user_id=lambda *_args, **_kwargs: [])
+    user_service_mod.TenantService = SimpleNamespace(list_accessible_by_user_id=lambda *_args, **_kwargs: [])
     user_service_mod.UserService = SimpleNamespace(get_by_id=lambda *_args, **_kwargs: (False, None))
     user_service_mod.UserTenantService = SimpleNamespace(query=lambda **_kwargs: [])
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
@@ -2325,7 +2325,7 @@ def _load_chat_api_module(monkeypatch):
     user_svc_mod = ModuleType("api.db.services.user_service")
     user_svc_mod.TenantService = SimpleNamespace(
         get_by_id=lambda _id: (True, SimpleNamespace(id=_id, llm_id="chat-model")),
-        get_joined_tenants_by_user_id=lambda _id: [],
+        list_accessible_by_user_id=lambda _id: [],
     )
     user_svc_mod.UserTenantService = SimpleNamespace(query=lambda **_k: [])
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_svc_mod)

@@ -685,7 +685,7 @@ def list_agents(tenant_id):
     items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 0)))
     order_by = request.args.get("orderby", "create_time")
     desc = str(request.args.get("desc", "true")).lower() != "false"
-    tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
+    tenants = TenantService.list_accessible_by_user_id(tenant_id)
     authorized_owner_ids = {member["tenant_id"] for member in tenants}
     authorized_owner_ids.add(tenant_id)
 
@@ -724,7 +724,7 @@ def list_agents(tenant_id):
 def list_agent_tags(tenant_id):
     """Aggregate tag usage counts across agents visible to the caller."""
     canvas_category = request.args.get("canvas_category")
-    tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
+    tenants = TenantService.list_accessible_by_user_id(tenant_id)
     joined_ids = list({member["tenant_id"] for member in tenants} | {tenant_id})
     counts = UserCanvasService.list_tags(joined_ids, tenant_id, canvas_category)
     logging.info(

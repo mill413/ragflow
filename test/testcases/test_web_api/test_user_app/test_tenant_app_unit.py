@@ -125,7 +125,7 @@ def _load_tenant_module(monkeypatch):
             return True
 
         @staticmethod
-        def get_tenants_by_user_id(_user_id):
+        def list_memberships_by_user_id(_user_id):
             return []
 
         @staticmethod
@@ -288,7 +288,7 @@ def test_rm_and_tenant_list_matrix_unit(monkeypatch):
 
     monkeypatch.setattr(
         module.UserTenantService,
-        "get_tenants_by_user_id",
+        "list_memberships_by_user_id",
         lambda _user_id: [{"id": "tenant-1", "update_date": "2024-01-01 00:00:00"}],
     )
     monkeypatch.setattr(module, "delta_seconds", lambda _value: 9)
@@ -296,7 +296,7 @@ def test_rm_and_tenant_list_matrix_unit(monkeypatch):
     assert res["code"] == 0, res
     assert res["data"][0]["delta_seconds"] == 9, res
 
-    monkeypatch.setattr(module.UserTenantService, "get_tenants_by_user_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("tenant boom")))
+    monkeypatch.setattr(module.UserTenantService, "list_memberships_by_user_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("tenant boom")))
     res = module.tenant_list()
     assert res["code"] == 100, res
     assert "tenant boom" in res["message"], res

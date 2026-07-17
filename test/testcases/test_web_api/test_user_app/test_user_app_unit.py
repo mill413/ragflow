@@ -255,8 +255,8 @@ def _load_user_app(monkeypatch):
             return True, SimpleNamespace(id=_tenant_id)
 
         @staticmethod
-        def get_info_by(_user_id):
-            return []
+        def get_personal_by_user_id(_user_id):
+            return None
 
         @staticmethod
         def update_by_id(_tenant_id, _payload):
@@ -832,7 +832,7 @@ def test_registration_helpers_and_register_route_matrix_unit(monkeypatch):
 def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     module = _load_user_app(monkeypatch)
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", lambda _uid: [])
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", lambda _uid: None)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.DATA_ERROR, res
     assert "Tenant not found" in res["message"], res
@@ -840,7 +840,7 @@ def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     def _raise_tenant_info(_uid):
         raise RuntimeError("tenant info boom")
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", _raise_tenant_info)
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", _raise_tenant_info)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.EXCEPTION_ERROR, res
     assert "tenant info boom" in res["message"], res

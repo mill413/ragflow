@@ -311,7 +311,7 @@ def _load_dataset_module(monkeypatch):
             return True, SimpleNamespace(embd_id="embd-default")
 
         @staticmethod
-        def get_joined_tenants_by_user_id(_tenant_id):
+        def list_accessible_by_user_id(_tenant_id):
             return [{"tenant_id": "tenant-1"}]
 
     class _StubUserService:
@@ -321,7 +321,7 @@ def _load_dataset_module(monkeypatch):
 
     class _StubUserTenantService:
         @staticmethod
-        def get_tenants_by_user_id(_user_id):
+        def list_memberships_by_user_id(_user_id):
             return []
 
     user_service_mod.TenantService = _StubTenantService

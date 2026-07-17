@@ -137,7 +137,7 @@ def _load_tenant_module(monkeypatch):
             return True
 
         @staticmethod
-        def get_tenants_by_user_id(_user_id):
+        def list_memberships_by_user_id(_user_id):
             return []
 
         @staticmethod
@@ -300,7 +300,7 @@ def test_rm_and_tenant_list_matrix_unit(monkeypatch):
 
     monkeypatch.setattr(
         module.UserTenantService,
-        "get_tenants_by_user_id",
+        "list_memberships_by_user_id",
         lambda _user_id: [{"id": "tenant-1", "update_date": "2024-01-01 00:00:00"}],
     )
     monkeypatch.setattr(module, "delta_seconds", lambda _value: 9)
@@ -308,7 +308,7 @@ def test_rm_and_tenant_list_matrix_unit(monkeypatch):
     assert res["code"] == 0, res
     assert res["data"][0]["delta_seconds"] == 9, res
 
-    monkeypatch.setattr(module.UserTenantService, "get_tenants_by_user_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("tenant boom")))
+    monkeypatch.setattr(module.UserTenantService, "list_memberships_by_user_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("tenant boom")))
     res = module.tenant_list()
     assert res["code"] == 100, res
     assert "tenant boom" in res["message"], res
@@ -391,9 +391,6 @@ class _DummyUser:
 
     def to_dict(self):
         return {"id": self.id, "email": self.email}
-
-    def to_safe_dict(self, **_kwargs):
-        return self.to_dict()
 
     def to_safe_dict(self, *, for_self: bool = False):
         _sensitive = {"password", "access_token", "email"}
@@ -531,8 +528,8 @@ def _load_user_app(monkeypatch):
             return True, SimpleNamespace(id=_tenant_id)
 
         @staticmethod
-        def get_info_by(_user_id):
-            return []
+        def get_personal_by_user_id(_user_id):
+            return None
 
         @staticmethod
         def update_by_id(_tenant_id, _payload):
@@ -1107,7 +1104,7 @@ def test_registration_helpers_and_register_route_matrix_unit(monkeypatch):
 def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     module = _load_user_app(monkeypatch)
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", lambda _uid: [])
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", lambda _uid: None)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.DATA_ERROR, res
     assert "Tenant not found" in res["message"], res
@@ -1115,7 +1112,7 @@ def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     def _raise_tenant_info(_uid):
         raise RuntimeError("tenant info boom")
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", _raise_tenant_info)
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", _raise_tenant_info)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.EXCEPTION_ERROR, res
     assert "tenant info boom" in res["message"], res
@@ -1540,7 +1537,7 @@ def _load_chat_routes_unit_module(monkeypatch):
         (),
         {
             "get_by_id": staticmethod(lambda _tenant_id: (True, SimpleNamespace(llm_id="glm-4", tenant_llm_id="tenant-llm-id"))),
-            "get_joined_tenants_by_user_id": staticmethod(lambda _user_id: [{"tenant_id": "tenant-1"}, {"tenant_id": "team-tenant-2"}]),
+            "list_accessible_by_user_id": staticmethod(lambda _user_id: [{"tenant_id": "tenant-1"}, {"tenant_id": "team-tenant-2"}]),
         },
     )
     user_service_mod.UserTenantService = type("UserTenantService", (), {"query": staticmethod(lambda **_kwargs: [])})

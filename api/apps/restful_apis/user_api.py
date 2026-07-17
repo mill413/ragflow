@@ -586,10 +586,10 @@ async def tenant_info():
               description: Embedding model ID.
     """
     try:
-        tenants = TenantService.get_info_by(current_user.id)
-        if not tenants:
+        tenant = TenantService.get_personal_by_user_id(current_user.id)
+        if not tenant:
             return get_data_error_result(message="Tenant not found!")
-        return get_json_result(data=tenants[0])
+        return get_json_result(data=tenant)
     except Exception as e:
         return server_error_response(e)
 

@@ -190,7 +190,38 @@ class TenantService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def get_info_by(cls, user_id):
+    def get_personal_by_user_id(cls, user_id):
+        fields = [
+            cls.model.id.alias("tenant_id"),
+            cls.model.name,
+            cls.model.llm_id,
+            cls.model.tenant_llm_id,
+            cls.model.embd_id,
+            cls.model.tenant_embd_id,
+            cls.model.rerank_id,
+            cls.model.tenant_rerank_id,
+            cls.model.asr_id,
+            cls.model.tenant_asr_id,
+            cls.model.img2txt_id,
+            cls.model.tenant_img2txt_id,
+            cls.model.tts_id,
+            cls.model.tenant_tts_id,
+            cls.model.ocr_id,
+            cls.model.tenant_ocr_id,
+            cls.model.parser_ids,
+            UserTenant.role,
+        ]
+        return (
+            cls.model.select(*fields)
+            .join(UserTenant, on=((cls.model.id == UserTenant.tenant_id) & (UserTenant.user_id == user_id) & (UserTenant.status == StatusEnum.VALID.value) & (UserTenant.role == UserTenantRole.OWNER)))
+            .where((cls.model.id == user_id) & (cls.model.status == StatusEnum.VALID.value))
+            .dicts()
+            .first()
+        )
+
+    @classmethod
+    @DB.connection_context()
+    def list_accessible_by_user_id(cls, user_id):
         fields = [
             cls.model.id.alias("tenant_id"),
             cls.model.name,
@@ -213,21 +244,12 @@ class TenantService(CommonService):
         ]
         return list(
             cls.model.select(*fields)
-            .join(UserTenant, on=((cls.model.id == UserTenant.tenant_id) & (UserTenant.user_id == user_id) & (UserTenant.status == StatusEnum.VALID.value) & (UserTenant.role == UserTenantRole.OWNER)))
-            .where(cls.model.status == StatusEnum.VALID.value)
-            .dicts()
-        )
-
-    @classmethod
-    @DB.connection_context()
-    def get_joined_tenants_by_user_id(cls, user_id):
-        fields = [cls.model.id.alias("tenant_id"), cls.model.name, cls.model.llm_id, cls.model.embd_id, cls.model.asr_id, cls.model.img2txt_id, UserTenant.role]
-        return list(
-            cls.model.select(*fields)
-            .join(
-                UserTenant, on=((cls.model.id == UserTenant.tenant_id) & (UserTenant.user_id == user_id) & (UserTenant.status == StatusEnum.VALID.value) & (UserTenant.role == UserTenantRole.NORMAL))
+            .join(UserTenant, on=((cls.model.id == UserTenant.tenant_id) & (UserTenant.user_id == user_id) & (UserTenant.status == StatusEnum.VALID.value)))
+            .where(
+                (cls.model.status == StatusEnum.VALID.value)
+                & (UserTenant.role.in_([UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL]))
             )
-            .where(cls.model.status == StatusEnum.VALID.value)
+            .order_by((cls.model.id == user_id).desc(), cls.model.name.asc())
             .dicts()
         )
 
@@ -307,32 +329,62 @@ class UserTenantService(CommonService):
         ]
         return list(
             cls.model.select(*fields)
-            .join(User, on=((cls.model.user_id == User.id) & (cls.model.status == StatusEnum.VALID.value) & (cls.model.role != UserTenantRole.OWNER)))
-            .where(cls.model.tenant_id == tenant_id)
+            .join(User, on=(cls.model.user_id == User.id))
+            .where(
+                (cls.model.tenant_id == tenant_id)
+                & (cls.model.status == StatusEnum.VALID.value)
+                & (User.status == StatusEnum.VALID.value)
+            )
             .dicts()
         )
 
     @classmethod
     @DB.connection_context()
-    def get_tenants_by_user_id(cls, user_id):
-        fields = [cls.model.tenant_id, cls.model.role, User.nickname, User.email, User.avatar, User.update_date]
-        return list(
+    def list_memberships_by_user_id(cls, user_id):
+        fields = [
+            cls.model.id,
+            cls.model.tenant_id,
+            cls.model.role,
+            cls.model.invited_by,
+            cls.model.status,
+            Tenant.name,
+            Tenant.name.alias("nickname"),
+            Tenant.update_date,
+        ]
+        memberships = list(
             cls.model.select(*fields)
-            .join(User, on=((cls.model.tenant_id == User.id) & (UserTenant.user_id == user_id) & (UserTenant.status == StatusEnum.VALID.value)))
-            .where(cls.model.status == StatusEnum.VALID.value)
+            .join(Tenant, on=(cls.model.tenant_id == Tenant.id))
+            .where(
+                (cls.model.user_id == user_id)
+                & (cls.model.status == StatusEnum.VALID.value)
+                & (Tenant.status == StatusEnum.VALID.value)
+            )
+            .order_by(Tenant.name.asc())
             .dicts()
         )
+        for membership in memberships:
+            membership["email"] = ""
+            membership["avatar"] = ""
+        return memberships
 
     @classmethod
     @DB.connection_context()
     def get_user_tenant_relation_by_user_id(cls, user_id):
         fields = [cls.model.id, cls.model.user_id, cls.model.tenant_id, cls.model.role]
-        return list(cls.model.select(*fields).where(cls.model.user_id == user_id).dicts().dicts())
+        return list(cls.model.select(*fields).where((cls.model.user_id == user_id) & (cls.model.status == StatusEnum.VALID.value)).dicts())
 
     @classmethod
     @DB.connection_context()
-    def get_num_members(cls, user_id: str):
-        cnt_members = cls.model.select(peewee.fn.COUNT(cls.model.id)).where(cls.model.tenant_id == user_id).scalar()
+    def get_num_members(cls, tenant_id: str):
+        cnt_members = (
+            cls.model.select(peewee.fn.COUNT(cls.model.id))
+            .where(
+                (cls.model.tenant_id == tenant_id)
+                & (cls.model.status == StatusEnum.VALID.value)
+                & (cls.model.role.in_([UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL]))
+            )
+            .scalar()
+        )
         return cnt_members
 
     @classmethod

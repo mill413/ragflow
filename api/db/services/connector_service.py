@@ -79,7 +79,7 @@ class ConnectorService(CommonService):
 
         from api.db.services.user_service import TenantService
 
-        joined_tenants = TenantService.get_joined_tenants_by_user_id(user_id)
+        joined_tenants = TenantService.list_accessible_by_user_id(user_id)
         has_access = any(tenant["tenant_id"] == connector.tenant_id for tenant in joined_tenants)
         if not has_access:
             LOGGER.warning(
