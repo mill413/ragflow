@@ -35,7 +35,7 @@ export function DatasetCard({
           </DatasetDropdown>
         ) : undefined
       }
-      sharedBadge={
+      icon={
         <SharedBadge>
           {dataset.workspace_type === 'team'
             ? t('knowledgeList.teamWorkspace', {
