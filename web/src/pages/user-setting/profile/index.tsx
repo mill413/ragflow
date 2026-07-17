@@ -1,4 +1,6 @@
+// src/components/ProfilePage.tsx
 import { AvatarUpload } from '@/components/avatar-upload';
+import PasswordInput from '@/components/originui/password-input';
 import { SelectWithSearch } from '@/components/originui/select-with-search';
 import Spotlight from '@/components/spotlight';
 import { Button } from '@/components/ui/button';
@@ -46,6 +48,46 @@ const baseSchema = z.object({
     .min(1, { message: t('setting.timezonePlaceholder') }),
 });
 
+const nameSchema = baseSchema.extend({
+  currPasswd: z.string().optional(),
+  newPasswd: z.string().optional(),
+  confirmPasswd: z.string().optional(),
+});
+
+const passwordSchema = baseSchema
+  .extend({
+    currPasswd: z
+      .string({
+        required_error: t('setting.currentPasswordMessage'),
+      })
+      .trim(),
+    newPasswd: z
+      .string({
+        required_error: t('setting.newPasswordMessage'),
+      })
+      .trim()
+      .min(8, { message: t('setting.newPasswordDescription') }),
+    confirmPasswd: z
+      .string({
+        required_error: t('setting.confirmPasswordMessage'),
+      })
+      .trim()
+      .min(8, { message: t('setting.newPasswordDescription') }),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.newPasswd &&
+      data.confirmPasswd &&
+      data.newPasswd !== data.confirmPasswd
+    ) {
+      ctx.addIssue({
+        path: ['confirmPasswd'],
+        message: t('setting.confirmPasswordNonMatchMessage'),
+        code: z.ZodIssueCode.custom,
+      });
+    }
+  });
+
 const ProfilePage: FC = () => {
   const { t } = useTranslate('setting');
 
@@ -61,16 +103,31 @@ const ProfilePage: FC = () => {
     handleAvatarUpload,
   } = useProfile();
 
-  const form = useForm<z.infer<typeof baseSchema>>({
-    resolver: zodResolver(baseSchema),
+  const form = useForm<z.infer<typeof baseSchema | typeof passwordSchema>>({
+    resolver: zodResolver(
+      editType === EditType.editPassword ? passwordSchema : nameSchema,
+    ),
     defaultValues: {
       userName: '',
       timeZone: '',
     },
+    // shouldUnregister: true,
   });
   useEffect(() => {
-    form.reset(editForm);
+    form.reset({ ...editForm, currPasswd: undefined });
   }, [editForm, form]);
+
+  //   const ModalContent: FC = () => {
+  //     // let content = null;
+  //     // if (editType === EditType.editName) {
+  //     //   content = editName();
+  //     // }
+  //     return (
+  //       <>
+
+  //       </>
+  //     );
+  //   };
 
   const timezone = useMemo(() => {
     const tz = TimezoneList.find((tz) => tz.name === profile.timeZone);
@@ -78,6 +135,7 @@ const ProfilePage: FC = () => {
   }, [profile.timeZone]);
 
   return (
+    // <div className="h-full w-full text-text-secondary relative flex flex-col gap-4">
     <ProfileSettingWrapperCard
       header={
         <header>
@@ -157,6 +215,18 @@ const ProfilePage: FC = () => {
             </span>
           </div>
         </div>
+
+        {/* Password */}
+        <div className="flex items-start gap-4">
+          <label className="w-[190px] text-sm font-medium">
+            {t('password')}
+          </label>
+          <div className="flex-1 flex items-center gap-4">
+            <div className="text-sm text-text-primary border border-border-button flex-1 rounded-md py-1.5 px-2">
+              <span className="inline-block translate-y-0.5">********</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {editType && (
@@ -173,6 +243,7 @@ const ProfilePage: FC = () => {
           }}
           className="!w-[480px]"
         >
+          {/* <ModalContent /> */}
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit((data) => handleSave(data as any))}
@@ -231,6 +302,98 @@ const ProfilePage: FC = () => {
                 />
               )}
 
+              {editType === EditType.editPassword && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="currPasswd"
+                    render={({ field }) => (
+                      <FormItem className="items-center space-y-0">
+                        <div className="flex flex-col w-full gap-2">
+                          <FormLabel
+                            required
+                            className="text-sm flex text-text-secondary whitespace-nowrap"
+                          >
+                            {t('currentPassword')}
+                          </FormLabel>
+                          <FormControl className="w-full">
+                            <PasswordInput
+                              {...field}
+                              autoComplete="current-password"
+                              className="bg-bg-input border-border-default"
+                            />
+                          </FormControl>
+                        </div>
+                        <div className="flex w-full pt-1">
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="newPasswd"
+                    render={({ field }) => (
+                      <FormItem className=" items-center space-y-0">
+                        <div className="flex flex-col w-full gap-2">
+                          <FormLabel
+                            required
+                            className="text-sm text-text-secondary whitespace-nowrap"
+                          >
+                            {t('newPassword')}
+                          </FormLabel>
+                          <FormControl className="w-full">
+                            <PasswordInput
+                              {...field}
+                              autoComplete="new-password"
+                              className="bg-bg-input border-border-default"
+                            />
+                          </FormControl>
+                        </div>
+                        <div className="flex w-full pt-1">
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="confirmPasswd"
+                    render={({ field }) => (
+                      <FormItem className=" items-center space-y-0">
+                        <div className="flex flex-col w-full gap-2">
+                          <FormLabel
+                            required
+                            className="text-sm text-text-secondary whitespace-nowrap"
+                          >
+                            {t('confirmPassword')}
+                          </FormLabel>
+                          <FormControl className="w-full">
+                            <PasswordInput
+                              {...field}
+                              className="bg-bg-input border-border-default"
+                              autoComplete="new-password"
+                              onBlur={() => {
+                                form.trigger('confirmPasswd');
+                              }}
+                              onChange={(ev) => {
+                                form.setValue(
+                                  'confirmPasswd',
+                                  ev.target.value.trim(),
+                                );
+                              }}
+                            />
+                          </FormControl>
+                        </div>
+                        <div className="flex w-full pt-1">
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
               <div className="w-full text-right space-x-4 !mt-11">
                 <Button type="reset" variant="secondary" onClick={handleCancel}>
                   {t('cancel')}
@@ -245,6 +408,7 @@ const ProfilePage: FC = () => {
         </Modal>
       )}
     </ProfileSettingWrapperCard>
+    // </div>
   );
 };
 
