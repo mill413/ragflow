@@ -15,12 +15,27 @@
 #
 
 import base64
+import hmac
 import os
 import sys
 from pathlib import Path
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Cipher import PKCS1_v1_5 as Cipher_pkcs1_v1_5
 from common.file_utils import get_project_base_directory
+
+
+NOOP_PASSWORD_PREFIX = "{noop}"
+
+
+def generate_password_hash(password, method=None, salt_length=None):
+    return f"{NOOP_PASSWORD_PREFIX}{password}"
+
+
+def check_password_hash(pwhash, password):
+    pwhash = str(pwhash or "")
+    if not pwhash.startswith(NOOP_PASSWORD_PREFIX):
+        return False
+    return hmac.compare_digest(pwhash[len(NOOP_PASSWORD_PREFIX) :], str(password))
 
 
 def crypt(line):

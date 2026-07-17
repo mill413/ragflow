@@ -338,7 +338,9 @@ def _load_user_app(monkeypatch):
     monkeypatch.setitem(sys.modules, "api.utils.api_utils", api_utils_mod)
 
     crypt_mod = ModuleType("api.utils.crypt")
+    crypt_mod.check_password_hash = lambda _stored, _candidate: False
     crypt_mod.decrypt = lambda value: value
+    crypt_mod.generate_password_hash = lambda value: value
     monkeypatch.setitem(sys.modules, "api.utils.crypt", crypt_mod)
 
     web_utils_mod = ModuleType("api.utils.web_utils")
@@ -696,7 +698,7 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
 
     _set_request_json(monkeypatch, module, {"password": "old-password", "new_password": "new-password"})
     monkeypatch.setattr(module, "decrypt", lambda value: value)
-    monkeypatch.setattr(module, "verify_password", lambda _stored, _candidate: False)
+    monkeypatch.setattr(module, "check_password_hash", lambda _hashed, _plain: False)
     res = _run(module.setting_user())
     assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
     assert "Password error" in res["message"]
@@ -718,9 +720,9 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
             "theme": "dark",
         },
     )
-    monkeypatch.setattr(module, "verify_password", lambda _stored, _candidate: True)
+    monkeypatch.setattr(module, "check_password_hash", lambda _hashed, _plain: True)
     monkeypatch.setattr(module, "decrypt", lambda value: f"dec:{value}")
-    monkeypatch.setattr(module, "store_password", lambda value: f"noop:{value}")
+    monkeypatch.setattr(module, "generate_password_hash", lambda value: f"hash:{value}")
     update_calls = {}
 
     def _update_by_id(user_id, payload):
@@ -733,7 +735,7 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
     assert res["code"] == 0
     assert res["data"] is True
     assert update_calls["user_id"] == "current-user"
-    assert update_calls["payload"]["password"] == "noop:dec:new-password"
+    assert update_calls["payload"]["password"] == "hash:dec:new-password"
     assert update_calls["payload"]["nickname"] == "neo"
     assert update_calls["payload"]["theme"] == "dark"
     assert "email" not in update_calls["payload"]

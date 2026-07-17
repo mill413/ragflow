@@ -27,7 +27,7 @@ from common.misc_utils import get_uuid
 from common.time_utils import current_timestamp, datetime_format
 from common.constants import StatusEnum
 from common import settings
-from api.utils.password import store_password, verify_password
+from api.utils.crypt import check_password_hash, generate_password_hash
 
 
 ACCESS_TOKEN_SEPARATOR = "|"
@@ -113,7 +113,7 @@ class UserService(CommonService):
             User object if authentication successful, None otherwise.
         """
         user = cls.model.select().where((cls.model.email == email), (cls.model.status == StatusEnum.VALID.value)).first()
-        if user and verify_password(user.password, password):
+        if user and check_password_hash(str(user.password), password):
             return user
         else:
             return None
@@ -130,7 +130,7 @@ class UserService(CommonService):
         if "id" not in kwargs:
             kwargs["id"] = get_uuid()
         if "password" in kwargs:
-            kwargs["password"] = store_password(str(kwargs["password"]))
+            kwargs["password"] = generate_password_hash(str(kwargs["password"]))
 
         current_ts = current_timestamp()
         current_date = datetime_format(datetime.now())
@@ -161,7 +161,7 @@ class UserService(CommonService):
     @DB.connection_context()
     def update_user_password(cls, user_id, new_password):
         with DB.atomic():
-            update_dict = {"password": store_password(str(new_password)), "update_time": current_timestamp(), "update_date": datetime_format(datetime.now())}
+            update_dict = {"password": generate_password_hash(str(new_password)), "update_time": current_timestamp(), "update_date": datetime_format(datetime.now())}
             cls.model.update(update_dict).where(cls.model.id == user_id).execute()
 
     @classmethod

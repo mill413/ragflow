@@ -21,6 +21,7 @@ import re
 from quart import Quart
 
 from api.db.services import UserService
+from api.utils.crypt import generate_password_hash
 
 
 @click.command("reset-password", help="Reset the account password.")
@@ -36,7 +37,9 @@ def reset_password(email, new_password, password_confirm):
         click.echo(click.style("sorry. The Email is not registered!.", fg="red"))
         return
     encode_password = base64.b64encode(new_password.encode("utf-8")).decode("utf-8")
-    UserService.update_user_password(user[0].id, encode_password)
+    password_hash = generate_password_hash(encode_password)
+    user_dict = {"password": password_hash}
+    UserService.update_user(user[0].id, user_dict)
     click.echo(click.style("Congratulations! Password has been reset.", fg="green"))
 
 
