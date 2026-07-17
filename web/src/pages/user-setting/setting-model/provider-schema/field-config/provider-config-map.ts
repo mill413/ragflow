@@ -568,6 +568,13 @@ export const ProviderConfigMap: Record<string, ProviderConfig> = {
         validation: { message: 'mineruApiserverMessage' },
       },
       {
+        name: 'mineru_api_key',
+        label: 'mineruApiKey',
+        type: FormFieldType.Password,
+        required: false,
+        placeholder: 'mineruApiKeyPlaceholder',
+      },
+      {
         name: 'mineru_output_dir',
         label: 'mineruOutputDir',
         type: FormFieldType.Text,

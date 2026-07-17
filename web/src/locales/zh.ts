@@ -1436,6 +1436,8 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       mineruApiserver: 'MinerU API 服务器',
       mineruApiserverMessage: '请输入 MinerU API 服务器地址！',
       mineruApiserverPlaceholder: '例如：http://host.docker.internal:9987',
+      mineruApiKey: 'MinerU API 密钥',
+      mineruApiKeyPlaceholder: '可选的 API 密钥',
       mineruOutputDir: 'MinerU 输出目录',
       mineruOutputDirMessage: '请输入 MinerU 输出目录！',
       mineruOutputDirPlaceholder: '/tmp/mineru',
