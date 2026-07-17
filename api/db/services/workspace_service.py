@@ -15,6 +15,7 @@
 #
 
 from collections.abc import Mapping
+import hashlib
 from typing import Any
 
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
@@ -155,6 +156,11 @@ class TeamService:
         "parser_ids",
     )
 
+    @staticmethod
+    def _lock_name(operation: str, *identifiers: str) -> str:
+        digest = hashlib.sha256(":".join(identifiers).encode()).hexdigest()[:48]
+        return f"team:{operation}:{digest}"
+
     @classmethod
     def create(cls, owner_id: str, name: str) -> dict[str, Any]:
         name = str(name or "").strip()
@@ -172,15 +178,15 @@ class TeamService:
                 if payload.get(field) in model_id_map:
                     payload[field] = model_id_map[payload[field]]
             payload.update({"id": tenant_id, "name": name, "status": StatusEnum.VALID.value})
-            TenantService.insert(**payload)
-            UserTenantService.insert(
+            Tenant.insert(**payload).execute()
+            UserTenant.insert(
                 id=get_uuid(),
                 user_id=owner_id,
                 tenant_id=tenant_id,
                 invited_by=owner_id,
                 role=UserTenantRole.OWNER,
                 status=StatusEnum.VALID.value,
-            )
+            ).execute()
         return cls.get(owner_id, tenant_id)
 
     @staticmethod
@@ -285,41 +291,42 @@ class TeamService:
         if not users:
             raise LookupError("User not found.")
         user = users[0]
-        with DB.lock(f"team-membership:{tenant_id}:{user.id}", 10):
+        with DB.lock(cls._lock_name("member", tenant_id, user.id), 10):
+            existing = UserTenantService.query(user_id=user.id, tenant_id=tenant_id)
             with DB.atomic():
-                existing = UserTenantService.query(user_id=user.id, tenant_id=tenant_id)
                 if existing:
                     relation = existing[0]
                     if relation.status == StatusEnum.VALID.value:
                         raise ValueError("User already has a membership or invitation.")
-                    UserTenantService.update_by_id(
-                        relation.id,
-                        {"role": UserTenantRole.INVITE, "invited_by": actor_id, "status": StatusEnum.VALID.value},
-                    )
+                    UserTenant.update(
+                        role=UserTenantRole.INVITE,
+                        invited_by=actor_id,
+                        status=StatusEnum.VALID.value,
+                    ).where(UserTenant.id == relation.id).execute()
                 else:
-                    UserTenantService.insert(
+                    UserTenant.insert(
                         id=get_uuid(),
                         user_id=user.id,
                         tenant_id=tenant_id,
                         invited_by=actor_id,
                         role=UserTenantRole.INVITE,
                         status=StatusEnum.VALID.value,
-                    )
+                    ).execute()
         return user
 
     @classmethod
     def accept_invitation(cls, user_id: str, tenant_id: str) -> dict[str, Any]:
-        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+        with DB.lock(cls._lock_name("member", tenant_id, user_id), 10):
             membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
             if not membership or membership.role != UserTenantRole.INVITE:
                 raise LookupError("Invitation not found.")
             with DB.atomic():
-                UserTenantService.update_by_id(membership.id, {"role": UserTenantRole.NORMAL})
+                UserTenant.update(role=UserTenantRole.NORMAL).where(UserTenant.id == membership.id).execute()
         return cls.get(user_id, tenant_id)
 
     @classmethod
     def remove_member(cls, actor_id: str, tenant_id: str, user_id: str) -> None:
-        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+        with DB.lock(cls._lock_name("member", tenant_id, user_id), 10):
             membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
             if not membership:
                 raise LookupError("Membership not found.")
@@ -332,13 +339,13 @@ class TeamService:
             if actor_role == UserTenantRole.ADMIN and membership.role == UserTenantRole.ADMIN:
                 raise PermissionError("Only the owner can remove an administrator.")
             with DB.atomic():
-                UserTenantService.update_by_id(membership.id, {"status": StatusEnum.INVALID.value})
+                UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.id == membership.id).execute()
 
     @classmethod
     def update_member_role(cls, actor_id: str, tenant_id: str, user_id: str, role: str) -> None:
         if role not in {UserTenantRole.ADMIN, UserTenantRole.NORMAL}:
             raise ValueError("Role must be admin or normal.")
-        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+        with DB.lock(cls._lock_name("member", tenant_id, user_id), 10):
             if not WorkspaceAccessService.can_manage_workspace(actor_id, tenant_id):
                 raise PermissionError("No authorization.")
             membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
@@ -347,11 +354,11 @@ class TeamService:
             if membership.role == UserTenantRole.OWNER:
                 raise ValueError("Use ownership transfer to change the owner.")
             with DB.atomic():
-                UserTenantService.update_by_id(membership.id, {"role": role})
+                UserTenant.update(role=role).where(UserTenant.id == membership.id).execute()
 
     @classmethod
     def transfer_ownership(cls, actor_id: str, tenant_id: str, user_id: str) -> None:
-        with DB.lock(f"team-ownership:{tenant_id}", 10):
+        with DB.lock(cls._lock_name("owner", tenant_id), 10):
             actor = WorkspaceAccessService.get_membership(actor_id, tenant_id)
             target = WorkspaceAccessService.get_membership(user_id, tenant_id)
             if not actor or actor.role != UserTenantRole.OWNER:
@@ -361,8 +368,8 @@ class TeamService:
             if actor_id == user_id:
                 return
             with DB.atomic():
-                UserTenantService.update_by_id(actor.id, {"role": UserTenantRole.ADMIN})
-                UserTenantService.update_by_id(target.id, {"role": UserTenantRole.OWNER})
+                UserTenant.update(role=UserTenantRole.ADMIN).where(UserTenant.id == actor.id).execute()
+                UserTenant.update(role=UserTenantRole.OWNER).where(UserTenant.id == target.id).execute()
 
     @classmethod
     def delete(cls, actor_id: str, tenant_id: str) -> None:

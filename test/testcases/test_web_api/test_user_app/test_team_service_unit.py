@@ -17,13 +17,24 @@ def database_contexts(monkeypatch):
 def test_invitation_acceptance_and_member_removal_are_role_safe(monkeypatch):
     membership = SimpleNamespace(id="membership-1", role=UserTenantRole.INVITE, status=StatusEnum.VALID.value)
     updates = []
+
+    class UpdateQuery:
+        def __init__(self, data):
+            self.data = data
+
+        def where(self, *_args):
+            return self
+
+        def execute(self):
+            updates.append(self.data)
+
     monkeypatch.setattr(WorkspaceAccessService, "get_membership", classmethod(lambda _cls, _user, _team: membership))
-    monkeypatch.setattr("api.db.services.workspace_service.UserTenantService.update_by_id", lambda row_id, data: updates.append((row_id, data)))
+    monkeypatch.setattr("api.db.services.workspace_service.UserTenant.update", lambda **data: UpdateQuery(data))
     monkeypatch.setattr(TeamService, "get", classmethod(lambda _cls, user_id, team_id: {"tenant_id": team_id, "user_id": user_id}))
 
     result = TeamService.accept_invitation("user-1", "team-1")
     assert result["tenant_id"] == "team-1"
-    assert updates == [("membership-1", {"role": UserTenantRole.NORMAL})]
+    assert updates == [{"role": UserTenantRole.NORMAL}]
 
     membership.role = UserTenantRole.OWNER
     with pytest.raises(ValueError, match="Transfer team ownership"):
@@ -55,3 +66,9 @@ def test_pending_invitations_are_separate_from_active_teams(monkeypatch):
             "workspace_type": "team",
         }
     ]
+
+
+def test_database_lock_names_fit_mysql_limit():
+    lock_name = TeamService._lock_name("member", "a" * 32, "b" * 32)
+    assert len(lock_name) <= 64
+    assert lock_name == TeamService._lock_name("member", "a" * 32, "b" * 32)
