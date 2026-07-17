@@ -719,6 +719,18 @@ class User(DataBaseModel, AuthUser):
         db_table = "user"
 
 
+class UserSession(DataBaseModel):
+    token = CharField(max_length=32, primary_key=True)
+    user_id = CharField(max_length=32, null=False, index=True)
+
+    def get_id(self):
+        jwt = Serializer(secret_key=settings.get_secret_key())
+        return jwt.dumps(self.token)
+
+    class Meta:
+        db_table = "user_session"
+
+
 class Tenant(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
     name = CharField(max_length=100, null=True, help_text="Tenant name", index=True)

@@ -21,7 +21,7 @@ import peewee
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from api.db import UserTenantRole
-from api.db.db_models import DB, UserTenant
+from api.db.db_models import DB, UserSession, UserTenant
 from api.db.db_models import User, Tenant
 from api.db.services.common_service import CommonService
 from common.misc_utils import get_uuid
@@ -157,6 +157,48 @@ class UserService(CommonService):
     def get_all_users(cls):
         users = cls.model.select().order_by(cls.model.email)
         return list(users)
+
+
+class UserSessionService(CommonService):
+    model = UserSession
+
+    @classmethod
+    @DB.connection_context()
+    def create(cls, user_id):
+        token = get_uuid()
+        timestamp = current_timestamp()
+        current_date = datetime_format(datetime.now())
+        return cls.model.create(
+            token=token,
+            user_id=user_id,
+            create_time=timestamp,
+            create_date=current_date,
+            update_time=timestamp,
+            update_date=current_date,
+        )
+
+    @classmethod
+    @DB.connection_context()
+    def get_user(cls, token):
+        token = str(token or "").strip()
+        if len(token) < 32:
+            return None
+        auth_session = cls.model.get_or_none(cls.model.token == token)
+        if not auth_session:
+            return None
+        return User.get_or_none(User.id == auth_session.user_id, User.status == StatusEnum.VALID.value)
+
+    @classmethod
+    @DB.connection_context()
+    def revoke(cls, token):
+        if not token:
+            return 0
+        return cls.model.delete().where(cls.model.token == token).execute()
+
+    @classmethod
+    @DB.connection_context()
+    def revoke_all(cls, user_id):
+        return cls.model.delete().where(cls.model.user_id == user_id).execute()
 
 
 class TenantService(CommonService):

@@ -392,6 +392,9 @@ class _DummyUser:
     def to_dict(self):
         return {"id": self.id, "email": self.email}
 
+    def to_safe_dict(self, **_kwargs):
+        return self.to_dict()
+
     def to_safe_dict(self, *, for_self: bool = False):
         _sensitive = {"password", "access_token", "email"}
         result = {k: v for k, v in self.to_dict().items() if k not in _sensitive}
@@ -419,6 +422,7 @@ def _load_user_app(monkeypatch):
 
     quart_mod = ModuleType("quart")
     quart_mod.session = {}
+    quart_mod.g = SimpleNamespace()
     quart_mod.request = SimpleNamespace(args=_Args({}))
 
     async def _make_response(data):
@@ -436,7 +440,7 @@ def _load_user_app(monkeypatch):
     apps_mod.__path__ = [str(repo_root / "api" / "apps")]
     apps_mod.current_user = _DummyUser("current-user", "current@example.com")
     apps_mod.login_required = lambda fn: fn
-    apps_mod.login_user = lambda _user: True
+    apps_mod.login_user = lambda user: user.get_id()
     apps_mod.logout_user = lambda: True
     monkeypatch.setitem(sys.modules, "api.apps", apps_mod)
     api_pkg.apps = apps_mod
@@ -564,6 +568,20 @@ def _load_user_app(monkeypatch):
         def update_user_password(_user_id, _new_password):
             return True
 
+    class _StubUserSessionService:
+        revoked = []
+        revoked_users = []
+
+        @classmethod
+        def revoke(cls, token):
+            cls.revoked.append(token)
+            return 1
+
+        @classmethod
+        def revoke_all(cls, user_id):
+            cls.revoked_users.append(user_id)
+            return 1
+
     class _StubUserTenantService:
         @staticmethod
         def insert(**_kwargs):
@@ -579,6 +597,7 @@ def _load_user_app(monkeypatch):
 
     user_service_mod.TenantService = _StubTenantService
     user_service_mod.UserService = _StubUserService
+    user_service_mod.UserSessionService = _StubUserSessionService
     user_service_mod.UserTenantService = _StubUserTenantService
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
 
@@ -908,7 +927,7 @@ def test_oauth_callback_matrix_unit(monkeypatch):
 
     new_user = _DummyUser("new-user", "new@example.com")
     login_calls = []
-    monkeypatch.setattr(module, "login_user", lambda user: login_calls.append(user))
+    monkeypatch.setattr(module, "login_user", lambda user: login_calls.append(user) or user.get_id())
     monkeypatch.setattr(module, "user_register", lambda _user_id, _user: [new_user])
     module.session.clear()
     module.session["oauth_state"] = "create-user-state"
@@ -938,14 +957,14 @@ def test_oauth_callback_matrix_unit(monkeypatch):
     existing_user = _DummyUser("existing-user", "existing@example.com")
     monkeypatch.setattr(module.UserService, "query", lambda **_kwargs: [existing_user])
     login_calls.clear()
-    monkeypatch.setattr(module, "login_user", lambda user: login_calls.append(user))
+    monkeypatch.setattr(module, "login_user", lambda user: login_calls.append(user) or user.get_id())
     monkeypatch.setattr(module, "get_uuid", lambda: "existing-token")
     module.session.clear()
     module.session["oauth_state"] = "existing-state"
     _set_request_args(monkeypatch, module, {"state": "existing-state", "code": "code"})
     res = _run(module.oauth_callback("github"))
     assert res["redirect"] == "/?auth=existing-user"
-    assert existing_user.access_token == "existing-token"
+    assert existing_user.access_token == ""
     assert existing_user.save_calls == 1
     assert login_calls and login_calls[-1] is existing_user
 
@@ -959,11 +978,13 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
     monkeypatch.setattr(module.secrets, "token_hex", lambda _n: "abcdef")
     logout_calls = []
     monkeypatch.setattr(module, "logout_user", lambda: logout_calls.append(True))
+    module.g.auth_token = "current-session-token"
 
     res = _run(module.log_out())
     assert res["code"] == 0
-    assert current_user.access_token == "INVALID_abcdef"
-    assert current_user.save_calls == 1
+    assert module.UserSessionService.revoked[-1] == "current-session-token"
+    assert current_user.access_token == ""
+    assert current_user.save_calls == 0
     assert logout_calls == [True]
 
     _set_request_json(monkeypatch, module, {"password": "old-password", "new_password": "new-password"})
@@ -1362,6 +1383,7 @@ def test_forget_reset_password_matrix_unit(monkeypatch):
     res = _run(module.forget_reset_password())
     assert res["code"] == module.RetCode.SUCCESS, res
     assert res["auth"] == user.get_id(), res
+    assert module.UserSessionService.revoked_users[-1] == user.id
 
     monkeypatch.setattr(module.REDIS_CONN, "delete", lambda key: module.REDIS_CONN.store.pop(key, None))
     module.REDIS_CONN.store[v_key] = "1"

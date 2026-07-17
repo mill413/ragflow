@@ -20,17 +20,16 @@ import uuid
 from functools import wraps
 from datetime import datetime
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 from flask_login import current_user, login_user
 
 from api.common.exceptions import AdminException, UserNotFoundError
 from api.common.base64 import encode_to_base64
-from api.db.services import UserService
+from api.db.services import UserService, UserSessionService
 from api.db import UserTenantRole
 from api.db.services.user_service import TenantService, UserTenantService
-from common.constants import ActiveEnum, StatusEnum
+from common.constants import ActiveEnum
 from api.utils.crypt import decrypt
-from common.misc_utils import get_uuid
 from common.time_utils import current_timestamp, datetime_format, get_format_time
 from common.connection_utils import sync_construct_response
 from common import settings
@@ -70,12 +69,10 @@ def setup_auth(login_manager):
                     logging.warning(f"Authentication attempt with invalid token format: {len(access_token)} chars")
                     return None
 
-                user = UserService.query(access_token=access_token, status=StatusEnum.VALID.value)
+                user = UserSessionService.get_user(access_token)
                 if user:
-                    if not user[0].access_token or not user[0].access_token.strip():
-                        logging.warning(f"User {user[0].email} has empty access_token in database")
-                        return None
-                    return user[0]
+                    g.auth_token = access_token
+                    return user
                 else:
                     return None
             except Exception as e:
@@ -167,14 +164,15 @@ def login_admin(email: str, password: str):
         raise AdminException(f"User {email} inactive", 403)
 
     resp = user.to_json()
-    user.access_token = get_uuid()
-    login_user(user)
     user.update_time = (current_timestamp(),)
     user.update_date = (datetime_format(datetime.now()),)
     user.last_login_time = get_format_time()
     user.save()
+    auth_session = UserSessionService.create(user.id)
+    user.access_token = auth_session.token
+    login_user(user)
     msg = "Welcome back!"
-    return sync_construct_response(data=resp, auth=user.get_id(), message=msg)
+    return sync_construct_response(data=resp, auth=auth_session.get_id(), message=msg)
 
 
 def check_admin(username: str, password: str):

@@ -22,13 +22,13 @@ import time
 from datetime import datetime
 import base64
 
-from quart import make_response, redirect, request, session
+from quart import g, make_response, redirect, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
 from api.db.services.file_service import FileService
-from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db.services.user_service import TenantService, UserService, UserSessionService, UserTenantService
 from common.time_utils import current_timestamp, datetime_format, get_format_time
 from common.misc_utils import download_img, get_uuid
 from common.constants import RetCode
@@ -122,8 +122,7 @@ async def login():
             message="This account has been disabled, please contact the administrator!",
         )
     elif user:
-        user.access_token = get_uuid()
-        login_user(user)
+        auth = login_user(user)
         user.last_login_time = get_format_time()
         user.update_time = current_timestamp()
         user.update_date = datetime_format(datetime.now())
@@ -131,7 +130,7 @@ async def login():
         logging.info("Login successful: user_id=%s", user.id)
         msg = "Welcome back!"
 
-        return await construct_response(data=user.to_safe_dict(for_self=True), auth=user.get_id(), message=msg)
+        return await construct_response(data=user.to_safe_dict(for_self=True), auth=auth, message=msg)
     else:
         logging.warning("Login failed: wrong credentials")
         return get_json_result(
@@ -232,7 +231,6 @@ async def oauth_callback(channel):
                 users = user_register(
                     user_id,
                     {
-                        "access_token": get_uuid(),
                         "email": user_info.email,
                         "avatar": avatar,
                         "nickname": user_info.nickname,
@@ -249,8 +247,8 @@ async def oauth_callback(channel):
 
                 # Try to log in
                 user = users[0]
-                login_user(user)
-                return redirect(f"/?auth={user.get_id()}")
+                auth = login_user(user)
+                return redirect(f"/?auth={auth}")
 
             except Exception as e:
                 rollback_user_registration(user_id)
@@ -259,13 +257,12 @@ async def oauth_callback(channel):
 
         # User exists, try to log in
         user = users[0]
-        user.access_token = get_uuid()
         if user and hasattr(user, "is_active") and user.is_active == "0":
             return redirect("/?error=user_inactive")
 
-        login_user(user)
+        auth = login_user(user)
         user.save()
-        return redirect(f"/?auth={user.get_id()}")
+        return redirect(f"/?auth={auth}")
     except Exception as e:
         logging.exception(e)
         return redirect(f"/?error={str(e)}")
@@ -288,14 +285,10 @@ async def log_out():
           type: object
     """
     user = current_user._get_current_object() if hasattr(current_user, "_get_current_object") else current_user
-    user_id = user.id
-    user.access_token = f"INVALID_{secrets.token_hex(16)}"
-    saved = user.save()
-    if saved == 0:
-        logging.error("Logout failed to persist access token update: user_id=%s", user_id)
-        return get_json_result(code=RetCode.SERVER_ERROR, data=False, message="Failed to update access token")
+    auth_token = getattr(g, "auth_token", None) or session.get("_auth_token")
+    UserSessionService.revoke(auth_token)
     logout_user()
-    logging.info("Logout: user_id=%s, access_token invalidated", user_id)
+    logging.info("Logout: user_id=%s, session revoked", user.id)
     return get_json_result(data=True)
 
 
@@ -343,7 +336,6 @@ async def setting_user():
 
         if new_password:
             update_dict["password"] = generate_password_hash(decrypt(new_password))
-            update_dict["access_token"] = f"INVALID_{secrets.token_hex(16)}"
             password_changed = True
 
     for k in request_data.keys():
@@ -371,6 +363,7 @@ async def setting_user():
     try:
         UserService.update_by_id(current_user.id, update_dict)
         if password_changed:
+            UserSessionService.revoke_all(current_user.id)
             logout_user()
         return get_json_result(data=True)
     except Exception as e:
@@ -531,7 +524,6 @@ async def user_add():
     nickname = nickname.strip()
 
     user_dict = {
-        "access_token": get_uuid(),
         "email": email_address,
         "nickname": nickname,
         "password": decrypt(req["password"]),
@@ -548,10 +540,10 @@ async def user_add():
         if len(users) > 1:
             raise Exception(f"Same email: {email_address} exists!")
         user = users[0]
-        login_user(user)
+        auth = login_user(user)
         return await construct_response(
             data=user.to_safe_dict(for_self=True),
-            auth=user.get_id(),
+            auth=auth,
             message=f"{nickname}, welcome aboard!",
         )
     except Exception as e:
@@ -848,6 +840,7 @@ async def forget_reset_password():
     user = users[0]
     try:
         UserService.update_user_password(user.id, new_pwd_base64)
+        UserSessionService.revoke_all(user.id)
     except Exception as e:
         logging.exception(e)
         return get_json_result(data=False, code=RetCode.EXCEPTION_ERROR, message="failed to reset password")
@@ -859,4 +852,5 @@ async def forget_reset_password():
         pass
 
     msg = "Password reset successful. Logged in."
-    return await construct_response(data=user.to_safe_dict(for_self=True), auth=user.get_id(), message=msg)
+    auth = login_user(user)
+    return await construct_response(data=user.to_safe_dict(for_self=True), auth=auth, message=msg)

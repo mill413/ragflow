@@ -24,7 +24,7 @@ from itsdangerous.url_safe import URLSafeTimedSerializer as Serializer
 from quart_cors import cors
 from common.constants import StatusEnum, RetCode
 from api.db.db_models import close_connection, APIToken
-from api.db.services import UserService
+from api.db.services import UserService, UserSessionService
 from api.utils.json_encode import CustomJSONEncoder
 from api.utils import commands
 
@@ -116,27 +116,23 @@ def _load_user_from_session():
     requests can arrive with no header at all — we still want to honour the
     server-side session in that window.
 
-    The same access-token validity rules used by the JWT path are applied
-    here so that tokens revoked by ``logout`` (which rewrites the column to
-    ``INVALID_<hex>``) or shortened by data corruption can't keep a stale
-    session authenticated.
+    The browser session carries its own authentication token so logging in or
+    out on another device does not affect this session.
     """
     user_id = session.get("_user_id")
-    if not user_id:
+    auth_token = session.get("_auth_token")
+    if not user_id or not auth_token:
         return None
     try:
-        users = UserService.query(id=user_id, status=StatusEnum.VALID.value)
+        user = UserSessionService.get_user(auth_token)
     except Exception:
         logging.exception("load_user from session failed")
         return None
-    if not users:
-        return None
-    user = users[0]
-    access_token = str(user.access_token or "").strip()
-    if not access_token or len(access_token) < 32 or access_token.startswith("INVALID_"):
+    if not user or user.id != user_id:
         return None
     logging.debug("Authenticated request via session fallback for user_id=%s", user_id)
     g.auth_type = AUTH_JWT
+    g.auth_token = auth_token
     g.user = user
     return user
 
@@ -157,7 +153,7 @@ def _load_user(auth_types=None):
         parts = authorization.split(maxsplit=1)
         if len(parts) < 2:
             logging.warning("Authorization header has invalid bearer format")
-            return None
+            return _load_user_from_session() if AUTH_JWT in auth_types else None
         auth_token = parts[1]
     else:
         auth_token = authorization
@@ -195,14 +191,12 @@ def _load_user(auth_types=None):
                 logging.warning(f"Authentication attempt with invalid token format: {len(access_token)} chars")
                 return None
 
-            user = UserService.query(access_token=access_token, status=StatusEnum.VALID.value)
+            user = UserSessionService.get_user(access_token)
             if user:
-                if not user[0].access_token or not user[0].access_token.strip():
-                    logging.warning(f"User {user[0].email} has empty access_token in database")
-                    return None
                 g.auth_type = AUTH_JWT
-                g.user = user[0]
-                return user[0]
+                g.auth_token = access_token
+                g.user = user
+                return user
             return None
         except Exception as e_jwt:
             logging.warning(f"load_user from jwt got exception {e_jwt}")
@@ -214,9 +208,6 @@ def _load_user(auth_types=None):
             if objs:
                 user = UserService.query(id=objs[0].tenant_id, status=StatusEnum.VALID.value)
                 if user:
-                    if not user[0].access_token or not user[0].access_token.strip():
-                        logging.warning(f"User {user[0].email} has empty access_token in database")
-                        return None
                     g.auth_type = AUTH_API
                     g.user = user[0]
                     return user[0]
@@ -226,7 +217,7 @@ def _load_user(auth_types=None):
         except Exception as e_api_token:
             logging.warning(f"load_user from api token got exception {e_api_token}")
 
-    return None
+    return _load_user_from_session() if AUTH_JWT in auth_types else None
 
 
 current_user = LocalProxy(_load_user)
@@ -286,7 +277,7 @@ def login_user(user, remember=False, duration=None, force=False, fresh=True):
     user's `is_active` property is ``False``, they will not be logged in
     unless `force` is ``True``.
 
-    This will return ``True`` if the login attempt succeeds, and ``False`` if
+    This returns the signed session token if login succeeds, and ``False`` if
     it fails (i.e. because the user is inactive).
 
     :param user: The user object to log in.
@@ -307,10 +298,12 @@ def login_user(user, remember=False, duration=None, force=False, fresh=True):
     if not force and not user.is_active:
         return False
 
+    auth_session = UserSessionService.create(user.id)
     session["_user_id"] = user.id
+    session["_auth_token"] = auth_session.token
     session["_fresh"] = fresh
     session["_id"] = get_uuid()
-    return True
+    return auth_session.get_id()
 
 
 def logout_user():
@@ -326,6 +319,9 @@ def logout_user():
 
     if "_id" in session:
         session.pop("_id")
+
+    if "_auth_token" in session:
+        session.pop("_auth_token")
 
     COOKIE_NAME = "remember_token"
     cookie_name = current_app.config.get("REMEMBER_COOKIE_NAME", COOKIE_NAME)
