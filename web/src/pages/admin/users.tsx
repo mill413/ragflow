@@ -503,6 +503,8 @@ function AdminUserManagement() {
                 variant="transparent"
                 size="icon"
                 className="border-0"
+                title={t('admin.userDetails')}
+                aria-label={t('admin.userDetails')}
                 onClick={() =>
                   navigate(
                     `${Routes.AdminUserManagement}/${row.original.email}`,
@@ -517,6 +519,7 @@ function AdminUserManagement() {
                 size="icon"
                 className="border-0"
                 title={t('admin.openRagflow')}
+                aria-label={t('admin.openRagflow')}
                 onClick={() => openUserHome(row.original.email)}
               >
                 <LucideExternalLink />
@@ -528,6 +531,8 @@ function AdminUserManagement() {
                     variant="transparent"
                     size="icon"
                     className="border-0"
+                    title={t('admin.changePassword')}
+                    aria-label={t('admin.changePassword')}
                     onClick={() => {
                       setUserToMakeAction(row.original);
                       setPasswordModalOpen(true);
@@ -539,6 +544,8 @@ function AdminUserManagement() {
                     variant="danger"
                     size="icon"
                     className="border-0"
+                    title={t('admin.deleteUser')}
+                    aria-label={t('admin.deleteUser')}
                     onClick={() => {
                       setUserToMakeAction(row.original);
                       setDeleteModalOpen(true);

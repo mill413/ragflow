@@ -3488,6 +3488,7 @@ Important structured information may include: names, dates, locations, events, k
       isSuperuser: 'Is superuser',
 
       deleteUser: 'Delete user',
+      userDetails: 'View user details',
       deleteUserConfirmation: 'Are you sure you want to delete this user?',
 
       createNewUser: 'Create new user',

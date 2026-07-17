@@ -3125,6 +3125,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       isSuperuser: '是否超级管理员',
 
       deleteUser: '删除用户',
+      userDetails: '查看用户详情',
       deleteUserConfirmation: '确定要删除该用户吗？',
       createNewUser: '创建用户',
       changePassword: '修改密码',
