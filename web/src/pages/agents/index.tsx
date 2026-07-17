@@ -11,10 +11,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { useFetchAgentListByPage } from '@/hooks/use-agent-request';
-import { useWorkspace } from '@/hooks/use-workspace';
-import { Routes } from '@/routes';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { t } from 'i18next';
 import { pick } from 'lodash';
 import { Clipboard, ClipboardPlus, FileInput, Plus } from 'lucide-react';
@@ -29,7 +29,11 @@ import { useHandleImportJsonFile } from './use-import-json';
 import { useRenameAgent } from './use-rename-agent';
 
 export default function Agents() {
-  const { canCreateSharedResource } = useWorkspace();
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction();
   const {
     data,
     pagination,
@@ -66,6 +70,19 @@ export default function Agents() {
     hideFileUploadModal,
   } = useHandleImportJsonFile();
 
+  const openCreateAgent = useCallback(
+    () => runInWritableWorkspace(showCreatingModal),
+    [runInWritableWorkspace, showCreatingModal],
+  );
+  const openAgentTemplates = useCallback(
+    () => runInWritableWorkspace(navigateToAgentTemplates),
+    [navigateToAgentTemplates, runInWritableWorkspace],
+  );
+  const openImportAgent = useCallback(
+    () => runInWritableWorkspace(handleImportJson),
+    [handleImportJson, runInWritableWorkspace],
+  );
+
   const filters = useSelectFilters();
 
   const handlePageChange = useCallback(
@@ -78,21 +95,22 @@ export default function Agents() {
   const isCreate = searchUrl.get('isCreate') === 'true';
 
   useEffect(() => {
-    if (isCreate && canCreateSharedResource) {
-      showCreatingModal();
+    if (isCreate && canRunInWritableWorkspace) {
+      openCreateAgent();
       searchUrl.delete('isCreate');
       setSearchUrl(searchUrl);
     }
   }, [
     isCreate,
-    canCreateSharedResource,
-    showCreatingModal,
+    canRunInWritableWorkspace,
+    openCreateAgent,
     searchUrl,
     setSearchUrl,
   ]);
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -108,7 +126,7 @@ export default function Agents() {
               onChange={handleFilterSubmit}
               value={filterValue}
             >
-              {canCreateSharedResource && (
+              {canRunInWritableWorkspace && (
                 <DropdownMenu>
                   <DropdownMenuTrigger data-testid="create-agent" asChild>
                     <Button>
@@ -119,14 +137,14 @@ export default function Agents() {
                   <DropdownMenuContent data-testid="agent-create-menu">
                     <DropdownMenuItem
                       justifyBetween={false}
-                      onClick={showCreatingModal}
+                      onClick={openCreateAgent}
                     >
                       <Clipboard />
                       {t('flow.createFromBlank')}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       justifyBetween={false}
-                      onClick={() => navigateToAgentTemplates()}
+                      onClick={openAgentTemplates}
                     >
                       <ClipboardPlus />
                       {t('flow.createFromTemplate')}
@@ -134,7 +152,7 @@ export default function Agents() {
                     <DropdownMenuItem
                       data-testid="agent-import-json"
                       justifyBetween={false}
-                      onClick={handleImportJson}
+                      onClick={openImportAgent}
                     >
                       <FileInput />
                       {t('flow.importJsonFile')}
@@ -176,8 +194,8 @@ export default function Agents() {
                 isSearch
                 type={EmptyCardType.Agent}
                 onClick={
-                  canCreateSharedResource
-                    ? () => showCreatingModal()
+                  canRunInWritableWorkspace
+                    ? () => openCreateAgent()
                     : undefined
                 }
               />
@@ -197,13 +215,13 @@ export default function Agents() {
             tabIndex={-1}
             // onClick={() => showCreatingModal()}
           >
-            {canCreateSharedResource && (
+            {canRunInWritableWorkspace && (
               <ul className="flex flex-col gap-y-5 text-text-secondary text-sm pt-5">
                 <li data-testid="agents-empty-create">
                   <Button
                     variant="static"
                     size="auto"
-                    onClick={showCreatingModal}
+                    onClick={openCreateAgent}
                   >
                     <Clipboard className="size-[1em]" />
                     {t('flow.createFromBlank')}
@@ -212,10 +230,9 @@ export default function Agents() {
 
                 <li>
                   <Button
-                    asLink
                     variant="static"
                     size="auto"
-                    to={Routes.AgentTemplates}
+                    onClick={openAgentTemplates}
                   >
                     <ClipboardPlus className="size-[1em]" />
                     {t('flow.createFromTemplate')}
@@ -226,7 +243,7 @@ export default function Agents() {
                   <Button
                     variant="static"
                     size="auto"
-                    onClick={handleImportJson}
+                    onClick={openImportAgent}
                   >
                     <FileInput className="size-[1em]" />
                     {t('flow.importJsonFile')}

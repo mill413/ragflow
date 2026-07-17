@@ -5,8 +5,9 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useFetchChatList } from '@/hooks/use-chat-request';
-import { useWorkspace } from '@/hooks/use-workspace';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
@@ -18,7 +19,11 @@ import { useCreateChatDialog } from './hooks/use-create-chat';
 import { useRenameChat } from './hooks/use-rename-chat';
 
 export default function ChatList() {
-  const { canCreateSharedResource } = useWorkspace();
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction();
   const {
     data,
     setPagination,
@@ -55,20 +60,20 @@ export default function ChatList() {
   );
 
   const handleShowCreateModal = useCallback(() => {
-    showCreateChatModal();
-  }, [showCreateChatModal]);
+    runInWritableWorkspace(showCreateChatModal);
+  }, [runInWritableWorkspace, showCreateChatModal]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const isCreate = searchParams.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate && canCreateSharedResource) {
+    if (isCreate && canRunInWritableWorkspace) {
       handleShowCreateModal();
       searchParams.delete('isCreate');
       setSearchParams(searchParams);
     }
   }, [
     isCreate,
-    canCreateSharedResource,
+    canRunInWritableWorkspace,
     handleShowCreateModal,
     searchParams,
     setSearchParams,
@@ -109,6 +114,7 @@ export default function ChatList() {
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data.chats?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -124,7 +130,7 @@ export default function ChatList() {
               value={filterValue}
               onChange={handleFilterSubmit}
             >
-              {canCreateSharedResource && (
+              {canRunInWritableWorkspace && (
                 <Button
                   data-testid="create-chat"
                   onClick={handleShowCreateModal}
@@ -180,7 +186,7 @@ export default function ChatList() {
             className="w-[480px] p-14"
             type={EmptyCardType.Chat}
             onClick={
-              canCreateSharedResource
+              canRunInWritableWorkspace
                 ? () => handleShowCreateModal()
                 : undefined
             }

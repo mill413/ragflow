@@ -1,5 +1,5 @@
 import { useListWorkspace } from '@/hooks/use-user-setting-request';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const WorkspaceStorageKey = 'activeWorkspaceId';
@@ -69,5 +69,59 @@ export const useWorkspace = () => {
     ),
     options,
     setWorkspaceId,
+  };
+};
+
+export const useWritableWorkspaceAction = () => {
+  const { options, isAllWorkspaces, canCreateSharedResource, setWorkspaceId } =
+    useWorkspace();
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
+  const pendingAction = useRef<(() => void) | null>(null);
+  const writableOptions = useMemo(
+    () =>
+      options.filter(
+        (option) =>
+          option.value !== AllWorkspacesId &&
+          option.capabilities?.create_shared_resource,
+      ),
+    [options],
+  );
+
+  const runInWritableWorkspace = useCallback(
+    (action: () => void) => {
+      if (canCreateSharedResource) {
+        action();
+        return;
+      }
+      if (isAllWorkspaces && writableOptions.length) {
+        pendingAction.current = action;
+        setWorkspaceDialogOpen(true);
+      }
+    },
+    [canCreateSharedResource, isAllWorkspaces, writableOptions.length],
+  );
+
+  const selectWorkspace = useCallback(
+    (workspaceId: string) => {
+      setWorkspaceId(workspaceId);
+      setWorkspaceDialogOpen(false);
+      const action = pendingAction.current;
+      pendingAction.current = null;
+      action?.();
+    },
+    [setWorkspaceId],
+  );
+
+  return {
+    canRunInWritableWorkspace:
+      canCreateSharedResource ||
+      (isAllWorkspaces && writableOptions.length > 0),
+    runInWritableWorkspace,
+    workspaceDialogProps: {
+      open: workspaceDialogOpen,
+      onOpenChange: setWorkspaceDialogOpen,
+      options: writableOptions,
+      onSelect: selectWorkspace,
+    },
   };
 };

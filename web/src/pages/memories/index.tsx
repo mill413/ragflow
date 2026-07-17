@@ -4,8 +4,9 @@ import { EmptyAppCard } from '@/components/empty/empty';
 import ListFilterBar from '@/components/list-filter-bar';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useTranslate } from '@/hooks/common-hooks';
-import { useWorkspace } from '@/hooks/use-workspace';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -17,7 +18,11 @@ import { ICreateMemoryProps, IMemory } from './interface';
 import { MemoryCard } from './memory-card';
 
 export default function MemoryList() {
-  const { canCreateSharedResource } = useWorkspace();
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction();
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('memories');
   const [addOrEditType, setAddOrEditType] = useState<'add' | 'edit'>('add');
@@ -48,10 +53,11 @@ export default function MemoryList() {
     });
   };
   const openCreateModalFun = useCallback(() => {
-    // setIsEdit(false);
-    setAddOrEditType('add');
-    showMemoryRenameModal(defaultMemoryFields as unknown as IMemory);
-  }, [showMemoryRenameModal]);
+    runInWritableWorkspace(() => {
+      setAddOrEditType('add');
+      showMemoryRenameModal(defaultMemoryFields as unknown as IMemory);
+    });
+  }, [runInWritableWorkspace, showMemoryRenameModal]);
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
       setPagination({ page, pageSize });
@@ -63,14 +69,14 @@ export default function MemoryList() {
   const { filters } = useSelectFilters();
   const isCreate = searchUrl.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate && canCreateSharedResource) {
+    if (isCreate && canRunInWritableWorkspace) {
       openCreateModalFun();
       searchUrl.delete('isCreate');
       setMemoryUrl(searchUrl);
     }
   }, [
     isCreate,
-    canCreateSharedResource,
+    canRunInWritableWorkspace,
     openCreateModalFun,
     searchUrl,
     setMemoryUrl,
@@ -78,6 +84,7 @@ export default function MemoryList() {
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {list?.data?.memory_list?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -93,7 +100,7 @@ export default function MemoryList() {
               onChange={handleFilterSubmit}
               value={filterValue}
             >
-              {canCreateSharedResource && (
+              {canRunInWritableWorkspace && (
                 <Button onClick={() => openCreateModalFun()}>
                   <Plus className="size-[1em]" />
                   {t('createMemory')}
@@ -133,7 +140,7 @@ export default function MemoryList() {
                 isSearch
                 type={EmptyCardType.Memory}
                 onClick={
-                  canCreateSharedResource
+                  canRunInWritableWorkspace
                     ? () => openCreateModalFun()
                     : undefined
                 }
@@ -151,7 +158,7 @@ export default function MemoryList() {
             size="large"
             type={EmptyCardType.Memory}
             onClick={
-              canCreateSharedResource ? () => openCreateModalFun() : undefined
+              canRunInWritableWorkspace ? () => openCreateModalFun() : undefined
             }
           />
         </article>

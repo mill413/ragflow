@@ -1789,6 +1789,7 @@ Example: Virtual Hosted Style`,
       ttsModelTip:
         'The default text-to-speech model. If you cannot find a model from the dropdown, check https://ragflow.io/docs/dev/supported_models to see if your model provider supports this model.',
       workspace: 'workspace',
+      selectCreationWorkspace: 'Select creation workspace',
       upgrade: 'Upgrade',
       addLlmTitle: 'Add LLM',
       editLlmTitle: 'Edit {{name}} model',

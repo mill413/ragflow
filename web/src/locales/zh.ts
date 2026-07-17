@@ -1481,6 +1481,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       rerankModel: 'Rerank',
       rerankModelTip: `默认的 reranking 模型。如未显示可选模型，请根据 https://ragflow.io/docs/dev/supported_models 确认你的模型供应商是否提供该模型。`,
       workspace: '工作空间',
+      selectCreationWorkspace: '选择创建位置',
       upgrade: '升级',
       addLlmTitle: '添加 LLM',
       editLlmTitle: '编辑 {{name}} 模型',
