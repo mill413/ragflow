@@ -48,6 +48,51 @@ class WorkspaceAccessService:
             return record.get(field, default)
         return getattr(record, field, default)
 
+    @staticmethod
+    def is_superuser(user_id: str) -> bool:
+        return UserService.is_admin(user_id)
+
+    @classmethod
+    def list_visible_workspace_ids(cls, user_id: str) -> list[str]:
+        if cls.is_superuser(user_id):
+            tenant_ids = Tenant.select(Tenant.id).where(Tenant.status == StatusEnum.VALID.value).tuples()
+            return [tenant_id for (tenant_id,) in tenant_ids]
+        return [workspace["tenant_id"] for workspace in TenantService.list_accessible_by_user_id(user_id)]
+
+    @classmethod
+    def list_visible_workspaces(cls, user_id: str) -> list[dict[str, Any]]:
+        workspace_ids = cls.list_visible_workspace_ids(user_id)
+        tenants = TenantService.get_by_ids(workspace_ids)
+        users = UserService.get_by_ids(workspace_ids)
+        user_map = {user.id: user for user in users}
+        workspaces = []
+        for tenant in tenants:
+            workspace_type = cls.get_workspace_type(tenant.id)
+            if not workspace_type:
+                continue
+            membership = cls.get_membership(user_id, tenant.id)
+            name = tenant.name or ""
+            if workspace_type == WorkspaceType.PERSONAL:
+                owner = user_map.get(tenant.id)
+                name = cls._value(owner, "nickname") or cls._value(owner, "email") or name
+            workspaces.append(
+                {
+                    "tenant_id": tenant.id,
+                    "name": name,
+                    "role": cls._value(membership, "role"),
+                    "workspace_type": workspace_type,
+                    "capabilities": cls.get_workspace_capabilities(user_id, tenant.id),
+                }
+            )
+        return sorted(
+            workspaces,
+            key=lambda workspace: (
+                workspace["tenant_id"] != user_id,
+                workspace["workspace_type"] != WorkspaceType.PERSONAL,
+                workspace["name"].casefold(),
+            ),
+        )
+
     @classmethod
     def get_workspace_type(cls, tenant_id: str) -> WorkspaceType | None:
         tenant_exists, tenant = TenantService.get_by_id(tenant_id)
@@ -118,6 +163,8 @@ class WorkspaceAccessService:
         tenant_id = cls._value(resource, workspace_field)
         workspace_type = cls.get_workspace_type(tenant_id)
         permission = cls._value(resource, permission_field) if permission_field else None
+        if workspace_type and cls.is_superuser(user_id):
+            return True
         if workspace_type == WorkspaceType.PERSONAL:
             return (
                 tenant_id == user_id
@@ -149,7 +196,7 @@ class WorkspaceAccessService:
 
         tenant_id = cls._value(resource, workspace_field)
         if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
-            return True
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
         return cls.can_manage_workspace(user_id, tenant_id)
 
     @classmethod
@@ -191,6 +238,9 @@ class WorkspaceAccessService:
         workspace_type = cls.get_workspace_type(tenant_id)
         permission = cls._value(knowledgebase, "permission")
 
+        if workspace_type and cls.is_superuser(user_id):
+            return True
+
         if workspace_type == WorkspaceType.PERSONAL:
             return permission == TenantPermission.ME and tenant_id == user_id and cls.is_member(user_id, tenant_id)
         if workspace_type == WorkspaceType.TEAM:
@@ -204,7 +254,7 @@ class WorkspaceAccessService:
 
         tenant_id = cls._value(knowledgebase, "tenant_id")
         if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
-            return True
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
 
         membership = cls.get_membership(user_id, tenant_id)
         role = cls._value(membership, "role") if membership else None
@@ -222,7 +272,7 @@ class WorkspaceAccessService:
         is_member = role in cls.ACTIVE_MEMBER_ROLES
         is_team = workspace_type == WorkspaceType.TEAM
         return {
-            "read": bool(is_member),
+            "read": bool(is_member or (workspace_type and cls.is_superuser(user_id))),
             "create_knowledgebase": cls.can_create_knowledgebase(user_id, tenant_id),
             "create_shared_resource": cls.can_create_shared_resource(user_id, tenant_id),
             "manage_members": bool(is_team and role in cls.MANAGER_ROLES),

@@ -107,8 +107,7 @@ def list_searches():
     owner_ids = request.args.getlist("owner_ids")
 
     try:
-        accessible_workspace_ids = {item["tenant_id"] for item in TenantService.list_accessible_by_user_id(current_user.id)}
-        accessible_workspace_ids.add(current_user.id)
+        accessible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(current_user.id))
         if not owner_ids:
             search_apps, total = SearchService.get_by_tenant_ids(
                 list(accessible_workspace_ids), current_user.id, page_number, items_per_page, orderby, desc, keywords

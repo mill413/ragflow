@@ -113,6 +113,7 @@ export const useFetchSearchList = () => {
         workspaceId,
       },
     ],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const { data: response } = await searchService.getSearchList(
         {

@@ -22,6 +22,7 @@ export default {
   deleteTenantUser: (tenantId: string) =>
     `${restAPIv1}/teams/${tenantId}/members`,
   listTenant: `${restAPIv1}/teams`,
+  listWorkspace: `${restAPIv1}/workspaces`,
   listTeamInvitations: `${restAPIv1}/teams/invitations`,
   createTeam: `${restAPIv1}/teams`,
   team: (tenantId: string) => `${restAPIv1}/teams/${tenantId}`,

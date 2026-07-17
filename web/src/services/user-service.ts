@@ -97,6 +97,7 @@ export const deleteTenantUser = ({
 }) => request.delete(`${api.deleteTenantUser(tenantId)}/${userId}`);
 
 export const listTenant = () => request.get(api.listTenant);
+export const listWorkspace = () => request.get(api.listWorkspace);
 export const listTeamInvitations = () => request.get(api.listTeamInvitations);
 
 export const agreeTenant = (tenantId: string) =>

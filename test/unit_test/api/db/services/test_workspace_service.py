@@ -49,6 +49,10 @@ def workspace_dependencies(monkeypatch):
         lambda user_id: (user_id in users, users.get(user_id)),
     )
     monkeypatch.setattr(
+        "api.db.services.workspace_service.UserService.is_admin",
+        lambda user_id: user_id == "system-admin",
+    )
+    monkeypatch.setattr(
         "api.db.services.workspace_service.UserTenantService.query",
         lambda **kwargs: [
             membership
@@ -113,6 +117,16 @@ def test_shared_resource_permissions_follow_workspace_roles(workspace_dependenci
     assert not WorkspaceAccessService.can_read_shared_resource("outsider", team_resource)
 
 
+def test_superuser_can_read_but_not_manage_every_workspace(workspace_dependencies):
+    personal_resource = {"tenant_id": "user-1", "status": StatusEnum.VALID.value}
+    team_resource = {"tenant_id": "team-1", "status": StatusEnum.VALID.value}
+
+    assert WorkspaceAccessService.can_read_shared_resource("system-admin", personal_resource)
+    assert WorkspaceAccessService.can_read_shared_resource("system-admin", team_resource)
+    assert not WorkspaceAccessService.can_manage_shared_resource("system-admin", personal_resource)
+    assert not WorkspaceAccessService.can_manage_shared_resource("system-admin", team_resource)
+
+
 def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_dependencies):
     personal_kb = {
         "tenant_id": "user-1",
@@ -134,6 +148,16 @@ def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_
     assert WorkspaceAccessService.get_knowledgebase_capabilities("admin-1", team_kb) == {"read": True, "update": True, "delete": True}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("invite-1", team_kb) == {"read": False, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("outsider", team_kb) == {"read": False, "update": False, "delete": False}
+    assert WorkspaceAccessService.get_knowledgebase_capabilities("system-admin", personal_kb) == {
+        "read": True,
+        "update": False,
+        "delete": False,
+    }
+    assert WorkspaceAccessService.get_knowledgebase_capabilities("system-admin", team_kb) == {
+        "read": True,
+        "update": False,
+        "delete": False,
+    }
 
 
 def test_workspace_capabilities_distinguish_member_and_manager(workspace_dependencies):

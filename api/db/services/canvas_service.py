@@ -132,6 +132,7 @@ class UserCanvasService(CommonService):
         canvas_category=None,
         tags=None,
         canvas_type=None,
+        include_private=False,
     ):
         fields = [
             cls.model.id,
@@ -146,7 +147,11 @@ class UserCanvasService(CommonService):
             cls.model.canvas_category,
             cls.model.tags,
         ]
-        if keywords:
+        if include_private:
+            agents = cls.model.select(*fields).join(Tenant, on=(cls.model.user_id == Tenant.id)).where(cls.model.user_id.in_(joined_tenant_ids))
+            if keywords:
+                agents = agents.where(fn.LOWER(cls.model.title).contains(keywords.lower()))
+        elif keywords:
             agents = (
                 cls.model.select(*fields)
                 .join(Tenant, on=(cls.model.user_id == Tenant.id))
@@ -200,9 +205,15 @@ class UserCanvasService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def list_tags(cls, joined_tenant_ids, user_id, canvas_category=None):
+    def list_tags(cls, joined_tenant_ids, user_id, canvas_category=None, include_private=False):
         """Return {tag: agent_count} aggregated across agents visible to the user."""
-        query = cls.model.select(cls.model.tags).where(((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.user_id == user_id))
+        if include_private:
+            query = cls.model.select(cls.model.tags).where(cls.model.user_id.in_(joined_tenant_ids))
+        else:
+            query = cls.model.select(cls.model.tags).where(
+                ((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value))
+                | (cls.model.user_id == user_id)
+            )
         if canvas_category:
             query = query.where(cls.model.canvas_category == canvas_category)
 

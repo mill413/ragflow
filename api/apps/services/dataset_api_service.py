@@ -418,19 +418,26 @@ def list_datasets(tenant_id: str, args: dict):
             return False, f"User '{tenant_id}' lacks permission for dataset '{name}'"
     personal_user_id = tenant_id
     if scope == "personal":
+        workspace_id = workspace_id or tenant_id
+        if (
+            WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.PERSONAL
+            or workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
+        ):
+            return False, "No authorization."
         tenant_ids = []
+        personal_user_id = workspace_id
     elif scope == "team":
         if not workspace_id or WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.TEAM:
             return False, "A valid team workspace_id is required."
-        if not WorkspaceAccessService.is_member(tenant_id, workspace_id):
+        if workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id):
             return False, "No authorization."
         tenant_ids = [workspace_id]
         personal_user_id = ""
     elif ext_fields.get("owner_ids", []):
         tenant_ids = ext_fields["owner_ids"]
     else:
-        tenants = TenantService.list_accessible_by_user_id(tenant_id)
-        tenant_ids = [m["tenant_id"] for m in tenants if m["tenant_id"] != tenant_id]
+        tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
+        tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]
     kbs, total = KnowledgebaseService.get_list(tenant_ids, personal_user_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
     workspaces = TenantService.get_by_ids([m["tenant_id"] for m in kbs])
     workspace_map = {m.id: m.to_dict() for m in workspaces}

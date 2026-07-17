@@ -85,6 +85,7 @@ export const useFetchChatList = () => {
       },
     ],
     initialData: { chats: [], total: 0 },
+    enabled: Boolean(workspaceId),
     gcTime: 0,
     refetchOnWindowFocus: false,
     queryFn: async () => {

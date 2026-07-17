@@ -169,6 +169,7 @@ export const useFetchAgentListByPage = () => {
       }
       return previousData;
     },
+    enabled: Boolean(workspaceId),
     gcTime: 0,
     queryFn: async () => {
       const { data } = await agentService.listAgents(

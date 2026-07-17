@@ -175,6 +175,7 @@ export const useFetchNextKnowledgeListByPage = () => {
       kbs: [],
       total_datasets: 0,
     },
+    enabled: Boolean(workspaceId),
     gcTime: 0,
     queryFn: async () => {
       const { data } = await listDataset({
@@ -185,7 +186,7 @@ export const useFetchNextKnowledgeListByPage = () => {
           owner_ids: filterValue.owner as string[],
         },
         scope: workspaceType,
-        workspace_id: workspaceType === 'team' ? workspaceId : undefined,
+        workspace_id: workspaceId,
       });
 
       return { kbs: data?.data, total_datasets: data?.total_datasets };

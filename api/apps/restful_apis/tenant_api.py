@@ -19,7 +19,7 @@ import logging
 from typing import Set
 
 from api.apps import current_user, login_required
-from api.db.services.workspace_service import TeamService
+from api.db.services.workspace_service import TeamService, WorkspaceAccessService
 from api.utils.api_utils import get_json_result, get_request_json, server_error_response, validate_request
 from api.utils.web_utils import send_invite_email
 from common import settings
@@ -65,6 +65,15 @@ async def create_team():
 def list_teams():
     try:
         return get_json_result(data=TeamService.list_by_user_id(current_user.id))
+    except Exception as exc:
+        return _team_error(exc)
+
+
+@manager.route("/workspaces", methods=["GET"])  # noqa: F821
+@login_required
+def list_workspaces():
+    try:
+        return get_json_result(data=WorkspaceAccessService.list_visible_workspaces(current_user.id))
     except Exception as exc:
         return _team_error(exc)
 

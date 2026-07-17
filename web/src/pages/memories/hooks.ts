@@ -89,6 +89,7 @@ export const useFetchMemoryList = () => {
       },
       filterValue,
     ],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const { data: response } = await memoryService.getMemoryList(
         {

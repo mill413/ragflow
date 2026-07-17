@@ -9,6 +9,7 @@ import {
   IUserInfo,
 } from '@/interfaces/database/user-setting';
 import { ISetLangfuseConfigRequestBody } from '@/interfaces/request/system';
+import { IWorkspace } from '@/interfaces/database/workspace';
 import { DEFAULT_LANGUAGE_CODE, supportedLanguages } from '@/locales/config';
 import kbService from '@/services/knowledge-service';
 import {
@@ -22,6 +23,7 @@ import userService, {
   deleteTeam,
   deleteTenantUser,
   listTenant,
+  listWorkspace,
   listTeamInvitations,
   listTenantUser,
   updateTeam,
@@ -46,6 +48,7 @@ export const enum UserSettingApiAction {
   AddTenantUser = 'addTenantUser',
   DeleteTenantUser = 'deleteTenantUser',
   ListTenant = 'listTenant',
+  ListWorkspace = 'listWorkspace',
   AgreeTenant = 'agreeTenant',
   ListTeamInvitations = 'listTeamInvitations',
   CreateTeam = 'createTeam',
@@ -416,6 +419,9 @@ export const useDeleteTenantUser = () => {
           queryKey: [UserSettingApiAction.ListTenant],
         });
         queryClient.invalidateQueries({
+          queryKey: [UserSettingApiAction.ListWorkspace],
+        });
+        queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTeamInvitations],
         });
       }
@@ -448,6 +454,20 @@ export const useListTenant = () => {
   return { data, loading, refetch };
 };
 
+export const useListWorkspace = () => {
+  const { data, isFetching: loading } = useQuery<IWorkspace[]>({
+    queryKey: [UserSettingApiAction.ListWorkspace],
+    initialData: [],
+    gcTime: 0,
+    queryFn: async () => {
+      const { data } = await listWorkspace();
+      return data?.data ?? [];
+    },
+  });
+
+  return { data, loading };
+};
+
 export const useAgreeTenant = () => {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -464,6 +484,9 @@ export const useAgreeTenant = () => {
         message.success(t('message.operated'));
         queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTenant],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [UserSettingApiAction.ListWorkspace],
         });
         queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTeamInvitations],
@@ -493,6 +516,9 @@ const useRefreshTeams = () => {
   return () => {
     queryClient.invalidateQueries({
       queryKey: [UserSettingApiAction.ListTenant],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [UserSettingApiAction.ListWorkspace],
     });
     queryClient.invalidateQueries({
       queryKey: [UserSettingApiAction.ListTeamInvitations],

@@ -30,7 +30,7 @@ from api.apps.restful_apis._generation_params import merge_generation_config, po
 from api.db.joint_services.tenant_model_service import get_api_key, get_tenant_default_model_by_type, resolve_model_config
 from api.db.services.chunk_feedback_service import ChunkFeedbackService
 from api.db.services.conversation_service import ConversationService, structure_answer
-from api.db.services.dialog_service import DialogService, async_chat, gen_mindmap, rag_agent
+from api.db.services.dialog_service import DialogService, gen_mindmap, rag_agent
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
 from api.db.services.llm_service import LLMBundle
 from api.db.services.search_service import SearchService
@@ -472,10 +472,9 @@ async def list_chats():
     try:
         page_number = int(request.args.get("page", 0))
         items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 0)))
-        accessible_workspace_ids = {
-            item["tenant_id"] for item in await thread_pool_exec(TenantService.list_accessible_by_user_id, current_user.id)
-        }
-        accessible_workspace_ids.add(current_user.id)
+        accessible_workspace_ids = set(
+            await thread_pool_exec(WorkspaceAccessService.list_visible_workspace_ids, current_user.id)
+        )
 
         if owner_ids:
             if not set(owner_ids).issubset(accessible_workspace_ids):

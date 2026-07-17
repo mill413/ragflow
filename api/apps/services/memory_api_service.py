@@ -47,7 +47,7 @@ def _split_filter_values(values):
 
 
 def _joined_tenant_ids(user_id: str) -> set[str]:
-    return {user_id, *[tenant["tenant_id"] for tenant in TenantService.list_accessible_by_user_id(user_id)]}
+    return set(WorkspaceAccessService.list_visible_workspace_ids(user_id))
 
 
 def _memory_accessible(memory) -> bool:
@@ -286,7 +286,9 @@ async def list_memory(filter_params: dict, keywords: str, page: int = 1, page_si
     :param page: int
     :param page_size: int
     """
-    filter_dict: dict = {"storage_type": filter_params.get("storage_type"), "accessible_user_id": current_user.id}
+    filter_dict: dict = {"storage_type": filter_params.get("storage_type")}
+    if not WorkspaceAccessService.is_superuser(current_user.id):
+        filter_dict["accessible_user_id"] = current_user.id
     allowed_tenant_ids = _joined_tenant_ids(current_user.id)
     tenant_ids = _split_filter_values(filter_params.get("tenant_id") or filter_params.get("owner_ids"))
     if tenant_ids:
