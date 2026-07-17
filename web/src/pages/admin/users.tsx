@@ -132,6 +132,20 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'inactive', label: 'admin.inactive' },
 ];
 
+const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
+  email: 'min-w-44',
+  nickname: 'min-w-24',
+  password_plain: 'min-w-40',
+  department_path: 'min-w-52',
+  is_active: 'w-32 min-w-32',
+  is_superuser: 'w-36 min-w-36',
+  teams_total: 'w-24 min-w-24 text-center',
+  created_datasets: 'w-28 min-w-28 text-center',
+  uploaded_documents: 'w-24 min-w-24 text-center',
+  uploaded_storage_bytes: 'w-28 min-w-28 text-center',
+  actions: 'w-44 min-w-44',
+};
+
 function AdminUserManagement() {
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
 
@@ -309,7 +323,7 @@ function AdminUserManagement() {
               })
             }
           >
-            <SelectTrigger className="min-w-40">
+            <SelectTrigger className="w-52 [&>span]:truncate">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -398,7 +412,7 @@ function AdminUserManagement() {
                 })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-32 [&>span]:truncate">
                 <SelectValue />
               </SelectTrigger>
 
@@ -453,7 +467,7 @@ function AdminUserManagement() {
                 });
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-36 [&>span]:truncate">
                 <SelectValue />
               </SelectTrigger>
 
@@ -492,7 +506,7 @@ function AdminUserManagement() {
           const isMe = row.original.email === userInfo?.email;
 
           return (
-            <div className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
+            <div className="flex items-center whitespace-nowrap opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
               <Button
                 variant="transparent"
                 size="icon"
@@ -765,12 +779,18 @@ function AdminUserManagement() {
           </CardHeader>
 
           <CardContent>
-            <Table>
+            <Table className="min-w-[1660px]">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        className={cn(
+                          'whitespace-nowrap px-3',
+                          USER_TABLE_COLUMN_CLASSES[header.column.id],
+                        )}
+                      >
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -788,7 +808,13 @@ function AdminUserManagement() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} className="group/row">
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          className={cn(
+                            'whitespace-nowrap px-3',
+                            USER_TABLE_COLUMN_CLASSES[cell.column.id],
+                          )}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),
