@@ -15,7 +15,7 @@
 #
 from typing import List
 
-from api.db.db_models import DB, Memory, User
+from api.db.db_models import DB, Memory, Tenant
 from api.db.services import duplicate_name
 from api.db.services.common_service import CommonService
 from api.utils.memory_utils import calculate_memory_type
@@ -53,7 +53,7 @@ class MemoryService(CommonService):
             cls.model.name,
             cls.model.avatar,
             cls.model.tenant_id,
-            User.nickname.alias("owner_name"),
+            Tenant.name.alias("owner_name"),
             cls.model.memory_type,
             cls.model.storage_type,
             cls.model.embd_id,
@@ -68,7 +68,7 @@ class MemoryService(CommonService):
             cls.model.create_date,
             cls.model.create_time,
         ]
-        memory = cls.model.select(*fields).join(User, on=(cls.model.tenant_id == User.id)).where(cls.model.id == memory_id).first()
+        memory = cls.model.select(*fields).join(Tenant, on=(cls.model.tenant_id == Tenant.id)).where(cls.model.id == memory_id).first()
         return memory
 
     @classmethod
@@ -79,7 +79,7 @@ class MemoryService(CommonService):
             cls.model.name,
             cls.model.avatar,
             cls.model.tenant_id,
-            User.nickname.alias("owner_name"),
+            Tenant.name.alias("owner_name"),
             cls.model.memory_type,
             cls.model.storage_type,
             cls.model.embd_id,
@@ -89,7 +89,7 @@ class MemoryService(CommonService):
             cls.model.create_time,
             cls.model.create_date,
         ]
-        memories = cls.model.select(*fields).join(User, on=(cls.model.tenant_id == User.id))
+        memories = cls.model.select(*fields).join(Tenant, on=(cls.model.tenant_id == Tenant.id))
         if filter_dict.get("tenant_id"):
             memories = memories.where(cls.model.tenant_id.in_(filter_dict["tenant_id"]))
         if filter_dict.get("accessible_user_id"):
@@ -109,7 +109,17 @@ class MemoryService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def create_memory(cls, tenant_id: str, name: str, memory_type: List[str], embd_id: str, llm_id: str, tenant_embd_id: str | None = None, tenant_llm_id: str | None = None):
+    def create_memory(
+        cls,
+        tenant_id: str,
+        name: str,
+        memory_type: List[str],
+        embd_id: str,
+        llm_id: str,
+        tenant_embd_id: str | None = None,
+        tenant_llm_id: str | None = None,
+        permissions: str = "me",
+    ):
         # Deduplicate name within tenant
         memory_name = duplicate_name(cls.query, name=name, tenant_id=tenant_id)
         if len(memory_name) > MEMORY_NAME_LIMIT:
@@ -123,6 +133,7 @@ class MemoryService(CommonService):
             "name": memory_name,
             "memory_type": calculate_memory_type(memory_type),
             "tenant_id": tenant_id,
+            "permissions": permissions,
             "embd_id": embd_id,
             "tenant_embd_id": tenant_embd_id,
             "llm_id": llm_id,

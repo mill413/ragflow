@@ -14,9 +14,10 @@
 #  limitations under the License.
 #
 from api.apps import current_user
-from api.db import TenantPermission
+from api.db import TenantPermission, WorkspaceType
 from api.db.services.memory_service import MemoryService
-from api.db.services.user_service import UserTenantService
+from api.db.services.user_service import TenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService
 from api.db.joint_services.memory_message_service import get_memory_size_cache, judge_system_prompt_is_default, queue_save_to_memory_task, query_message
@@ -46,23 +47,37 @@ def _split_filter_values(values):
 
 
 def _joined_tenant_ids(user_id: str) -> set[str]:
-    user_tenants = UserTenantService.get_user_tenant_relation_by_user_id(user_id)
-    return {user_id, *[tenant["tenant_id"] for tenant in user_tenants]}
+    return {user_id, *[tenant["tenant_id"] for tenant in TenantService.list_accessible_by_user_id(user_id)]}
 
 
 def _memory_accessible(memory) -> bool:
-    if memory.tenant_id == current_user.id:
-        return True
-    if memory.permissions != TenantPermission.TEAM.value:
-        return False
-    return memory.tenant_id in _joined_tenant_ids(current_user.id)
+    return WorkspaceAccessService.can_read_shared_resource(
+        current_user.id,
+        memory,
+        permission_field="permissions",
+    )
 
 
-def _require_memory_access(memory_id: str):
+def _require_memory_access(memory_id: str, *, manage=False):
     memory = MemoryService.get_by_memory_id(memory_id)
-    if not memory or not _memory_accessible(memory):
+    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    if not memory or not check(current_user.id, memory, permission_field="permissions"):
         raise NotFoundException(f"Memory '{memory_id}' not found.")
     return memory
+
+
+def _build_memory_response(memory):
+    data = format_ret_data_from_memory(memory) if not isinstance(memory, dict) else dict(memory)
+    workspace_type = WorkspaceAccessService.get_workspace_type(data["tenant_id"])
+    workspace_exists, workspace = TenantService.get_by_id(data["tenant_id"])
+    data["workspace_type"] = workspace_type
+    data["workspace_name"] = workspace.name if workspace_exists else ""
+    data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(
+        current_user.id,
+        data,
+        permission_field="permissions",
+    )
+    return data
 
 
 def _filter_accessible_memories(memory_ids: list[str]):
@@ -98,17 +113,26 @@ async def create_memory(memory_info: dict):
     if invalid_type:
         raise ArgumentException(f"Memory type '{invalid_type}' is not supported.")
     memory_type = list(memory_type)
+    workspace_id = memory_info.get("workspace_id", current_user.id)
+    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        raise ArgumentException("No authorization for the selected workspace.")
+    permissions = (
+        TenantPermission.TEAM
+        if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM
+        else TenantPermission.ME
+    )
     success, res = MemoryService.create_memory(
-        tenant_id=current_user.id,
+        tenant_id=workspace_id,
         name=memory_name,
         memory_type=memory_type,
         embd_id=memory_info["embd_id"],
         llm_id=memory_info["llm_id"],
         tenant_embd_id=memory_info.get("tenant_embd_id"),
         tenant_llm_id=memory_info.get("tenant_llm_id"),
+        permissions=permissions,
     )
     if success:
-        return True, format_ret_data_from_memory(res)
+        return True, _build_memory_response(res)
     else:
         return False, res
 
@@ -131,7 +155,7 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
         "user_prompt": str
     }
     """
-    current_memory = _require_memory_access(memory_id)
+    current_memory = _require_memory_access(memory_id, manage=True)
 
     def _normalize_memory_type(value):
         if value is None:
@@ -161,7 +185,13 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
     if new_memory_setting.get("permissions"):
         if new_memory_setting["permissions"] not in [e.value for e in TenantPermission]:
             raise ArgumentException(f"Unknown permission '{new_memory_setting['permissions']}'.")
-        update_dict["permissions"] = new_memory_setting["permissions"]
+        expected_permission = (
+            TenantPermission.TEAM
+            if WorkspaceAccessService.get_workspace_type(current_memory.tenant_id) == WorkspaceType.TEAM
+            else TenantPermission.ME
+        )
+        if new_memory_setting["permissions"] != expected_permission:
+            raise ArgumentException("Memory permissions are determined by its workspace.")
     if new_memory_setting.get("llm_id") or new_memory_setting.get("embd_id"):
         merged = {
             "llm_id": new_memory_setting.get("llm_id") or current_memory.llm_id,
@@ -234,11 +264,11 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
 
     MemoryService.update_memory(current_memory.tenant_id, memory_id, to_update)
     updated_memory = MemoryService.get_by_memory_id(memory_id)
-    return True, format_ret_data_from_memory(updated_memory)
+    return True, _build_memory_response(updated_memory)
 
 
 async def delete_memory(memory_id):
-    memory = _require_memory_access(memory_id)
+    memory = _require_memory_access(memory_id, manage=True)
     MemoryService.delete_memory(memory_id)
     if MessageService.has_index(memory.tenant_id, memory_id):
         MessageService.delete_message({"memory_id": memory_id}, memory.tenant_id, memory_id)
@@ -270,6 +300,7 @@ async def list_memory(filter_params: dict, keywords: str, page: int = 1, page_si
 
     memory_list, count = MemoryService.get_by_filter(filter_dict, keywords, page, page_size)
     [memory.update({"memory_type": get_memory_type_human(memory["memory_type"])}) for memory in memory_list]
+    memory_list = [_build_memory_response(memory) for memory in memory_list]
     memory_list.sort(key=lambda m: m["create_time"], reverse=True)
     return {"memory_list": memory_list, "total_count": count}
 
@@ -278,7 +309,7 @@ async def get_memory_config(memory_id):
     memory = MemoryService.get_with_owner_name_by_id(memory_id)
     if not memory or not _memory_accessible(memory):
         raise NotFoundException(f"Memory '{memory_id}' not found.")
-    return format_ret_data_from_memory(memory)
+    return _build_memory_response(memory)
 
 
 async def get_memory_messages(memory_id, agent_ids: list[str], keywords: str, page: int = 1, page_size: int = 50):

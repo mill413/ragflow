@@ -21,7 +21,7 @@ from operator import or_
 from uuid import uuid4
 from agent.canvas import Canvas
 from api.db import CanvasCategory, TenantPermission
-from api.db.db_models import DB, CanvasTemplate, User, UserCanvas, API4Conversation, UserCanvasVersion
+from api.db.db_models import DB, CanvasTemplate, Tenant, UserCanvas, API4Conversation, UserCanvasVersion
 from api.db.services.api_service import API4ConversationService
 from api.db.services.common_service import CommonService
 from api.db.services.user_canvas_version import UserCanvasVersionService
@@ -103,10 +103,9 @@ class UserCanvasService(CommonService):
                 cls.model.create_date,
                 cls.model.update_date,
                 cls.model.canvas_category,
-                User.nickname,
-                User.avatar.alias("tenant_avatar"),
+                Tenant.name.alias("nickname"),
             ]
-            agents = cls.model.select(*fields).join(User, on=(cls.model.user_id == User.id)).where(cls.model.id == pid)
+            agents = cls.model.select(*fields).join(Tenant, on=(cls.model.user_id == Tenant.id)).where(cls.model.id == pid)
             # obj = cls.model.query(id=pid)[0]
             return True, agents.dicts()[0]
         except Exception as e:
@@ -141,8 +140,7 @@ class UserCanvasService(CommonService):
             cls.model.description,
             cls.model.permission,
             cls.model.user_id.alias("tenant_id"),
-            User.nickname,
-            User.avatar.alias("tenant_avatar"),
+            Tenant.name.alias("nickname"),
             cls.model.update_time,
             cls.model.canvas_type,
             cls.model.canvas_category,
@@ -151,7 +149,7 @@ class UserCanvasService(CommonService):
         if keywords:
             agents = (
                 cls.model.select(*fields)
-                .join(User, on=(cls.model.user_id == User.id))
+                .join(Tenant, on=(cls.model.user_id == Tenant.id))
                 .where(
                     (((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.user_id == user_id)),
                     (fn.LOWER(cls.model.title).contains(keywords.lower())),
@@ -160,7 +158,7 @@ class UserCanvasService(CommonService):
         else:
             agents = (
                 cls.model.select(*fields)
-                .join(User, on=(cls.model.user_id == User.id))
+                .join(Tenant, on=(cls.model.user_id == Tenant.id))
                 .where((((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.user_id == user_id)))
             )
         if canvas_category:
@@ -264,20 +262,32 @@ class UserCanvasService(CommonService):
     @classmethod
     @DB.connection_context()
     def accessible(cls, canvas_id, tenant_id):
-        from api.db.services.user_service import UserTenantService
+        from api.db.services.workspace_service import WorkspaceAccessService
 
         e, c = UserCanvasService.get_by_canvas_id(canvas_id)
         if not e:
             return False
+        return WorkspaceAccessService.can_read_shared_resource(
+            tenant_id,
+            c,
+            workspace_field="user_id",
+            permission_field="permission",
+        )
 
-        tids = [t.tenant_id for t in UserTenantService.query(user_id=tenant_id)]
-        if c["user_id"] == tenant_id:
-            return True
-        if c["user_id"] not in tids:
+    @classmethod
+    @DB.connection_context()
+    def manageable(cls, canvas_id, tenant_id):
+        from api.db.services.workspace_service import WorkspaceAccessService
+
+        e, canvas = UserCanvasService.get_by_canvas_id(canvas_id)
+        if not e:
             return False
-        if c["permission"] != TenantPermission.TEAM.value:
-            return False
-        return True
+        return WorkspaceAccessService.can_manage_shared_resource(
+            tenant_id,
+            canvas,
+            workspace_field="user_id",
+            permission_field="permission",
+        )
 
     @classmethod
     def get_agent_dsl_with_release(cls, agent_id, release_mode=False, tenant_id=None):

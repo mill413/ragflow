@@ -19,7 +19,20 @@ import hashlib
 from typing import Any
 
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
-from api.db.db_models import DB, Knowledgebase, Tenant, TenantLLM, TenantModel, TenantModelInstance, TenantModelProvider, UserTenant
+from api.db.db_models import (
+    DB,
+    Dialog,
+    Knowledgebase,
+    Memory,
+    Search,
+    Tenant,
+    TenantLLM,
+    TenantModel,
+    TenantModelInstance,
+    TenantModelProvider,
+    UserCanvas,
+    UserTenant,
+)
 from api.db.services.user_service import TenantService, UserService, UserTenantService
 from common.constants import StatusEnum
 from common.misc_utils import get_uuid
@@ -466,11 +479,15 @@ class TeamService:
         membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
         if not membership or membership.role != UserTenantRole.OWNER:
             raise PermissionError("Only the owner can delete a team.")
-        has_knowledgebases = Knowledgebase.select().where(
-            (Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)
-        ).exists()
-        if has_knowledgebases:
-            raise ValueError("Delete all team knowledgebases before deleting the team.")
+        resource_queries = (
+            Knowledgebase.select().where((Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)),
+            Dialog.select().where((Dialog.tenant_id == tenant_id) & (Dialog.status == StatusEnum.VALID.value)),
+            Search.select().where((Search.tenant_id == tenant_id) & (Search.status == StatusEnum.VALID.value)),
+            UserCanvas.select().where(UserCanvas.user_id == tenant_id),
+            Memory.select().where(Memory.tenant_id == tenant_id),
+        )
+        if any(query.exists() for query in resource_queries):
+            raise ValueError("Delete all team resources before deleting the team.")
         with DB.atomic():
             UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
             Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()

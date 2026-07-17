@@ -18,7 +18,7 @@ from datetime import datetime
 from peewee import fn
 
 from common.constants import StatusEnum
-from api.db.db_models import DB, Search, User
+from api.db.db_models import DB, Search, Tenant
 from api.db.services.common_service import CommonService
 from common.time_utils import current_timestamp, datetime_format
 
@@ -64,12 +64,11 @@ class SearchService(CommonService):
             cls.model.created_by,
             cls.model.search_config,
             cls.model.update_time,
-            User.nickname,
-            User.avatar.alias("tenant_avatar"),
+            Tenant.name.alias("nickname"),
         ]
         search = (
             cls.model.select(*fields)
-            .join(User, on=((User.id == cls.model.tenant_id) & (User.status == StatusEnum.VALID.value)))
+            .join(Tenant, on=((Tenant.id == cls.model.tenant_id) & (Tenant.status == StatusEnum.VALID.value)))
             .where((cls.model.id == search_id) & (cls.model.status == StatusEnum.VALID.value))
             .first()
         )
@@ -90,12 +89,11 @@ class SearchService(CommonService):
             cls.model.status,
             cls.model.update_time,
             cls.model.create_time,
-            User.nickname,
-            User.avatar.alias("tenant_avatar"),
+            Tenant.name.alias("nickname"),
         ]
         query = (
             cls.model.select(*fields)
-            .join(User, on=(cls.model.tenant_id == User.id))
+            .join(Tenant, on=(cls.model.tenant_id == Tenant.id))
             .where(((cls.model.tenant_id.in_(joined_tenant_ids)) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value))
         )
 
