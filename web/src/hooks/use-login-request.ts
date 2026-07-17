@@ -1,5 +1,6 @@
 import message from '@/components/ui/message';
 import { Authorization } from '@/constants/authorization';
+import { changeLanguageAsync, resolveLanguageCode } from '@/locales/config';
 import userService, {
   getLoginChannels,
   loginWithChannel,
@@ -7,7 +8,6 @@ import userService, {
 import {
   default as authorizationUtil,
   redirectToLogin,
-  default as storage,
 } from '@/utils/authorization-util';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -63,10 +63,6 @@ export const useLogin = () => {
     mutationFn: async (params: { email: string; password: string }) => {
       const { data: res = {}, response } = await userService.login(params);
       if (res.code === 0) {
-        // The language is based on the .lng stored in the client's local storage.
-        // The language stored in the database is for agent template resources,
-        // since the agent template resources are stored on the server.
-        saveSetting({ language: storage.getLanguage() });
         const { data } = res;
         const authorization = response.headers.get(Authorization);
         const token = data.access_token;
@@ -80,6 +76,10 @@ export const useLogin = () => {
           userInfo: JSON.stringify(userInfo),
           Token: token,
         });
+
+        const language = resolveLanguageCode(data.language);
+        await changeLanguageAsync(language);
+        await saveSetting({ language });
       }
       return res.code;
     },
