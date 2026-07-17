@@ -121,14 +121,6 @@ export default {
   dataSourceRebuild: (id: string) => `${restAPIv1}/connectors/${id}/rebuild`,
   dataSourceLogs: (id: string) => `${restAPIv1}/connectors/${id}/logs`,
   dataSourceDetail: (id: string) => `${restAPIv1}/connectors/${id}`,
-  dataSourceTest: (id: string) => `${restAPIv1}/connectors/${id}/test`,
-  googleWebAuthStart: (type: 'google-drive' | 'gmail') =>
-    `${restAPIv1}/connectors/google/oauth/web/start?type=${type}`,
-  googleWebAuthResult: (type: 'google-drive' | 'gmail') =>
-    `${restAPIv1}/connectors/google/oauth/web/result?type=${type}`,
-  boxWebAuthStart: () => `${restAPIv1}/connectors/box/oauth/web/start`,
-  boxWebAuthResult: () => `${restAPIv1}/connectors/box/oauth/web/result`,
-
   // plugin
   llmTools: `${restAPIv1}/plugin/tools`,
 

@@ -178,6 +178,16 @@ class FileSource(StrEnum):
     AZURE_BLOB = "azure_blob"
 
 
+SUPPORTED_DATA_SOURCES = frozenset(
+    {
+        FileSource.S3.value,
+        FileSource.IMAP.value,
+        FileSource.MYSQL.value,
+        FileSource.POSTGRESQL.value,
+    }
+)
+
+
 class PipelineTaskType(StrEnum):
     PARSE = "Parse"
     DOWNLOAD = "Download"

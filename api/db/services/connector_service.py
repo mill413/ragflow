@@ -28,7 +28,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.document_service import DocMetadataService
 from api.utils.common import hash128
 from common.misc_utils import get_uuid
-from common.constants import ConnectorTaskType, TaskStatus
+from common.constants import ConnectorTaskType, SUPPORTED_DATA_SOURCES, TaskStatus
 from common.settings import TIMEZONE
 from common.time_utils import current_timestamp, timestamp_to_date
 
@@ -312,6 +312,7 @@ class SyncLogsService(CommonService):
         query = query.where(
             Connector.input_type == InputType.POLL,
             Connector.status == TaskStatus.SCHEDULE,
+            Connector.source.in_(SUPPORTED_DATA_SOURCES),
             cls.model.status == TaskStatus.SCHEDULE,
             cls.model.task_type == task_type,
         )
