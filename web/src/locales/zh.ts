@@ -2894,6 +2894,31 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       roles: '角色管理',
       monitoring: '监控',
 
+      monitoringPage: {
+        title: '运行监控',
+        description:
+          '实时查看业务规模、知识处理情况、存储分布和组件健康状态，每 30 秒自动刷新。',
+        refresh: '刷新',
+        users: '用户总数',
+        activeUsers: '其中 {{count}} 个活跃用户',
+        teams: '团队总数',
+        datasets: '知识库',
+        documents: '文件',
+        storage: '知识库总存储',
+        chats: '聊天助手',
+        agents: '智能体',
+        services: '健康组件',
+        processing: '知识处理',
+        processingDocuments: '处理中',
+        pendingTasks: '待完成任务',
+        failedDocuments: '解析失败',
+        storageDistribution: '空间存储分布',
+        teamSpace: '团队',
+        personalSpace: '个人',
+        noStorage: '暂无存储数据',
+        componentHealth: '组件健康状态',
+      },
+
       sandboxSettingsPage: {
         description:
           '配置代码执行沙箱服务。智能体中的代码组件会使用该沙箱运行代码。',

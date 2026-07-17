@@ -3320,6 +3320,31 @@ Important structured information may include: names, dates, locations, events, k
       roles: 'Roles',
       monitoring: 'Monitoring',
 
+      monitoringPage: {
+        title: 'Operations monitoring',
+        description:
+          'Live business, ingestion, storage, and component health metrics. Refreshes every 30 seconds.',
+        refresh: 'Refresh',
+        users: 'Users',
+        activeUsers: '{{count}} active users',
+        teams: 'Teams',
+        datasets: 'Datasets',
+        documents: 'Documents',
+        storage: 'Dataset storage',
+        chats: 'Chat assistants',
+        agents: 'Agents',
+        services: 'Healthy services',
+        processing: 'Knowledge processing',
+        processingDocuments: 'Processing',
+        pendingTasks: 'Pending tasks',
+        failedDocuments: 'Failed',
+        storageDistribution: 'Workspace storage distribution',
+        teamSpace: 'Team',
+        personalSpace: 'Personal',
+        noStorage: 'No storage data',
+        componentHealth: 'Component health',
+      },
+
       sandboxSettingsPage: {
         description:
           'Configure your code execution sandbox provider. The sandbox is used by the Code component in agents.',

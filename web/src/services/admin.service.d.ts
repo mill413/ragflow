@@ -128,6 +128,43 @@ declare namespace AdminService {
         message: AdminService.TaskExecutorInfo;
       };
 
+  export type MonitoringStorageItem = {
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    datasets_total: number;
+    documents_total: number;
+    storage_bytes: number;
+  };
+
+  export type MonitoringServiceItem = {
+    id: number;
+    name: string;
+    service_type: string;
+    host: string;
+    port: number | string;
+    status: 'alive' | 'timeout' | 'fail';
+  };
+
+  export type MonitoringSummary = {
+    users_total: number;
+    active_users: number;
+    teams_total: number;
+    datasets_total: number;
+    documents_total: number;
+    storage_bytes: number;
+    failed_documents: number;
+    processing_documents: number;
+    pending_tasks: number;
+    chats_total: number;
+    agents_total: number;
+    health_status: 'healthy' | 'degraded';
+    healthy_services: number;
+    services_total: number;
+    services: MonitoringServiceItem[];
+    storage_distribution: MonitoringStorageItem[];
+  };
+
   export type PermissionData = {
     enable: boolean;
     read: boolean;

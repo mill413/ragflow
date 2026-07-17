@@ -31,7 +31,7 @@ from api.db.services.user_service import TenantService, UserTenantService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken, Dialog, Knowledgebase, Memory, Search, Tenant, User, UserCanvas
+from api.db.db_models import APIToken, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas
 from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
@@ -448,6 +448,95 @@ class ServiceMgr:
     @staticmethod
     def restart_service(service_id: int):
         raise AdminException("restart_service: not implemented")
+
+
+class MonitoringMgr:
+    """Build a real-time operational overview without persisting snapshots."""
+
+    @staticmethod
+    def get_summary():
+        valid = StatusEnum.VALID.value
+        users_total = User.select().where(User.status == valid).count()
+        active_users = User.select().where((User.status == valid) & (User.is_active == ActiveEnum.ACTIVE.value)).count()
+        teams_total = (
+            Tenant.select()
+            .where((Tenant.status == valid) & ~(Tenant.id.in_(User.select(User.id))))
+            .count()
+        )
+        datasets_total = Knowledgebase.select().where(Knowledgebase.status == valid).count()
+        documents = Document.select().where(Document.status == valid)
+        documents_total = documents.count()
+        storage_bytes = documents.select(fn.COALESCE(fn.SUM(Document.size), 0)).scalar() or 0
+        failed_documents = documents.where(Document.progress < 0).count()
+        processing_documents = documents.where((Document.progress >= 0) & (Document.progress < 1)).count()
+        pending_tasks = Task.select().where((Task.progress >= 0) & (Task.progress < 1)).count()
+        chats_total = Dialog.select().where(Dialog.status == valid).count()
+        agents_total = UserCanvas.select().where(UserCanvas.canvas_category == CanvasCategory.Agent.value).count()
+
+        services = [
+            {
+                "id": service["id"],
+                "name": service["name"],
+                "service_type": service["service_type"],
+                "host": service["host"],
+                "port": service["port"],
+                "status": service["status"],
+            }
+            for service in ServiceMgr.get_all_services()
+        ]
+        healthy_services = sum(service["status"] == "alive" for service in services)
+
+        return {
+            "users_total": users_total,
+            "active_users": active_users,
+            "teams_total": teams_total,
+            "datasets_total": datasets_total,
+            "documents_total": documents_total,
+            "storage_bytes": int(storage_bytes),
+            "failed_documents": failed_documents,
+            "processing_documents": processing_documents,
+            "pending_tasks": pending_tasks,
+            "chats_total": chats_total,
+            "agents_total": agents_total,
+            "health_status": "healthy" if healthy_services == len(services) else "degraded",
+            "healthy_services": healthy_services,
+            "services_total": len(services),
+            "services": services,
+            "storage_distribution": MonitoringMgr.get_storage_distribution(),
+        }
+
+    @staticmethod
+    def get_storage_distribution(limit=8):
+        valid = StatusEnum.VALID.value
+        dataset_counts = {
+            row["workspace_id"]: row["datasets_total"]
+            for row in (
+                Knowledgebase.select(
+                    Knowledgebase.tenant_id.alias("workspace_id"),
+                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
+                )
+                .where(Knowledgebase.status == valid)
+                .group_by(Knowledgebase.tenant_id)
+                .dicts()
+            )
+        }
+        rows = list(
+            Document.select(
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                fn.COUNT(Document.id).alias("documents_total"),
+                fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+            )
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .where((Document.status == valid) & (Knowledgebase.status == valid))
+            .group_by(Knowledgebase.tenant_id)
+            .order_by(fn.SUM(Document.size).desc())
+            .limit(limit)
+            .dicts()
+        )
+        ResourceMgr._attach_ownership(rows)
+        for row in rows:
+            row["datasets_total"] = dataset_counts.get(row["workspace_id"], 0)
+        return rows
 
 
 class SettingsMgr:

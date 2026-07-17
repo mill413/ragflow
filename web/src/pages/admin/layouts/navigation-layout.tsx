@@ -57,6 +57,11 @@ const AdminNavigationLayout = () => {
         name: t('admin.sandboxSettings'),
         icon: <LucideZap className="size-[1em]" />,
       },
+      {
+        path: Routes.AdminMonitoring,
+        name: t('admin.monitoring'),
+        icon: <LucideMonitor className="size-[1em]" />,
+      },
       ...(IS_ENTERPRISE
         ? [
             {
@@ -68,11 +73,6 @@ const AdminNavigationLayout = () => {
               path: Routes.AdminRoles,
               name: t('admin.roles'),
               icon: <LucideSquareUserRound className="size-[1em]" />,
-            },
-            {
-              path: Routes.AdminMonitoring,
-              name: t('admin.monitoring'),
-              icon: <LucideMonitor className="size-[1em]" />,
             },
           ]
         : []),

@@ -24,7 +24,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, ServiceMgr, UserServiceMgr, ResourceMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import UserMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.versions import get_ragflow_version
@@ -572,6 +572,16 @@ def show_version():
     try:
         res = {"version": get_ragflow_version()}
         return success_response(res)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/monitoring/summary", methods=["GET"])
+@login_required
+@check_admin_auth
+def monitoring_summary():
+    try:
+        return success_response(MonitoringMgr.get_summary())
     except Exception as e:
         return error_response(str(e), 500)
 

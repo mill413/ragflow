@@ -453,6 +453,7 @@ export default {
   adminImportWhitelist: `${restAPIv1}/admin/whitelist/batch`,
 
   adminGetSystemVersion: `${restAPIv1}/admin/version`,
+  adminGetMonitoringSummary: `${restAPIv1}/admin/monitoring/summary`,
 
   // Sandbox settings
   adminListSandboxProviders: `${restAPIv1}/admin/sandbox/providers`,

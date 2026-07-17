@@ -412,6 +412,10 @@ const routeConfigOptions = [
                 path: Routes.AdminSandboxSettings,
                 Component: () => import('@/pages/admin/sandbox-settings'),
               },
+              {
+                path: Routes.AdminMonitoring,
+                Component: () => import('@/pages/admin/monitoring'),
+              },
               ...(IS_ENTERPRISE
                 ? [
                     {
@@ -421,10 +425,6 @@ const routeConfigOptions = [
                     {
                       path: Routes.AdminRoles,
                       Component: () => import('@/pages/admin/roles'),
-                    },
-                    {
-                      path: Routes.AdminMonitoring,
-                      Component: () => import('@/pages/admin/monitoring'),
                     },
                   ]
                 : []),

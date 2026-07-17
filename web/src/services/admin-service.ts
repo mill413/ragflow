@@ -136,6 +136,7 @@ const {
   adminImportWhitelist,
 
   adminGetSystemVersion,
+  adminGetMonitoringSummary,
 
   adminListSandboxProviders,
   adminGetSandboxProviderSchema,
@@ -199,6 +200,10 @@ export const deleteUser = (email: string) =>
 
 export const listServices = () =>
   request.get<ResponseData<AdminService.ListServicesItem[]>>(adminListServices);
+export const getMonitoringSummary = () =>
+  request.get<ResponseData<AdminService.MonitoringSummary>>(
+    adminGetMonitoringSummary,
+  );
 export const showServiceDetails = (serviceId: number) =>
   request.get<ResponseData<AdminService.ServiceDetail>>(
     adminShowServiceDetails(String(serviceId)),
