@@ -350,6 +350,9 @@ class UserMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         user = users[0]
 
+        if "email" in data:
+            raise AdminException("Email cannot be changed", 400)
+
         department_id = data.get("department_id")
         if department_id:
             OrganizationMgr.ensure_department_exists(department_id)
@@ -359,14 +362,6 @@ class UserMgr:
             raise AdminException("Remark must be at most 2000 characters", 400)
 
         updates = {}
-        if "email" in data:
-            email = str(data.get("email") or "").strip().lower()
-            if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", email):
-                raise AdminException(f"Invalid email address: {email}!", 400)
-            existing = UserService.query_user_by_email(email)
-            if existing and existing[0].id != user.id:
-                raise UserAlreadyExistsError(email)
-            updates["email"] = email
         if "nickname" in data:
             nickname = str(data.get("nickname") or "").strip()
             if len(nickname) > 100:

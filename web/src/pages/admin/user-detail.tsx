@@ -328,7 +328,6 @@ function AdminUserDetail() {
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({
-    email: '',
     nickname: '',
     password: '',
     departmentId: '',
@@ -363,7 +362,6 @@ function AdminUserDetail() {
   const updateMutation = useMutation({
     mutationFn: () =>
       updateUser(id!, {
-        email: editForm.email.trim(),
         nickname: editForm.nickname.trim(),
         password: editForm.password
           ? (rsaPsw(editForm.password) as string)
@@ -373,23 +371,16 @@ function AdminUserDetail() {
         isSuperuser: editForm.isSuperuser,
         remark: editForm.remark.trim(),
       }),
-    onSuccess: (response) => {
-      const nextEmail = response.data.data.email;
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
       queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
       message.success(t('admin.userUpdated'));
       setEditOpen(false);
-      if (nextEmail !== id) {
-        navigate(`${Routes.AdminUserManagement}/${nextEmail}`, {
-          replace: true,
-        });
-      }
     },
   });
   const openEdit = () => {
     if (!detail) return;
     setEditForm({
-      email: detail.email,
       nickname: detail.nickname || '',
       password: '',
       departmentId: detail.department_id || '',
@@ -535,18 +526,6 @@ function AdminUserDetail() {
             <DialogTitle>{t('admin.editUser')}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-5 px-6 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t('admin.email')}</Label>
-              <Input
-                value={editForm.email}
-                onChange={(event) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    email: event.target.value,
-                  }))
-                }
-              />
-            </div>
             <div className="space-y-2">
               <Label>{t('admin.nickname')}</Label>
               <Input
@@ -648,7 +627,7 @@ function AdminUserDetail() {
               {t('admin.cancel')}
             </Button>
             <Button
-              disabled={!editForm.email.trim() || updateMutation.isPending}
+              disabled={updateMutation.isPending}
               onClick={() => updateMutation.mutate()}
             >
               {t('admin.save')}

@@ -186,7 +186,6 @@ export const getUserDetails = (email: string) =>
 export const updateUser = (
   email: string,
   data: {
-    email: string;
     nickname: string;
     departmentId: string | null;
     isActive: boolean;
