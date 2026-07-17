@@ -79,6 +79,40 @@ def test_only_team_owner_and_admin_can_manage_workspace(workspace_dependencies):
     assert not WorkspaceAccessService.can_manage_workspace("user-1", "user-1")
 
 
+def test_shared_resource_permissions_follow_workspace_roles(workspace_dependencies):
+    personal_resource = {"tenant_id": "user-1", "status": StatusEnum.VALID.value}
+    team_resource = {"tenant_id": "team-1", "status": StatusEnum.VALID.value}
+    team_agent = {"user_id": "team-1", "permission": TenantPermission.TEAM}
+
+    assert WorkspaceAccessService.can_create_shared_resource("user-1", "user-1")
+    assert WorkspaceAccessService.can_create_shared_resource("owner-1", "team-1")
+    assert WorkspaceAccessService.can_create_shared_resource("admin-1", "team-1")
+    assert not WorkspaceAccessService.can_create_shared_resource("member-1", "team-1")
+
+    assert WorkspaceAccessService.get_shared_resource_capabilities("user-1", personal_resource) == {
+        "read": True,
+        "update": True,
+        "delete": True,
+    }
+    assert WorkspaceAccessService.get_shared_resource_capabilities("member-1", team_resource) == {
+        "read": True,
+        "update": False,
+        "delete": False,
+    }
+    assert WorkspaceAccessService.get_shared_resource_capabilities("admin-1", team_resource) == {
+        "read": True,
+        "update": True,
+        "delete": True,
+    }
+    assert WorkspaceAccessService.get_shared_resource_capabilities(
+        "member-1",
+        team_agent,
+        workspace_field="user_id",
+        permission_field="permission",
+    )["read"]
+    assert not WorkspaceAccessService.can_read_shared_resource("outsider", team_resource)
+
+
 def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_dependencies):
     personal_kb = {
         "tenant_id": "user-1",
@@ -106,6 +140,7 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
     assert WorkspaceAccessService.get_workspace_capabilities("owner-1", "team-1") == {
         "read": True,
         "create_knowledgebase": True,
+        "create_shared_resource": True,
         "manage_members": True,
         "update": True,
         "delete": True,
@@ -113,6 +148,7 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
     assert WorkspaceAccessService.get_workspace_capabilities("member-1", "team-1") == {
         "read": True,
         "create_knowledgebase": True,
+        "create_shared_resource": False,
         "manage_members": False,
         "update": False,
         "delete": False,

@@ -81,6 +81,95 @@ class WorkspaceAccessService:
         return False
 
     @classmethod
+    def can_create_shared_resource(cls, user_id: str, tenant_id: str) -> bool:
+        workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type == WorkspaceType.PERSONAL:
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        if workspace_type == WorkspaceType.TEAM:
+            return cls.can_manage_workspace(user_id, tenant_id)
+        return False
+
+    @classmethod
+    def can_read_shared_resource(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> bool:
+        status = cls._value(resource, "status")
+        if status is not None and status != StatusEnum.VALID.value:
+            return False
+
+        tenant_id = cls._value(resource, workspace_field)
+        workspace_type = cls.get_workspace_type(tenant_id)
+        permission = cls._value(resource, permission_field) if permission_field else None
+        if workspace_type == WorkspaceType.PERSONAL:
+            return (
+                tenant_id == user_id
+                and cls.is_member(user_id, tenant_id)
+                and (permission_field is None or permission == TenantPermission.ME)
+            )
+        if workspace_type == WorkspaceType.TEAM:
+            return cls.is_member(user_id, tenant_id) and (
+                permission_field is None or permission == TenantPermission.TEAM
+            )
+        return False
+
+    @classmethod
+    def can_manage_shared_resource(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> bool:
+        if not cls.can_read_shared_resource(
+            user_id,
+            resource,
+            workspace_field=workspace_field,
+            permission_field=permission_field,
+        ):
+            return False
+
+        tenant_id = cls._value(resource, workspace_field)
+        if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
+            return True
+        return cls.can_manage_workspace(user_id, tenant_id)
+
+    @classmethod
+    def get_shared_resource_capabilities(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> dict[str, bool]:
+        return {
+            "read": cls.can_read_shared_resource(
+                user_id,
+                resource,
+                workspace_field=workspace_field,
+                permission_field=permission_field,
+            ),
+            "update": cls.can_manage_shared_resource(
+                user_id,
+                resource,
+                workspace_field=workspace_field,
+                permission_field=permission_field,
+            ),
+            "delete": cls.can_manage_shared_resource(
+                user_id,
+                resource,
+                workspace_field=workspace_field,
+                permission_field=permission_field,
+            ),
+        }
+
+    @classmethod
     def can_read_knowledgebase(cls, user_id: str, knowledgebase: Mapping[str, Any] | Any) -> bool:
         if cls._value(knowledgebase, "status") != StatusEnum.VALID.value:
             return False
@@ -122,6 +211,7 @@ class WorkspaceAccessService:
         return {
             "read": bool(is_member),
             "create_knowledgebase": cls.can_create_knowledgebase(user_id, tenant_id),
+            "create_shared_resource": cls.can_create_shared_resource(user_id, tenant_id),
             "manage_members": bool(is_team and role in cls.MANAGER_ROLES),
             "update": bool(is_team and role in cls.MANAGER_ROLES),
             "delete": bool(is_team and role == UserTenantRole.OWNER),
