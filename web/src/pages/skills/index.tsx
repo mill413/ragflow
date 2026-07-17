@@ -27,7 +27,7 @@ import {
 import { Routes } from '@/routes';
 import fileManagerService from '@/services/file-manager-service';
 import { formatFileSize } from '@/utils/common-util';
-import { formatDate } from '@/utils/date';
+import { formatDate, isChineseLanguage } from '@/utils/date';
 import {
   Eye,
   FolderOpen,
@@ -59,6 +59,8 @@ const formatRelative = (timestamp: number): string => {
   if (normalized > 1e17) normalized = normalized / 1e6;
   else if (normalized > 1e14) normalized = normalized / 1e3;
   else if (normalized > 0 && normalized < 1e11) normalized = normalized * 1e3;
+
+  if (isChineseLanguage()) return formatDate(normalized);
 
   const diff = Date.now() - normalized;
   if (diff < 0) return 'just now';

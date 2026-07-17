@@ -1,7 +1,27 @@
+import { LanguageAbbreviation } from '@/constants/common';
 import dayjs from 'dayjs';
+import storage from './authorization-util';
+
+export const CHINESE_DATE_TIME_FORMAT = 'YYYY/MM/DD HH:mm:ss';
+export const CHINESE_DATE_FORMAT = 'YYYY/MM/DD';
+
+export function isChineseLanguage() {
+  const language =
+    storage.getLanguage() ||
+    (typeof document === 'undefined' ? '' : document.documentElement.lang);
+  return language === LanguageAbbreviation.Zh;
+}
+
+export function getDateDisplayFormat() {
+  return isChineseLanguage() ? CHINESE_DATE_FORMAT : 'DD/MM/YYYY';
+}
+
+export function getDateTimeDisplayFormat() {
+  return isChineseLanguage() ? CHINESE_DATE_TIME_FORMAT : 'DD/MM/YYYY HH:mm:ss';
+}
 
 export function formatDate(date: any, format?: string) {
-  const thisFormat = format || 'DD/MM/YYYY HH:mm:ss';
+  const thisFormat = format || getDateTimeDisplayFormat();
   if (!date) {
     return '';
   }
@@ -12,7 +32,9 @@ export function formatTime(date: any) {
   if (!date) {
     return '';
   }
-  return dayjs(date).format('HH:mm:ss');
+  return dayjs(date).format(
+    isChineseLanguage() ? CHINESE_DATE_TIME_FORMAT : 'HH:mm:ss',
+  );
 }
 
 export function today() {
@@ -31,7 +53,9 @@ export function formatPureDate(date: any) {
   if (!date) {
     return '';
   }
-  return dayjs(date).format('DD/MM/YYYY');
+  return dayjs(date).format(
+    isChineseLanguage() ? CHINESE_DATE_TIME_FORMAT : 'DD/MM/YYYY',
+  );
 }
 
 export function formatStandardDate(date: any) {

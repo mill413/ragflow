@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatBytes } from '@/lib/utils';
+import { formatDate } from '@/utils/date';
 import {
   getMonitoringSummary,
   listFailedDocuments,
@@ -347,7 +348,9 @@ export default function AdminResources() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{dataset.update_date || '-'}</TableCell>
+                      <TableCell>
+                        {formatDate(dataset.update_date) || '-'}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (
@@ -448,7 +451,9 @@ export default function AdminResources() {
                       <TableCell className="max-w-md whitespace-normal text-state-error">
                         {document.failure_reason || '-'}
                       </TableCell>
-                      <TableCell>{document.create_date || '-'}</TableCell>
+                      <TableCell>
+                        {formatDate(document.create_date) || '-'}
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (

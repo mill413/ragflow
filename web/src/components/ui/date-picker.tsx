@@ -6,6 +6,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { LanguageAbbreviation } from '@/constants/common';
 import { Locale } from 'date-fns';
 import dayjs from 'dayjs';
 import {
@@ -51,7 +52,7 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
       className,
       value,
       onChange,
-      dateFormat = 'DD/MM/YYYY',
+      dateFormat,
       timeFormat = 'HH:mm:ss',
       showTimeSelect = false,
       showTimeSelectOnly = false,
@@ -65,7 +66,12 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
     },
     ref,
   ) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const resolvedDateFormat =
+      dateFormat ||
+      (i18n.resolvedLanguage === LanguageAbbreviation.Zh
+        ? 'YYYY/MM/DD'
+        : 'DD/MM/YYYY');
     const [open, setOpen] = useState(false);
     const [inputValue, setInputValue] = useState('');
     const [currentYear, setCurrentYear] = useState(() => {
@@ -92,10 +98,16 @@ const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
     const displayFormat = useMemo(() => {
       if (picker === 'year') return 'YYYY';
       if (picker === 'month') return 'MM/YYYY';
-      if (showTimeSelect) return `${dateFormat} ${timeFormat}`;
+      if (showTimeSelect) return `${resolvedDateFormat} ${timeFormat}`;
       if (showTimeSelectOnly) return timeFormat;
-      return dateFormat;
-    }, [picker, dateFormat, timeFormat, showTimeSelect, showTimeSelectOnly]);
+      return resolvedDateFormat;
+    }, [
+      picker,
+      resolvedDateFormat,
+      timeFormat,
+      showTimeSelect,
+      showTimeSelectOnly,
+    ]);
 
     const formattedValue = useMemo(() => {
       if (selectedDate && !isNaN(selectedDate.getTime())) {
