@@ -6,6 +6,7 @@ import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { useFetchChatList } from '@/hooks/use-chat-request';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
@@ -17,6 +18,7 @@ import { useCreateChatDialog } from './hooks/use-create-chat';
 import { useRenameChat } from './hooks/use-rename-chat';
 
 export default function ChatList() {
+  const { canCreateSharedResource } = useWorkspace();
   const {
     data,
     setPagination,
@@ -28,9 +30,7 @@ export default function ChatList() {
   } = useFetchChatList();
   const { t } = useTranslation();
   const { t: tc } = useTranslation('common');
-  const owners = [
-    buildOwnersFilter(data?.chats ?? [], undefined, tc('owner')),
-  ];
+  const owners = [buildOwnersFilter(data?.chats ?? [], undefined, tc('owner'))];
   const {
     initialChatName,
     chatRenameVisible,
@@ -61,12 +61,18 @@ export default function ChatList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isCreate = searchParams.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canCreateSharedResource) {
       handleShowCreateModal();
       searchParams.delete('isCreate');
       setSearchParams(searchParams);
     }
-  }, [isCreate, handleShowCreateModal, searchParams, setSearchParams]);
+  }, [
+    isCreate,
+    canCreateSharedResource,
+    handleShowCreateModal,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const renameDialogProps = useMemo(() => {
     if (chatRenameVisible) {
@@ -118,10 +124,15 @@ export default function ChatList() {
               value={filterValue}
               onChange={handleFilterSubmit}
             >
-              <Button data-testid="create-chat" onClick={handleShowCreateModal}>
-                <Plus className="size-[1em]" />
-                {t('chat.createChat')}
-              </Button>
+              {canCreateSharedResource && (
+                <Button
+                  data-testid="create-chat"
+                  onClick={handleShowCreateModal}
+                >
+                  <Plus className="size-[1em]" />
+                  {t('chat.createChat')}
+                </Button>
+              )}
             </ListFilterBar>
           </header>
 
@@ -168,7 +179,11 @@ export default function ChatList() {
             size="large"
             className="w-[480px] p-14"
             type={EmptyCardType.Chat}
-            onClick={() => handleShowCreateModal()}
+            onClick={
+              canCreateSharedResource
+                ? () => handleShowCreateModal()
+                : undefined
+            }
             testId="chats-empty-create"
           />
         </article>

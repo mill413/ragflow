@@ -5,6 +5,7 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { useTranslate } from '@/hooks/common-hooks';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ import { ICreateMemoryProps, IMemory } from './interface';
 import { MemoryCard } from './memory-card';
 
 export default function MemoryList() {
+  const { canCreateSharedResource } = useWorkspace();
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('memories');
   const [addOrEditType, setAddOrEditType] = useState<'add' | 'edit'>('add');
@@ -61,12 +63,18 @@ export default function MemoryList() {
   const { filters } = useSelectFilters();
   const isCreate = searchUrl.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canCreateSharedResource) {
       openCreateModalFun();
       searchUrl.delete('isCreate');
       setMemoryUrl(searchUrl);
     }
-  }, [isCreate, openCreateModalFun, searchUrl, setMemoryUrl]);
+  }, [
+    isCreate,
+    canCreateSharedResource,
+    openCreateModalFun,
+    searchUrl,
+    setMemoryUrl,
+  ]);
 
   return (
     <>
@@ -85,10 +93,12 @@ export default function MemoryList() {
               onChange={handleFilterSubmit}
               value={filterValue}
             >
-              <Button onClick={() => openCreateModalFun()}>
-                <Plus className="size-[1em]" />
-                {t('createMemory')}
-              </Button>
+              {canCreateSharedResource && (
+                <Button onClick={() => openCreateModalFun()}>
+                  <Plus className="size-[1em]" />
+                  {t('createMemory')}
+                </Button>
+              )}
             </ListFilterBar>
           </header>
 
@@ -122,7 +132,11 @@ export default function MemoryList() {
                 size="large"
                 isSearch
                 type={EmptyCardType.Memory}
-                onClick={() => openCreateModalFun()}
+                onClick={
+                  canCreateSharedResource
+                    ? () => openCreateModalFun()
+                    : undefined
+                }
               />
             </div>
           )}
@@ -136,7 +150,9 @@ export default function MemoryList() {
             showIcon
             size="large"
             type={EmptyCardType.Memory}
-            onClick={() => openCreateModalFun()}
+            onClick={
+              canCreateSharedResource ? () => openCreateModalFun() : undefined
+            }
           />
         </article>
       )}

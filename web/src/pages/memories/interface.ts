@@ -22,8 +22,9 @@ export interface ICreateMemoryProps {
   memory_type: MemoryType[];
   embd_id: string;
   llm_id: string;
+  workspace_id?: string;
 }
-export interface IMemory extends ICreateMemoryProps {
+export interface IMemory extends ICreateMemoryProps, IWorkspaceResource {
   id: string;
   avatar: string;
   tenant_id: string;
@@ -115,3 +116,4 @@ export interface MemoryDetailResponse {
 // export type IUpdateMemoryProps = Omit<IMemoryAppDetailProps, 'id'> & {
 //   id: string;
 // };
+import { IWorkspaceResource } from '@/interfaces/database/workspace';

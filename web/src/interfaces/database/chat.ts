@@ -1,5 +1,6 @@
 import { MessageType } from '@/constants/chat';
 import { IAttachment } from '@/hooks/use-send-message';
+import { IWorkspaceResource } from './workspace';
 
 export interface IDocumentDownloadInfo {
   doc_id: string;
@@ -50,7 +51,7 @@ export interface Variable {
   model_type?: string;
 }
 
-export interface IDialog {
+export interface IDialog extends IWorkspaceResource {
   create_date: string;
   create_time: number;
   description: string;

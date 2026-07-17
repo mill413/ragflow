@@ -1,5 +1,6 @@
 import { HomeCard } from '@/components/home-card';
 import { MoreButton } from '@/components/more-button';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { ISearchAppProps } from './hooks';
 import { SearchDropdown } from './search-dropdown';
@@ -15,13 +16,16 @@ export function SearchCard({ data, showSearchRenameModal }: IProps) {
     <HomeCard
       data={data}
       moreDropdown={
-        <SearchDropdown
-          dataset={data}
-          showSearchRenameModal={showSearchRenameModal}
-        >
-          <MoreButton></MoreButton>
-        </SearchDropdown>
+        data.capabilities?.update || data.capabilities?.delete ? (
+          <SearchDropdown
+            dataset={data}
+            showSearchRenameModal={showSearchRenameModal}
+          >
+            <MoreButton></MoreButton>
+          </SearchDropdown>
+        ) : undefined
       }
+      icon={<WorkspaceBadge {...data} />}
       onClick={navigateToSearch(data?.id)}
     />
   );

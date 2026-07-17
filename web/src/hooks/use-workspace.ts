@@ -17,11 +17,13 @@ export const useWorkspace = () => {
           value: personal.tenant_id,
           label: personal.name || '个人空间',
           type: 'personal' as const,
+          capabilities: { create_shared_resource: true },
         },
         ...teams.map((team) => ({
           value: team.tenant_id,
           label: team.name || team.nickname,
           type: 'team' as const,
+          capabilities: team.capabilities,
         })),
       ].filter((item) => Boolean(item.value)),
     [personal, teams],
@@ -56,6 +58,9 @@ export const useWorkspace = () => {
   return {
     workspaceId: selected?.value || '',
     workspaceType: selected?.type || 'personal',
+    canCreateSharedResource: Boolean(
+      selected?.capabilities?.create_shared_resource,
+    ),
     options,
     setWorkspaceId,
   };

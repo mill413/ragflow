@@ -43,6 +43,7 @@ import {
   useGetPaginationWithRouter,
   useHandleSearchChange,
 } from './logic-hooks';
+import { useWorkspace } from './use-workspace';
 
 export const enum AgentApiAction {
   FetchAgentListByPage = 'fetchAgentListByPage',
@@ -130,6 +131,7 @@ const buildAgentListParams = ({
 };
 
 export const useFetchAgentListByPage = () => {
+  const { workspaceId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -137,7 +139,6 @@ export const useFetchAgentListByPage = () => {
   const canvasCategory = Array.isArray(filterValue.canvasCategory)
     ? filterValue.canvasCategory
     : [];
-  const owner = filterValue.owner;
   const tags = Array.isArray(filterValue.tags) ? filterValue.tags : undefined;
 
   const requestParams = buildAgentListParams({
@@ -145,7 +146,7 @@ export const useFetchAgentListByPage = () => {
     pageSize: pagination.pageSize,
     keywords: debouncedSearchString,
     canvasCategory: canvasCategory.length === 1 ? canvasCategory[0] : undefined,
-    ownerIds: Array.isArray(owner) ? owner : undefined,
+    ownerIds: workspaceId ? [workspaceId] : undefined,
     tags,
   });
 
@@ -159,6 +160,7 @@ export const useFetchAgentListByPage = () => {
         debouncedSearchString,
         ...pagination,
         filterValue,
+        workspaceId,
       },
     ],
     placeholderData: (previousData) => {
@@ -442,6 +444,7 @@ export const useResetAgent = () => {
 export const useSetAgent = (showMessage: boolean = true) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
   const {
     data,
     isPending: loading,
@@ -457,6 +460,7 @@ export const useSetAgent = (showMessage: boolean = true) => {
       release?: string;
       description?: string | null;
       permission?: string;
+      workspace_id?: string;
     }) => {
       const agentId = params.id ?? id;
       const { data = {} } = agentId
@@ -468,7 +472,10 @@ export const useSetAgent = (showMessage: boolean = true) => {
             permission: params.permission,
             release: params.release,
           })
-        : await agentService.createAgent(params);
+        : await agentService.createAgent({
+            ...params,
+            workspace_id: workspaceId,
+          });
       if (data.code === 0) {
         if (showMessage) {
           message.success(

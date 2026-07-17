@@ -44,34 +44,40 @@ export function ChatDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onClick={handleShowChatRenameModal}>
-          {t('common.rename')} <PenLine />
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <ConfirmDeleteDialog
-          onOk={handleDelete}
-          title={t('deleteModal.delChat')}
-          content={{
-            node: (
-              <ConfirmDeleteDialogNode
-                avatar={{ avatar: chat.icon, name: chat.name }}
-                name={chat.name}
-              />
-            ),
-          }}
-        >
-          <DropdownMenuItem
-            className="text-state-error"
-            onSelect={(e) => {
-              e.preventDefault();
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
+        {chat.capabilities?.update && (
+          <DropdownMenuItem onClick={handleShowChatRenameModal}>
+            {t('common.rename')} <PenLine />
+          </DropdownMenuItem>
+        )}
+        {chat.capabilities?.update && chat.capabilities?.delete && (
+          <DropdownMenuSeparator />
+        )}
+        {chat.capabilities?.delete && (
+          <ConfirmDeleteDialog
+            onOk={handleDelete}
+            title={t('deleteModal.delChat')}
+            content={{
+              node: (
+                <ConfirmDeleteDialogNode
+                  avatar={{ avatar: chat.icon, name: chat.name }}
+                  name={chat.name}
+                />
+              ),
             }}
           >
-            {t('common.delete')} <Trash2 />
-          </DropdownMenuItem>
-        </ConfirmDeleteDialog>
+            <DropdownMenuItem
+              className="text-state-error"
+              onSelect={(e) => {
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              {t('common.delete')} <Trash2 />
+            </DropdownMenuItem>
+          </ConfirmDeleteDialog>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

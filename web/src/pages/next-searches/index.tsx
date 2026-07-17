@@ -6,6 +6,7 @@ import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { useTranslate } from '@/hooks/common-hooks';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
@@ -15,6 +16,7 @@ import { useFetchSearchList, useRenameSearch } from './hooks';
 import { SearchCard } from './search-card';
 
 export default function SearchList() {
+  const { canCreateSharedResource } = useWorkspace();
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('search');
   const { t: tc } = useTranslate('common');
@@ -63,12 +65,18 @@ export default function SearchList() {
   const [searchUrl, setSearchUrl] = useSearchParams();
   const isCreate = searchUrl.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canCreateSharedResource) {
       openCreateModalFun();
       searchUrl.delete('isCreate');
       setSearchUrl(searchUrl);
     }
-  }, [isCreate, openCreateModalFun, searchUrl, setSearchUrl]);
+  }, [
+    isCreate,
+    canCreateSharedResource,
+    openCreateModalFun,
+    searchUrl,
+    setSearchUrl,
+  ]);
 
   return (
     <>
@@ -87,13 +95,15 @@ export default function SearchList() {
               onChange={handleFilterSubmit}
               filters={owners}
             >
-              <Button
-                data-testid="create-search"
-                onClick={() => openCreateModalFun()}
-              >
-                <Plus className="size-[1em]" />
-                {t('createSearch')}
-              </Button>
+              {canCreateSharedResource && (
+                <Button
+                  data-testid="create-search"
+                  onClick={() => openCreateModalFun()}
+                >
+                  <Plus className="size-[1em]" />
+                  {t('createSearch')}
+                </Button>
+              )}
             </ListFilterBar>
           </header>
 
@@ -144,7 +154,9 @@ export default function SearchList() {
             size="large"
             className="w-[480px] p-14"
             type={EmptyCardType.Search}
-            onClick={() => openCreateModalFun()}
+            onClick={
+              canCreateSharedResource ? () => openCreateModalFun() : undefined
+            }
             testId="search-empty-create"
           />
         </article>

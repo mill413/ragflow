@@ -13,6 +13,7 @@ import {
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { useFetchAgentListByPage } from '@/hooks/use-agent-request';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { Routes } from '@/routes';
 import { t } from 'i18next';
 import { pick } from 'lodash';
@@ -28,6 +29,7 @@ import { useHandleImportJsonFile } from './use-import-json';
 import { useRenameAgent } from './use-rename-agent';
 
 export default function Agents() {
+  const { canCreateSharedResource } = useWorkspace();
   const {
     data,
     pagination,
@@ -76,12 +78,18 @@ export default function Agents() {
   const isCreate = searchUrl.get('isCreate') === 'true';
 
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canCreateSharedResource) {
       showCreatingModal();
       searchUrl.delete('isCreate');
       setSearchUrl(searchUrl);
     }
-  }, [isCreate, showCreatingModal, searchUrl, setSearchUrl]);
+  }, [
+    isCreate,
+    canCreateSharedResource,
+    showCreatingModal,
+    searchUrl,
+    setSearchUrl,
+  ]);
 
   return (
     <>
@@ -100,38 +108,40 @@ export default function Agents() {
               onChange={handleFilterSubmit}
               value={filterValue}
             >
-              <DropdownMenu>
-                <DropdownMenuTrigger data-testid="create-agent" asChild>
-                  <Button>
-                    <Plus className="size-[1em]" />
-                    {t('flow.createGraph')}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent data-testid="agent-create-menu">
-                  <DropdownMenuItem
-                    justifyBetween={false}
-                    onClick={showCreatingModal}
-                  >
-                    <Clipboard />
-                    {t('flow.createFromBlank')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    justifyBetween={false}
-                    onClick={() => navigateToAgentTemplates()}
-                  >
-                    <ClipboardPlus />
-                    {t('flow.createFromTemplate')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    data-testid="agent-import-json"
-                    justifyBetween={false}
-                    onClick={handleImportJson}
-                  >
-                    <FileInput />
-                    {t('flow.importJsonFile')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {canCreateSharedResource && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger data-testid="create-agent" asChild>
+                    <Button>
+                      <Plus className="size-[1em]" />
+                      {t('flow.createGraph')}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent data-testid="agent-create-menu">
+                    <DropdownMenuItem
+                      justifyBetween={false}
+                      onClick={showCreatingModal}
+                    >
+                      <Clipboard />
+                      {t('flow.createFromBlank')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      justifyBetween={false}
+                      onClick={() => navigateToAgentTemplates()}
+                    >
+                      <ClipboardPlus />
+                      {t('flow.createFromTemplate')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="agent-import-json"
+                      justifyBetween={false}
+                      onClick={handleImportJson}
+                    >
+                      <FileInput />
+                      {t('flow.importJsonFile')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </ListFilterBar>
           </header>
 
@@ -165,7 +175,11 @@ export default function Agents() {
                 className="w-[480px] p-14"
                 isSearch
                 type={EmptyCardType.Agent}
-                onClick={() => showCreatingModal()}
+                onClick={
+                  canCreateSharedResource
+                    ? () => showCreatingModal()
+                    : undefined
+                }
               />
             </div>
           )}
@@ -183,37 +197,43 @@ export default function Agents() {
             tabIndex={-1}
             // onClick={() => showCreatingModal()}
           >
-            <ul className="flex flex-col gap-y-5 text-text-secondary text-sm pt-5">
-              <li data-testid="agents-empty-create">
-                <Button
-                  variant="static"
-                  size="auto"
-                  onClick={showCreatingModal}
-                >
-                  <Clipboard className="size-[1em]" />
-                  {t('flow.createFromBlank')}
-                </Button>
-              </li>
+            {canCreateSharedResource && (
+              <ul className="flex flex-col gap-y-5 text-text-secondary text-sm pt-5">
+                <li data-testid="agents-empty-create">
+                  <Button
+                    variant="static"
+                    size="auto"
+                    onClick={showCreatingModal}
+                  >
+                    <Clipboard className="size-[1em]" />
+                    {t('flow.createFromBlank')}
+                  </Button>
+                </li>
 
-              <li>
-                <Button
-                  asLink
-                  variant="static"
-                  size="auto"
-                  to={Routes.AgentTemplates}
-                >
-                  <ClipboardPlus className="size-[1em]" />
-                  {t('flow.createFromTemplate')}
-                </Button>
-              </li>
+                <li>
+                  <Button
+                    asLink
+                    variant="static"
+                    size="auto"
+                    to={Routes.AgentTemplates}
+                  >
+                    <ClipboardPlus className="size-[1em]" />
+                    {t('flow.createFromTemplate')}
+                  </Button>
+                </li>
 
-              <li>
-                <Button variant="static" size="auto" onClick={handleImportJson}>
-                  <FileInput className="size-[1em]" />
-                  {t('flow.importJsonFile')}
-                </Button>
-              </li>
-            </ul>
+                <li>
+                  <Button
+                    variant="static"
+                    size="auto"
+                    onClick={handleImportJson}
+                  >
+                    <FileInput className="size-[1em]" />
+                    {t('flow.importJsonFile')}
+                  </Button>
+                </li>
+              </ul>
+            )}
           </EmptyAppCard>
         </article>
       )}

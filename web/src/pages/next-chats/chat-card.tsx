@@ -1,5 +1,6 @@
 import { HomeCard } from '@/components/home-card';
 import { MoreButton } from '@/components/more-button';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { IDialog } from '@/interfaces/database/chat';
 import { ChatDropdown } from './chat-dropdown';
@@ -21,10 +22,13 @@ export function ChatCard({ data, showChatRenameModal }: IProps) {
         update_time: data.update_time,
       }}
       moreDropdown={
-        <ChatDropdown chat={data} showChatRenameModal={showChatRenameModal}>
-          <MoreButton></MoreButton>
-        </ChatDropdown>
+        data.capabilities?.update || data.capabilities?.delete ? (
+          <ChatDropdown chat={data} showChatRenameModal={showChatRenameModal}>
+            <MoreButton></MoreButton>
+          </ChatDropdown>
+        ) : undefined
       }
+      icon={<WorkspaceBadge {...data} />}
       onClick={navigateToChat(data?.id)}
     />
   );

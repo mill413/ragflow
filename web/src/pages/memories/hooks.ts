@@ -6,6 +6,7 @@ import message from '@/components/ui/message';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useHandleSearchChange } from '@/hooks/logic-hooks';
 import { useFetchDefaultModelDictionary } from '@/hooks/use-llm-request';
+import { useWorkspace } from '@/hooks/use-workspace';
 import memoryService, { updateMemoryById } from '@/services/memory-service';
 import {
   buildOwnersFilter,
@@ -31,10 +32,14 @@ import {
 
 export const useCreateMemory = () => {
   const { t } = useTranslation();
+  const { workspaceId } = useWorkspace();
 
   const createMemory = useCallback(
     async (props: ICreateMemoryProps): Promise<CreateMemoryResponse> => {
-      const { data: response } = await memoryService.createMemory(props);
+      const { data: response } = await memoryService.createMemory({
+        ...props,
+        workspace_id: workspaceId,
+      });
       if (response.code !== 0) {
         throw new Error(response.message || 'Failed to create memory');
       }
@@ -43,13 +48,14 @@ export const useCreateMemory = () => {
       }
       return response.data;
     },
-    [t],
+    [t, workspaceId],
   );
 
   return { createMemory };
 };
 
 export const useFetchMemoryList = () => {
+  const { workspaceId } = useWorkspace();
   const { handleInputChange, searchString, pagination, setPagination } =
     useHandleSearchChange();
   const { filterValue, handleFilterSubmit } = useHandleFilterSubmit();
@@ -61,18 +67,15 @@ export const useFetchMemoryList = () => {
   const storageType = Array.isArray(filterValue.storageType)
     ? filterValue.storageType
     : [];
-  const owner = filterValue.owner;
   const requestParams: Record<string, any> = {
     keywords: debouncedSearchString,
     page_size: pagination.pageSize,
     page: pagination.current,
     memory_type: memoryType.length > 0 ? memoryType.join(',') : undefined,
     storage_type: storageType.length === 1 ? storageType[0] : undefined,
+    owner_ids: workspaceId || undefined,
   };
 
-  if (Array.isArray(owner) && owner.length > 0) {
-    requestParams.owner_ids = owner.join(',');
-  }
   const { data, isLoading, isError, refetch } = useQuery<
     MemoryListResponse,
     Error
@@ -82,6 +85,7 @@ export const useFetchMemoryList = () => {
       {
         debouncedSearchString,
         ...pagination,
+        workspaceId,
       },
       filterValue,
     ],
@@ -96,7 +100,6 @@ export const useFetchMemoryList = () => {
       if (response.code !== 0) {
         throw new Error(response.message || 'Failed to fetch memory list');
       }
-      console.log(response);
       return response;
     },
   });

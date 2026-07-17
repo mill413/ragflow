@@ -34,6 +34,7 @@ import { AgentCategory } from '@/constants/agent';
 import { Edge, Node } from '@xyflow/react';
 import { IReference, Message } from './chat';
 import { IDataset } from './dataset';
+import { IWorkspaceResource } from './workspace';
 
 export type DSLComponents = Record<string, IOperator>;
 
@@ -62,7 +63,7 @@ export interface IOperatorNode {
   params: Record<string, unknown>;
 }
 
-export declare interface IFlow {
+export declare interface IFlow extends IWorkspaceResource {
   avatar?: string;
   canvas_type: null;
   create_date: string;

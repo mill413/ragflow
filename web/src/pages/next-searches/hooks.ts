@@ -4,6 +4,8 @@ import { useHandleFilterSubmit } from '@/components/list-filter-bar/use-handle-f
 import message from '@/components/ui/message';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useHandleSearchChange } from '@/hooks/logic-hooks';
+import { useWorkspace } from '@/hooks/use-workspace';
+import { IWorkspaceResource } from '@/interfaces/database/workspace';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import searchService from '@/services/search-service';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +16,7 @@ import { useParams, useSearchParams } from 'react-router';
 interface CreateSearchProps {
   name: string;
   description?: string;
+  workspace_id?: string;
 }
 
 interface CreateSearchResponse {
@@ -24,6 +27,7 @@ interface CreateSearchResponse {
 
 export const useCreateSearch = () => {
   const { t } = useTranslation();
+  const { workspaceId } = useWorkspace();
 
   const {
     data,
@@ -32,7 +36,10 @@ export const useCreateSearch = () => {
   } = useMutation<CreateSearchResponse, Error, CreateSearchProps>({
     mutationKey: ['createSearch'],
     mutationFn: async (props) => {
-      const { data: response } = await searchService.createSearch(props);
+      const { data: response } = await searchService.createSearch({
+        ...props,
+        workspace_id: workspaceId,
+      });
       if (response.code !== 0) {
         throw new Error(response.message || 'Failed to create search');
       }
@@ -65,7 +72,7 @@ export interface SearchListParams {
   desc?: boolean;
   owner_ids?: string;
 }
-export interface ISearchAppProps {
+export interface ISearchAppProps extends IWorkspaceResource {
   avatar: any;
   create_time: number;
   created_by: string;
@@ -88,6 +95,7 @@ interface SearchListResponse {
 }
 
 export const useFetchSearchList = () => {
+  const { workspaceId } = useWorkspace();
   const { handleInputChange, searchString, pagination, setPagination } =
     useHandleSearchChange();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -102,6 +110,7 @@ export const useFetchSearchList = () => {
         debouncedSearchString,
         filterValue,
         ...pagination,
+        workspaceId,
       },
     ],
     queryFn: async () => {
@@ -111,7 +120,7 @@ export const useFetchSearchList = () => {
             keywords: debouncedSearchString,
             page_size: pagination.pageSize,
             page: pagination.current,
-            owner_ids: filterValue.owner,
+            owner_ids: workspaceId ? [workspaceId] : undefined,
           },
           paramsSerializer: { indexes: null },
         },

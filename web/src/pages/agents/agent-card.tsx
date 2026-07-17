@@ -1,6 +1,6 @@
 import { HomeCard } from '@/components/home-card';
 import { MoreButton } from '@/components/more-button';
-import { SharedBadge } from '@/components/shared-badge';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AgentCategory } from '@/constants/agent';
@@ -44,11 +44,15 @@ export function AgentCard({ data, showAgentRenameModal }: DatasetCardProps) {
         release_time: data.release_time,
       }}
       moreDropdown={
-        <AgentDropdown showAgentRenameModal={showAgentRenameModal} agent={data}>
-          <MoreButton></MoreButton>
-        </AgentDropdown>
+        data.capabilities?.update || data.capabilities?.delete ? (
+          <AgentDropdown
+            showAgentRenameModal={showAgentRenameModal}
+            agent={data}
+          >
+            <MoreButton></MoreButton>
+          </AgentDropdown>
+        ) : undefined
       }
-      sharedBadge={<SharedBadge>{data.nickname}</SharedBadge>}
       onClick={
         // data.canvas_category === AgentCategory.DataflowCanvas
         //   ? navigateToDataflow(data.id)
@@ -56,11 +60,14 @@ export function AgentCard({ data, showAgentRenameModal }: DatasetCardProps) {
         navigateToAgent(data?.id, data.canvas_category as AgentCategory)
       }
       icon={
-        data.canvas_category === AgentCategory.DataflowCanvas && (
-          <Button variant={'ghost'} size={'sm'}>
-            <Route />
-          </Button>
-        )
+        <div className="flex items-center gap-1">
+          {data.canvas_category === AgentCategory.DataflowCanvas && (
+            <Button variant={'ghost'} size={'sm'}>
+              <Route />
+            </Button>
+          )}
+          <WorkspaceBadge {...data} />
+        </div>
       }
       extra={<AgentTags tags={data.tags} />}
       showReleaseTime
