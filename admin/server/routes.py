@@ -14,12 +14,13 @@
 #  limitations under the License.
 #
 
+import secrets
 import logging
 from typing import Any
 
 from common.time_utils import current_timestamp, datetime_format
 from datetime import datetime
-from flask import Blueprint, Response, g, request
+from flask import Blueprint, Response, request
 from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
@@ -27,7 +28,6 @@ from responses import success_response, error_response
 from services import UserMgr, ServiceMgr, UserServiceMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
-from api.db.services import UserSessionService
 from common.versions import get_ragflow_version
 from api.utils.api_utils import generate_confirmation_token
 from common.log_utils import get_log_levels, set_log_level
@@ -56,7 +56,8 @@ def login():
 @login_required
 def logout():
     try:
-        UserSessionService.revoke(getattr(g, "auth_token", None))
+        current_user.access_token = f"INVALID_{secrets.token_hex(16)}"
+        current_user.save()
         logout_user()
         return success_response(True)
     except Exception as e:

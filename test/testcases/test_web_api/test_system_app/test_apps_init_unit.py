@@ -36,27 +36,6 @@ class _DummyUserService:
         return []
 
 
-class _DummyUserSessionService:
-    users = {}
-    sequence = 0
-
-    @classmethod
-    def reset(cls):
-        cls.users = {}
-        cls.sequence = 0
-
-    @classmethod
-    def create(cls, user_id):
-        cls.sequence += 1
-        token = f"{cls.sequence:032d}"
-        cls.users[token] = user_id
-        return SimpleNamespace(token=token, get_id=lambda: f"signed:{token}")
-
-    @classmethod
-    def get_user(cls, token):
-        return cls.users.get(token)
-
-
 def _run(coro):
     return asyncio.run(coro)
 
@@ -83,8 +62,6 @@ def _load_apps_module(monkeypatch):
 
     services_mod = ModuleType("api.db.services")
     services_mod.UserService = _DummyUserService
-    _DummyUserSessionService.reset()
-    services_mod.UserSessionService = _DummyUserSessionService
     monkeypatch.setitem(sys.modules, "api.db.services", services_mod)
 
     commands_mod = ModuleType("api.utils.commands")
@@ -150,6 +127,8 @@ def test_module_init_and_unauthorized_message_variants(monkeypatch):
 def test_load_user_token_edge_cases(monkeypatch):
     quart_app, apps_module = _load_apps_module(monkeypatch)
 
+    user_with_empty_token = SimpleNamespace(email="empty@example.com", access_token="")
+
     async def _case():
         async with quart_app.test_request_context("/", headers={"Authorization": "token"}):
             monkeypatch.setattr(apps_module.Serializer, "loads", lambda _self, _auth: "")
@@ -161,7 +140,7 @@ def test_load_user_token_edge_cases(monkeypatch):
 
         async with quart_app.test_request_context("/", headers={"Authorization": "token"}):
             monkeypatch.setattr(apps_module.Serializer, "loads", lambda _self, _auth: "a" * 32)
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", lambda _token: None)
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kwargs: [user_with_empty_token])
             assert apps_module._load_user() is None
 
     _run(_case())
@@ -176,11 +155,17 @@ def test_load_user_api_token_fallback_and_fallback_exception(monkeypatch, caplog
 
     monkeypatch.setattr(apps_module.Serializer, "loads", _raise_decode)
 
-    beta_user = SimpleNamespace(id="tenant-1", email="embed@example.com")
+    fallback_user_empty_token = SimpleNamespace(email="fallback@example.com", access_token="")
+    valid_token = "a" * 32
+    beta_user = SimpleNamespace(
+        id="tenant-1",
+        email="embed@example.com",
+        access_token=valid_token,
+    )
 
     async def _case():
         monkeypatch.setattr(apps_module.APIToken, "query", lambda **_kwargs: [SimpleNamespace(tenant_id="tenant-1")])
-        monkeypatch.setattr(apps_module.UserService, "query", lambda **_kwargs: [])
+        monkeypatch.setattr(apps_module.UserService, "query", lambda **_kwargs: [fallback_user_empty_token])
         async with quart_app.test_request_context("/", headers={"Authorization": "Bearer api-token"}):
             assert apps_module._load_user() is None
 
@@ -221,7 +206,9 @@ def test_load_user_session_fallback(monkeypatch, caplog):
     quart_app, apps_module = _load_apps_module(monkeypatch)
 
     valid_token = "a" * 32
-    valid_user = SimpleNamespace(id="user-1", email="oidc@example.com")
+    valid_user = SimpleNamespace(id="user-1", email="oidc@example.com", access_token=valid_token)
+    invalid_token_user = SimpleNamespace(id="user-1", email="oidc@example.com", access_token="INVALID_deadbeef")
+    short_token_user = SimpleNamespace(id="user-1", email="oidc@example.com", access_token="too-short")
 
     async def _case():
         # No Authorization header but a valid session: helper resolves the user.
@@ -229,8 +216,7 @@ def test_load_user_session_fallback(monkeypatch, caplog):
             from quart import session
 
             session["_user_id"] = "user-1"
-            session["_auth_token"] = valid_token
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", lambda _token: valid_user)
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kw: [valid_user])
             assert apps_module._load_user() is valid_user
 
         # Malformed bearer header still falls back to session.
@@ -238,24 +224,23 @@ def test_load_user_session_fallback(monkeypatch, caplog):
             from quart import session
 
             session["_user_id"] = "user-1"
-            session["_auth_token"] = valid_token
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", lambda _token: valid_user)
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kw: [valid_user])
             assert apps_module._load_user() is valid_user
 
-        # Revoked session tokens are rejected even when the browser cookie remains.
+        # Logout-revoked tokens (INVALID_ prefix) are rejected even with a session.
         async with quart_app.test_request_context("/"):
             from quart import session
 
             session["_user_id"] = "user-1"
-            session["_auth_token"] = valid_token
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", lambda _token: None)
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kw: [invalid_token_user])
             assert apps_module._load_user() is None
 
-        # A session without its per-login token is not authenticated.
+        # Short tokens are rejected (matches the JWT-path length floor).
         async with quart_app.test_request_context("/"):
             from quart import session
 
             session["_user_id"] = "user-1"
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kw: [short_token_user])
             assert apps_module._load_user() is None
 
         # No session and no header → still None.
@@ -267,12 +252,11 @@ def test_load_user_session_fallback(monkeypatch, caplog):
             from quart import session
 
             session["_user_id"] = "user-1"
-            session["_auth_token"] = valid_token
 
-            def _raise(_token):
+            def _raise(**_kw):
                 raise RuntimeError("db down")
 
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", _raise)
+            monkeypatch.setattr(apps_module.UserService, "query", _raise)
             with caplog.at_level(logging.ERROR):
                 assert apps_module._load_user() is None
 
@@ -287,7 +271,7 @@ def test_load_user_session_fallback_after_token_paths_fail(monkeypatch):
     quart_app, apps_module = _load_apps_module(monkeypatch)
 
     valid_token = "b" * 32
-    valid_user = SimpleNamespace(id="user-1", email="oidc@example.com")
+    valid_user = SimpleNamespace(id="user-1", email="oidc@example.com", access_token=valid_token)
 
     def _raise_decode(_self, _auth):
         raise RuntimeError("jwt decode boom")
@@ -301,8 +285,7 @@ def test_load_user_session_fallback_after_token_paths_fail(monkeypatch):
             from quart import session
 
             session["_user_id"] = "user-1"
-            session["_auth_token"] = valid_token
-            monkeypatch.setattr(apps_module.UserSessionService, "get_user", lambda _token: valid_user)
+            monkeypatch.setattr(apps_module.UserService, "query", lambda **_kw: [valid_user])
             assert apps_module._load_user() is valid_user
 
     _run(_case())
@@ -313,14 +296,14 @@ def test_login_required_timing_and_login_user_inactive(monkeypatch, caplog):
     quart_app, apps_module = _load_apps_module(monkeypatch)
 
     monkeypatch.setenv("RAGFLOW_API_TIMING", "1")
+    monkeypatch.setattr(apps_module, "current_user", SimpleNamespace(id="tenant-1"))
+
     @apps_module.login_required
     async def _timed_handler():
         return {"ok": True}
 
     async def _case():
         async with quart_app.test_request_context("/timed"):
-            apps_module.g.user = SimpleNamespace(id="tenant-1")
-            apps_module.g.auth_type = apps_module.AUTH_JWT
             with caplog.at_level(logging.INFO):
                 assert await _timed_handler() == {"ok": True}
 
@@ -329,24 +312,6 @@ def test_login_required_timing_and_login_user_inactive(monkeypatch, caplog):
 
     _run(_case())
     assert "api_timing login_required" in caplog.text
-
-
-@pytest.mark.p2
-def test_login_user_creates_independent_device_sessions(monkeypatch):
-    quart_app, apps_module = _load_apps_module(monkeypatch)
-    user = SimpleNamespace(id="user-1", is_active=True)
-
-    async def _case():
-        async with quart_app.test_request_context("/"):
-            first_auth = apps_module.login_user(user)
-        async with quart_app.test_request_context("/"):
-            second_auth = apps_module.login_user(user)
-
-        assert first_auth != second_auth
-        assert len(apps_module.UserSessionService.users) == 2
-        assert all(stored_user_id == "user-1" for stored_user_id in apps_module.UserSessionService.users.values())
-
-    _run(_case())
 
 
 @pytest.mark.p2
