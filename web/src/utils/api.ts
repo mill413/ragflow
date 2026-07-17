@@ -419,6 +419,7 @@ export default {
   adminListUserAgents: (username: string) =>
     `${restAPIv1}/admin/users/${username}/agents`,
   adminListManagedResources: `${restAPIv1}/admin/resources`,
+  adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>

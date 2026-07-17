@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 
 import { rsaPsw } from '@/utils';
+import { formatBytes } from '@/lib/utils';
 
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
@@ -386,6 +387,34 @@ function AdminUserManagement() {
         },
       }),
 
+      columnHelper.accessor('teams_total', {
+        header: t('admin.userMonitoring.teams'),
+      }),
+
+      columnHelper.accessor('datasets_total', {
+        header: t('admin.userMonitoring.datasets'),
+        cell: ({ row, cell }) => (
+          <div>
+            <div>{cell.getValue()}</div>
+            <div className="text-xs text-text-secondary">
+              {t('admin.userMonitoring.datasetBreakdown', {
+                personal: row.original.private_datasets,
+                team: row.original.team_datasets,
+              })}
+            </div>
+          </div>
+        ),
+      }),
+
+      columnHelper.accessor('documents_total', {
+        header: t('admin.userMonitoring.documents'),
+      }),
+
+      columnHelper.accessor('storage_bytes', {
+        header: t('admin.userMonitoring.storage'),
+        cell: ({ cell }) => formatBytes(cell.getValue(), { decimals: 1 }),
+      }),
+
       columnHelper.display({
         id: 'actions',
         header: t('admin.actions'),
@@ -476,7 +505,35 @@ function AdminUserManagement() {
 
         <ScrollArea className="size-full">
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
-            <CardTitle>{t('admin.userManagement')}</CardTitle>
+            <div>
+              <CardTitle>{t('admin.userManagement')}</CardTitle>
+              <div className="mt-2 flex gap-4 text-xs text-text-secondary">
+                <span>
+                  {t('admin.userMonitoring.totalUsers', {
+                    count: usersList?.length ?? 0,
+                  })}
+                </span>
+                <span>
+                  {t('admin.userMonitoring.activeUsers', {
+                    count:
+                      usersList?.filter((user) =>
+                        parseBooleanish(user.is_active),
+                      ).length ?? 0,
+                  })}
+                </span>
+                <span>
+                  {t('admin.userMonitoring.totalStorage', {
+                    size: formatBytes(
+                      usersList?.reduce(
+                        (total, user) => total + user.storage_bytes,
+                        0,
+                      ) ?? 0,
+                      { decimals: 1 },
+                    ),
+                  })}
+                </span>
+              </div>
+            </div>
 
             <div className="ml-auto flex justify-end gap-4">
               <Popover>
@@ -594,19 +651,6 @@ function AdminUserManagement() {
 
           <CardContent>
             <Table>
-              <colgroup>
-                <col width="*" />
-                <col className="w-[22%]" />
-
-                <EnterpriseFeature>
-                  {() => <col className="w-24" />}
-                </EnterpriseFeature>
-
-                <col className="w-40" />
-                <col className="w-40" />
-                <col className="w-52" />
-              </colgroup>
-
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>

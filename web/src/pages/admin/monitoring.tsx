@@ -7,7 +7,6 @@ import {
   Building2,
   FileText,
   HardDrive,
-  HeartPulse,
   Library,
   MessageSquare,
   RefreshCw,
@@ -15,7 +14,6 @@ import {
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -27,19 +25,8 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { formatBytes } from '@/lib/utils';
 import { getMonitoringSummary } from '@/services/admin-service';
-
-const statusVariant = (status: string) =>
-  status === 'alive' || status === 'healthy' ? 'success' : 'destructive';
 
 function AdminMonitoring() {
   const { t } = useTranslation();
@@ -91,13 +78,6 @@ function AdminMonitoring() {
         label: t('admin.monitoringPage.agents'),
         value: data?.agents_total,
         icon: Bot,
-      },
-      {
-        label: t('admin.monitoringPage.services'),
-        value: data
-          ? `${data.healthy_services}/${data.services_total}`
-          : undefined,
-        icon: HeartPulse,
       },
     ],
     [data, t],
@@ -225,42 +205,6 @@ function AdminMonitoring() {
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {t('admin.monitoringPage.componentHealth')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('admin.name')}</TableHead>
-                    <TableHead>{t('admin.serviceType')}</TableHead>
-                    <TableHead>{t('admin.host')}</TableHead>
-                    <TableHead>{t('admin.status')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.services.map((service) => (
-                    <TableRow key={service.id}>
-                      <TableCell>{service.name}</TableCell>
-                      <TableCell>{service.service_type}</TableCell>
-                      <TableCell>
-                        {service.host}:{service.port}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(service.status)}>
-                          {t(`admin.${service.status}`)}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
         </CardContent>
       </ScrollArea>
     </Card>

@@ -20,7 +20,7 @@ import logging
 import re
 from typing import Any
 
-from peewee import fn
+from peewee import Case, fn
 
 from common.constants import ActiveEnum, StatusEnum
 from api.db import CanvasCategory, TenantPermission
@@ -31,7 +31,7 @@ from api.db.services.user_service import TenantService, UserTenantService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas
+from api.db.db_models import APIToken, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
 from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
@@ -43,17 +43,74 @@ class UserMgr:
     @staticmethod
     def get_all_users():
         users = UserService.get_all_users()
+        usage_by_user = UserMgr.get_user_usage([user.id for user in users])
         result = []
         for user in users:
             result.append(
                 {
+                    "id": user.id,
                     "email": user.email,
                     "nickname": user.nickname,
                     "create_date": user.create_date,
+                    "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
                     "is_superuser": user.is_superuser,
+                    **usage_by_user[user.id],
                 }
             )
+        return result
+
+    @staticmethod
+    def get_user_usage(user_ids):
+        if not user_ids:
+            return {}
+
+        valid = StatusEnum.VALID.value
+        workspace_ids_by_user = {user_id: {user_id} for user_id in user_ids}
+        for membership in UserTenant.select(UserTenant.user_id, UserTenant.tenant_id).where(
+            (UserTenant.user_id.in_(user_ids)) & (UserTenant.status == valid)
+        ):
+            workspace_ids_by_user[membership.user_id].add(membership.tenant_id)
+
+        dataset_usage = {
+            row["workspace_id"]: row
+            for row in (
+                Knowledgebase.select(
+                    Knowledgebase.tenant_id.alias("workspace_id"),
+                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
+                    fn.COALESCE(fn.SUM(Knowledgebase.doc_num), 0).alias("documents_total"),
+                )
+                .where(Knowledgebase.status == valid)
+                .group_by(Knowledgebase.tenant_id)
+                .dicts()
+            )
+        }
+        storage_usage = {
+            row["workspace_id"]: int(row["storage_bytes"] or 0)
+            for row in (
+                Document.select(
+                    Knowledgebase.tenant_id.alias("workspace_id"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                )
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .where((Document.status == valid) & (Knowledgebase.status == valid))
+                .group_by(Knowledgebase.tenant_id)
+                .dicts()
+            )
+        }
+
+        result = {}
+        for user_id, workspace_ids in workspace_ids_by_user.items():
+            personal = dataset_usage.get(user_id, {})
+            team_ids = workspace_ids - {user_id}
+            result[user_id] = {
+                "teams_total": len(team_ids),
+                "private_datasets": int(personal.get("datasets_total", 0) or 0),
+                "team_datasets": sum(int(dataset_usage.get(workspace_id, {}).get("datasets_total", 0) or 0) for workspace_id in team_ids),
+                "datasets_total": sum(int(dataset_usage.get(workspace_id, {}).get("datasets_total", 0) or 0) for workspace_id in workspace_ids),
+                "documents_total": sum(int(dataset_usage.get(workspace_id, {}).get("documents_total", 0) or 0) for workspace_id in workspace_ids),
+                "storage_bytes": sum(storage_usage.get(workspace_id, 0) for workspace_id in workspace_ids),
+            }
         return result
 
     @staticmethod
@@ -331,6 +388,8 @@ class ResourceMgr:
             fields.append(permission_field.alias("permission"))
         if creator_field is not None:
             fields.append(creator_field.alias("creator_id"))
+        if resource_type == "dataset":
+            fields.extend([Knowledgebase.doc_num, Knowledgebase.chunk_num, Knowledgebase.token_num])
 
         query = model.select(*fields)
         if hasattr(model, "status"):
@@ -344,6 +403,8 @@ class ResourceMgr:
         total = query.count()
         rows = list(query.order_by(model.create_time.desc()).paginate(page, page_size).dicts())
         cls._attach_ownership(rows)
+        if resource_type == "dataset":
+            cls._attach_dataset_metrics(rows)
         for row in rows:
             if not row.get("permission"):
                 row["permission"] = (
@@ -351,6 +412,63 @@ class ResourceMgr:
                 )
 
         return {"resources": rows, "total": total}
+
+    @staticmethod
+    def _attach_dataset_metrics(rows):
+        if not rows:
+            return
+        dataset_ids = [row["id"] for row in rows]
+        metrics = {
+            row["dataset_id"]: row
+            for row in (
+                Document.select(
+                    Document.kb_id.alias("dataset_id"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                    fn.COALESCE(fn.SUM(Case(None, [(Document.progress < 0, 1)], 0)), 0).alias("failed_documents"),
+                    fn.COALESCE(
+                        fn.SUM(Case(None, [((Document.progress >= 0) & (Document.progress < 1), 1)], 0)),
+                        0,
+                    ).alias("processing_documents"),
+                )
+                .where((Document.kb_id.in_(dataset_ids)) & (Document.status == StatusEnum.VALID.value))
+                .group_by(Document.kb_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            metric = metrics.get(row["id"], {})
+            row["storage_bytes"] = int(metric.get("storage_bytes", 0) or 0)
+            row["failed_documents"] = int(metric.get("failed_documents", 0) or 0)
+            row["processing_documents"] = int(metric.get("processing_documents", 0) or 0)
+
+    @staticmethod
+    def list_failed_documents(page, page_size, keywords=""):
+        valid = StatusEnum.VALID.value
+        query = (
+            Document.select(
+                Document.id,
+                Document.name,
+                Document.kb_id.alias("dataset_id"),
+                Knowledgebase.name.alias("dataset_name"),
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                Document.progress_msg.alias("failure_reason"),
+                Document.size,
+                Document.create_date,
+            )
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .where((Document.status == valid) & (Knowledgebase.status == valid) & (Document.progress < 0))
+        )
+        keywords = str(keywords or "").strip().lower()
+        if keywords:
+            query = query.where(
+                fn.LOWER(Document.name).contains(keywords)
+                | fn.LOWER(Knowledgebase.name).contains(keywords)
+                | fn.LOWER(Document.progress_msg).contains(keywords)
+            )
+        total = query.count()
+        rows = list(query.order_by(Document.create_time.desc()).paginate(page, page_size).dicts())
+        ResourceMgr._attach_ownership(rows)
+        return {"documents": rows, "total": total}
 
     @staticmethod
     def _attach_ownership(rows: list[dict[str, Any]]) -> None:
@@ -473,19 +591,6 @@ class MonitoringMgr:
         chats_total = Dialog.select().where(Dialog.status == valid).count()
         agents_total = UserCanvas.select().where(UserCanvas.canvas_category == CanvasCategory.Agent.value).count()
 
-        services = [
-            {
-                "id": service["id"],
-                "name": service["name"],
-                "service_type": service["service_type"],
-                "host": service["host"],
-                "port": service["port"],
-                "status": service["status"],
-            }
-            for service in ServiceMgr.get_all_services()
-        ]
-        healthy_services = sum(service["status"] == "alive" for service in services)
-
         return {
             "users_total": users_total,
             "active_users": active_users,
@@ -498,10 +603,6 @@ class MonitoringMgr:
             "pending_tasks": pending_tasks,
             "chats_total": chats_total,
             "agents_total": agents_total,
-            "health_status": "healthy" if healthy_services == len(services) else "degraded",
-            "healthy_services": healthy_services,
-            "services_total": len(services),
-            "services": services,
             "storage_distribution": MonitoringMgr.get_storage_distribution(),
         }
 

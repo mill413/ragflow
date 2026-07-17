@@ -23,12 +23,20 @@ declare namespace AdminService {
   };
 
   export type ListUsersItem = {
+    id: string;
     create_date: string;
+    last_login_time?: string;
     email: string;
     is_active: '0' | '1';
     is_superuser: boolean;
     role: string;
     nickname: string;
+    teams_total: number;
+    datasets_total: number;
+    private_datasets: number;
+    team_datasets: number;
+    documents_total: number;
+    storage_bytes: number;
   };
 
   export type UserDetail = {
@@ -84,10 +92,34 @@ declare namespace AdminService {
     permission: 'me' | 'team';
     create_date: string;
     update_date: string;
+    doc_num?: number;
+    chunk_num?: number;
+    token_num?: number;
+    storage_bytes?: number;
+    failed_documents?: number;
+    processing_documents?: number;
   };
 
   export type ManagedResourceList = {
     resources: ManagedResourceItem[];
+    total: number;
+  };
+
+  export type FailedDocumentItem = {
+    id: string;
+    name: string;
+    dataset_id: string;
+    dataset_name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    failure_reason: string;
+    size: number;
+    create_date: string;
+  };
+
+  export type FailedDocumentList = {
+    documents: FailedDocumentItem[];
     total: number;
   };
 
@@ -137,15 +169,6 @@ declare namespace AdminService {
     storage_bytes: number;
   };
 
-  export type MonitoringServiceItem = {
-    id: number;
-    name: string;
-    service_type: string;
-    host: string;
-    port: number | string;
-    status: 'alive' | 'timeout' | 'fail';
-  };
-
   export type MonitoringSummary = {
     users_total: number;
     active_users: number;
@@ -158,10 +181,6 @@ declare namespace AdminService {
     pending_tasks: number;
     chats_total: number;
     agents_total: number;
-    health_status: 'healthy' | 'degraded';
-    healthy_services: number;
-    services_total: number;
-    services: MonitoringServiceItem[];
     storage_distribution: MonitoringStorageItem[];
   };
 

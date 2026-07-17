@@ -3314,7 +3314,7 @@ Important structured information may include: names, dates, locations, events, k
 
       serviceStatus: 'Service status',
       userManagement: 'User management',
-      resourceManagement: 'Resource management',
+      resourceManagement: 'Knowledge monitoring',
       sandboxSettings: 'Sandbox settings',
       registrationWhitelist: 'Registration whitelist',
       roles: 'Roles',
@@ -3323,7 +3323,7 @@ Important structured information may include: names, dates, locations, events, k
       monitoringPage: {
         title: 'Operations monitoring',
         description:
-          'Live business, ingestion, storage, and component health metrics. Refreshes every 30 seconds.',
+          'Live business, ingestion, and storage metrics. Refreshes every 30 seconds.',
         refresh: 'Refresh',
         users: 'Users',
         activeUsers: '{{count}} active users',
@@ -3333,7 +3333,6 @@ Important structured information may include: names, dates, locations, events, k
         storage: 'Dataset storage',
         chats: 'Chat assistants',
         agents: 'Agents',
-        services: 'Healthy services',
         processing: 'Knowledge processing',
         processingDocuments: 'Processing',
         pendingTasks: 'Pending tasks',
@@ -3342,7 +3341,40 @@ Important structured information may include: names, dates, locations, events, k
         teamSpace: 'Team',
         personalSpace: 'Personal',
         noStorage: 'No storage data',
-        componentHealth: 'Component health',
+      },
+
+      userMonitoring: {
+        teams: 'Teams joined',
+        datasets: 'Visible datasets',
+        documents: 'Visible documents',
+        storage: 'Visible storage',
+        datasetBreakdown: 'Personal {{personal}} / Team {{team}}',
+        totalUsers: '{{count}} users',
+        activeUsers: '{{count}} active',
+        totalStorage: '{{size}} total visible storage',
+      },
+
+      knowledgeMonitoring: {
+        title: 'Knowledge monitoring',
+        search: 'Search datasets, files, or errors',
+        datasets: 'Datasets',
+        documents: 'Documents',
+        storage: 'Storage',
+        failures: 'Parse failures',
+        datasetTab: 'Datasets',
+        failureTab: 'Parse failures',
+        visibility: 'Visibility',
+        documentCount: 'Documents',
+        chunkCount: 'Chunks',
+        parseStatus: 'Parse status',
+        teamVisible: 'Team visible',
+        privateVisible: 'Private',
+        failedCount: '{{count}} failed',
+        processingCount: '{{count}} processing',
+        fileName: 'File',
+        dataset: 'Dataset',
+        fileSize: 'Size',
+        failureReason: 'Failure reason',
       },
 
       sandboxSettingsPage: {

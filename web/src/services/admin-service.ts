@@ -111,6 +111,7 @@ const {
   adminListUserDatasets,
   adminListUserAgents,
   adminListManagedResources,
+  adminListFailedDocuments,
 
   adminListServices,
   adminShowServiceDetails,
@@ -189,6 +190,15 @@ export const listManagedResources = (params: {
 }) =>
   request.get<ResponseData<AdminService.ManagedResourceList>>(
     adminListManagedResources,
+    { params },
+  );
+export const listFailedDocuments = (params: {
+  page: number;
+  pageSize: number;
+  keywords?: string;
+}) =>
+  request.get<ResponseData<AdminService.FailedDocumentList>>(
+    adminListFailedDocuments,
     { params },
   );
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>

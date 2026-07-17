@@ -256,6 +256,22 @@ def list_resources():
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/resources/failures", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_failed_documents():
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        keywords = request.args.get("keywords", "")
+        return success_response(ResourceMgr.list_failed_documents(page, page_size, keywords))
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list failed documents")
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/services", methods=["GET"])
 @login_required
 @check_admin_auth
