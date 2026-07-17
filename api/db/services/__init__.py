@@ -17,6 +17,8 @@ import re
 from pathlib import PurePath
 
 from .user_service import UserService as UserService
+from .user_service import generate_access_token as generate_access_token
+from .user_service import get_user_id_from_access_token as get_user_id_from_access_token
 
 
 def _split_name_counter(filename: str) -> tuple[str, int | None]:

@@ -14,7 +14,6 @@
 #  limitations under the License.
 #
 
-import secrets
 import logging
 from typing import Any
 
@@ -56,8 +55,6 @@ def login():
 @login_required
 def logout():
     try:
-        current_user.access_token = f"INVALID_{secrets.token_hex(16)}"
-        current_user.save()
         logout_user()
         return success_response(True)
     except Exception as e:

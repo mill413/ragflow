@@ -28,7 +28,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
 from api.db.services.file_service import FileService
-from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db.services.user_service import generate_access_token, TenantService, UserService, UserTenantService
 from common.time_utils import current_timestamp, datetime_format, get_format_time
 from common.misc_utils import download_img, get_uuid
 from common.constants import RetCode
@@ -122,7 +122,7 @@ async def login():
             message="This account has been disabled, please contact the administrator!",
         )
     elif user:
-        user.access_token = get_uuid()
+        user.access_token = generate_access_token(user.id)
         login_user(user)
         user.last_login_time = get_format_time()
         user.update_time = current_timestamp()
@@ -232,7 +232,7 @@ async def oauth_callback(channel):
                 users = user_register(
                     user_id,
                     {
-                        "access_token": get_uuid(),
+                        "access_token": generate_access_token(user_id),
                         "email": user_info.email,
                         "avatar": avatar,
                         "nickname": user_info.nickname,
@@ -259,7 +259,7 @@ async def oauth_callback(channel):
 
         # User exists, try to log in
         user = users[0]
-        user.access_token = get_uuid()
+        user.access_token = generate_access_token(user.id)
         if user and hasattr(user, "is_active") and user.is_active == "0":
             return redirect("/?error=user_inactive")
 
@@ -288,14 +288,8 @@ async def log_out():
           type: object
     """
     user = current_user._get_current_object() if hasattr(current_user, "_get_current_object") else current_user
-    user_id = user.id
-    user.access_token = f"INVALID_{secrets.token_hex(16)}"
-    saved = user.save()
-    if saved == 0:
-        logging.error("Logout failed to persist access token update: user_id=%s", user_id)
-        return get_json_result(code=RetCode.SERVER_ERROR, data=False, message="Failed to update access token")
     logout_user()
-    logging.info("Logout: user_id=%s, access_token invalidated", user_id)
+    logging.info("Logout: user_id=%s, local session cleared", user.id)
     return get_json_result(data=True)
 
 
@@ -343,7 +337,6 @@ async def setting_user():
 
         if new_password:
             update_dict["password"] = generate_password_hash(decrypt(new_password))
-            update_dict["access_token"] = f"INVALID_{secrets.token_hex(16)}"
             password_changed = True
 
     for k in request_data.keys():
@@ -530,8 +523,9 @@ async def user_add():
         return get_json_result(data=False, message=error_message, code=error_code)
     nickname = nickname.strip()
 
+    user_id = get_uuid()
     user_dict = {
-        "access_token": get_uuid(),
+        "access_token": generate_access_token(user_id),
         "email": email_address,
         "nickname": nickname,
         "password": decrypt(req["password"]),
@@ -540,7 +534,6 @@ async def user_add():
         "is_superuser": False,
     }
 
-    user_id = get_uuid()
     try:
         users = user_register(user_id, user_dict)
         if not users:
@@ -848,6 +841,8 @@ async def forget_reset_password():
     user = users[0]
     try:
         UserService.update_user_password(user.id, new_pwd_base64)
+        user.access_token = generate_access_token(user.id)
+        UserService.update_by_id(user.id, {"access_token": user.access_token})
     except Exception as e:
         logging.exception(e)
         return get_json_result(data=False, code=RetCode.EXCEPTION_ERROR, message="failed to reset password")

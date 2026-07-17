@@ -30,6 +30,23 @@ from common.constants import StatusEnum
 from common import settings
 
 
+ACCESS_TOKEN_SEPARATOR = "|"
+
+
+def generate_access_token(user_id):
+    return f"{get_uuid()}{ACCESS_TOKEN_SEPARATOR}{user_id}"
+
+
+def get_user_id_from_access_token(access_token):
+    try:
+        random_token, user_id = str(access_token or "").rsplit(ACCESS_TOKEN_SEPARATOR, 1)
+    except ValueError:
+        return None
+    if len(random_token.strip()) < 32 or not user_id.strip():
+        return None
+    return user_id.strip()
+
+
 class UserService(CommonService):
     """Service class for managing user-related database operations.
 

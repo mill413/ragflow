@@ -392,6 +392,9 @@ class _DummyUser:
     def to_dict(self):
         return {"id": self.id, "email": self.email}
 
+    def to_safe_dict(self, **_kwargs):
+        return self.to_dict()
+
     def to_safe_dict(self, *, for_self: bool = False):
         _sensitive = {"password", "access_token", "email"}
         result = {k: v for k, v in self.to_dict().items() if k not in _sensitive}
@@ -580,6 +583,7 @@ def _load_user_app(monkeypatch):
     user_service_mod.TenantService = _StubTenantService
     user_service_mod.UserService = _StubUserService
     user_service_mod.UserTenantService = _StubUserTenantService
+    user_service_mod.generate_access_token = lambda user_id: f"generated-token|{user_id}"
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
 
     api_utils_mod = ModuleType("api.utils.api_utils")
@@ -945,7 +949,7 @@ def test_oauth_callback_matrix_unit(monkeypatch):
     _set_request_args(monkeypatch, module, {"state": "existing-state", "code": "code"})
     res = _run(module.oauth_callback("github"))
     assert res["redirect"] == "/?auth=existing-user"
-    assert existing_user.access_token == "existing-token"
+    assert existing_user.access_token == "generated-token|existing-user"
     assert existing_user.save_calls == 1
     assert login_calls and login_calls[-1] is existing_user
 
@@ -962,8 +966,8 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
 
     res = _run(module.log_out())
     assert res["code"] == 0
-    assert current_user.access_token == "INVALID_abcdef"
-    assert current_user.save_calls == 1
+    assert current_user.access_token == ""
+    assert current_user.save_calls == 0
     assert logout_calls == [True]
 
     _set_request_json(monkeypatch, module, {"password": "old-password", "new_password": "new-password"})

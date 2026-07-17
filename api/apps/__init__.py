@@ -24,7 +24,7 @@ from itsdangerous.url_safe import URLSafeTimedSerializer as Serializer
 from quart_cors import cors
 from common.constants import StatusEnum, RetCode
 from api.db.db_models import close_connection, APIToken
-from api.db.services import UserService
+from api.db.services import UserService, get_user_id_from_access_token
 from api.utils.json_encode import CustomJSONEncoder
 from api.utils import commands
 
@@ -116,10 +116,9 @@ def _load_user_from_session():
     requests can arrive with no header at all — we still want to honour the
     server-side session in that window.
 
-    The same access-token validity rules used by the JWT path are applied
-    here so that tokens revoked by ``logout`` (which rewrites the column to
-    ``INVALID_<hex>``) or shortened by data corruption can't keep a stale
-    session authenticated.
+    The user id stored in the signed browser session is enough to restore the
+    login. A later login may replace ``User.access_token`` without invalidating
+    this device's session.
     """
     user_id = session.get("_user_id")
     if not user_id:
@@ -132,9 +131,6 @@ def _load_user_from_session():
     if not users:
         return None
     user = users[0]
-    access_token = str(user.access_token or "").strip()
-    if not access_token or len(access_token) < 32 or access_token.startswith("INVALID_"):
-        return None
     logging.debug("Authenticated request via session fallback for user_id=%s", user_id)
     g.auth_type = AUTH_JWT
     g.user = user
@@ -157,7 +153,7 @@ def _load_user(auth_types=None):
         parts = authorization.split(maxsplit=1)
         if len(parts) < 2:
             logging.warning("Authorization header has invalid bearer format")
-            return None
+            return _load_user_from_session() if AUTH_JWT in auth_types else None
         auth_token = parts[1]
     else:
         auth_token = authorization
@@ -191,15 +187,13 @@ def _load_user(auth_types=None):
                 logging.warning("Authentication attempt with empty access token")
                 return None
 
-            if len(access_token.strip()) < 32:
-                logging.warning(f"Authentication attempt with invalid token format: {len(access_token)} chars")
+            user_id = get_user_id_from_access_token(access_token)
+            if not user_id:
+                logging.warning("Authentication attempt with invalid access token format")
                 return None
 
-            user = UserService.query(access_token=access_token, status=StatusEnum.VALID.value)
+            user = UserService.query(id=user_id, status=StatusEnum.VALID.value)
             if user:
-                if not user[0].access_token or not user[0].access_token.strip():
-                    logging.warning(f"User {user[0].email} has empty access_token in database")
-                    return None
                 g.auth_type = AUTH_JWT
                 g.user = user[0]
                 return user[0]
@@ -226,7 +220,7 @@ def _load_user(auth_types=None):
         except Exception as e_api_token:
             logging.warning(f"load_user from api token got exception {e_api_token}")
 
-    return None
+    return _load_user_from_session() if AUTH_JWT in auth_types else None
 
 
 current_user = LocalProxy(_load_user)

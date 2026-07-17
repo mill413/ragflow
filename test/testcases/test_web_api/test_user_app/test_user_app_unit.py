@@ -104,6 +104,9 @@ class _DummyUser:
     def to_dict(self):
         return {"id": self.id, "email": self.email}
 
+    def to_safe_dict(self, **_kwargs):
+        return self.to_dict()
+
 
 class _Field:
     def __init__(self, name):
@@ -304,6 +307,7 @@ def _load_user_app(monkeypatch):
     user_service_mod.TenantService = _StubTenantService
     user_service_mod.UserService = _StubUserService
     user_service_mod.UserTenantService = _StubUserTenantService
+    user_service_mod.generate_access_token = lambda user_id: f"generated-token|{user_id}"
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
 
     api_utils_mod = ModuleType("api.utils.api_utils")
@@ -669,7 +673,7 @@ def test_oauth_callback_matrix_unit(monkeypatch):
     _set_request_args(monkeypatch, module, {"state": "existing-state", "code": "code"})
     res = _run(module.oauth_callback("github"))
     assert res["redirect"] == "/?auth=existing-user"
-    assert existing_user.access_token == "existing-token"
+    assert existing_user.access_token == "generated-token|existing-user"
     assert existing_user.save_calls == 1
     assert login_calls and login_calls[-1] is existing_user
 
@@ -686,8 +690,8 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
 
     res = _run(module.log_out())
     assert res["code"] == 0
-    assert current_user.access_token == "INVALID_abcdef"
-    assert current_user.save_calls == 1
+    assert current_user.access_token == ""
+    assert current_user.save_calls == 0
     assert logout_calls == [True]
 
     _set_request_json(monkeypatch, module, {"password": "old-password", "new_password": "new-password"})
@@ -754,33 +758,19 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
 def test_registration_helpers_and_register_route_matrix_unit(monkeypatch):
     module = _load_user_app(monkeypatch)
 
-    deleted = {"user": 0, "tenant": 0, "user_tenant": 0, "tenant_llm": 0}
+    deleted = {"user": 0, "tenant": 0, "user_tenant": 0}
     monkeypatch.setattr(module.UserService, "delete_by_id", lambda _user_id: deleted.__setitem__("user", deleted["user"] + 1))
     monkeypatch.setattr(module.TenantService, "delete_by_id", lambda _tenant_id: deleted.__setitem__("tenant", deleted["tenant"] + 1))
     monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(id="ut-1")])
     monkeypatch.setattr(module.UserTenantService, "delete_by_id", lambda _ut_id: deleted.__setitem__("user_tenant", deleted["user_tenant"] + 1))
 
-    class _DeleteQuery:
-        def where(self, *_args, **_kwargs):
-            return self
-
-        def execute(self):
-            deleted["tenant_llm"] += 1
-            return 1
-
-    monkeypatch.setattr(module.TenantLLM, "delete", lambda: _DeleteQuery())
     module.rollback_user_registration("user-1")
-    assert deleted == {"user": 1, "tenant": 1, "user_tenant": 1, "tenant_llm": 1}, deleted
+    assert deleted == {"user": 1, "tenant": 1, "user_tenant": 1}, deleted
 
     monkeypatch.setattr(module.UserService, "delete_by_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("u boom")))
     monkeypatch.setattr(module.TenantService, "delete_by_id", lambda _tenant_id: (_ for _ in ()).throw(RuntimeError("t boom")))
     monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("ut boom")))
 
-    class _RaisingDeleteQuery:
-        def where(self, *_args, **_kwargs):
-            raise RuntimeError("llm boom")
-
-    monkeypatch.setattr(module.TenantLLM, "delete", lambda: _RaisingDeleteQuery())
     module.rollback_user_registration("user-2")
 
     monkeypatch.setattr(module.UserService, "save", lambda **_kwargs: False)

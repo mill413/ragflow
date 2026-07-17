@@ -25,12 +25,11 @@ from flask_login import current_user, login_user
 
 from api.common.exceptions import AdminException, UserNotFoundError
 from api.common.base64 import encode_to_base64
-from api.db.services import UserService
+from api.db.services import UserService, generate_access_token, get_user_id_from_access_token
 from api.db import UserTenantRole
 from api.db.services.user_service import TenantService, UserTenantService
 from common.constants import ActiveEnum, StatusEnum
 from api.utils.crypt import decrypt
-from common.misc_utils import get_uuid
 from common.time_utils import current_timestamp, datetime_format, get_format_time
 from common.connection_utils import sync_construct_response
 from common import settings
@@ -65,16 +64,13 @@ def setup_auth(login_manager):
                     logging.warning("Authentication attempt with empty access token after JWT decode")
                     return None
 
-                # Access tokens stored in database are UUIDs (32 hex characters)
-                if len(access_token) < 32:
-                    logging.warning(f"Authentication attempt with invalid token format: {len(access_token)} chars")
+                user_id = get_user_id_from_access_token(access_token)
+                if not user_id:
+                    logging.warning("Authentication attempt with invalid access token format")
                     return None
 
-                user = UserService.query(access_token=access_token, status=StatusEnum.VALID.value)
+                user = UserService.query(id=user_id, status=StatusEnum.VALID.value)
                 if user:
-                    if not user[0].access_token or not user[0].access_token.strip():
-                        logging.warning(f"User {user[0].email} has empty access_token in database")
-                        return None
                     return user[0]
                 else:
                     return None
@@ -167,7 +163,7 @@ def login_admin(email: str, password: str):
         raise AdminException(f"User {email} inactive", 403)
 
     resp = user.to_json()
-    user.access_token = get_uuid()
+    user.access_token = generate_access_token(user.id)
     login_user(user)
     user.update_time = (current_timestamp(),)
     user.update_date = (datetime_format(datetime.now()),)
