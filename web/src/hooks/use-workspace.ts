@@ -1,13 +1,17 @@
 import {
   useFetchTenantInfo,
+  useFetchUserInfo,
   useListTenant,
 } from '@/hooks/use-user-setting-request';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const WorkspaceStorageKey = 'activeWorkspaceId';
 const WorkspaceChangeEvent = 'ragflow-workspace-change';
 
 export const useWorkspace = () => {
+  const { t } = useTranslation();
+  const { data: user } = useFetchUserInfo();
   const { data: personal } = useFetchTenantInfo();
   const { data: teams } = useListTenant();
   const options = useMemo(
@@ -15,18 +19,26 @@ export const useWorkspace = () => {
       [
         {
           value: personal.tenant_id,
-          label: personal.name || '个人空间',
+          label: t('knowledgeList.personalWorkspace', {
+            name:
+              user.nickname ||
+              user.email ||
+              personal.name ||
+              t('setting.workspace'),
+          }),
           type: 'personal' as const,
           capabilities: { create_shared_resource: true },
         },
         ...teams.map((team) => ({
           value: team.tenant_id,
-          label: team.name || team.nickname,
+          label: t('knowledgeList.teamWorkspace', {
+            name: team.name || team.nickname,
+          }),
           type: 'team' as const,
           capabilities: team.capabilities,
         })),
       ].filter((item) => Boolean(item.value)),
-    [personal, teams],
+    [personal, teams, t, user.email, user.nickname],
   );
   const [workspaceId, setWorkspaceIdState] = useState(
     () => localStorage.getItem(WorkspaceStorageKey) || '',

@@ -2,6 +2,13 @@ import { IconFontFill } from '@/components/icon-font';
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -19,8 +26,10 @@ import {
   LucideChevronDown,
   LucideCircleHelp,
   LucideLanguages,
+  LucideUsersRound,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 import { BellButton } from './bell-button';
 import { DesktopNavbar, MobileNavbar } from './global-navbar';
@@ -37,6 +46,7 @@ export function Header({
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const { pathname } = useLocation();
+  const { t } = useTranslation();
   const changeLanguage = useChangeLanguage();
 
   const {
@@ -110,18 +120,25 @@ export function Header({
           )}
           data-testid="auth-status"
         >
-          <select
-            aria-label="workspace"
-            className="hidden h-8 max-w-40 rounded-md border border-border-default bg-bg-input px-2 text-sm md:block"
-            value={workspaceId}
-            onChange={(event) => setWorkspaceId(event.target.value)}
-          >
-            {workspaceOptions.map((workspace) => (
-              <option key={workspace.value} value={workspace.value}>
-                {workspace.label}
-              </option>
-            ))}
-          </select>
+          <Select value={workspaceId} onValueChange={setWorkspaceId}>
+            <SelectTrigger
+              aria-label={t('setting.workspace')}
+              className={cn(
+                'h-9 border-border-default bg-bg-input text-sm',
+                isCompact ? 'w-36' : 'w-48',
+              )}
+            >
+              <LucideUsersRound className="size-4 shrink-0 text-text-secondary" />
+              <SelectValue placeholder={t('setting.workspace')} />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {workspaceOptions.map((workspace) => (
+                <SelectItem key={workspace.value} value={workspace.value}>
+                  {workspace.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {!isCompact && (
             <>
               <a
