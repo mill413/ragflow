@@ -3489,6 +3489,10 @@ Important structured information may include: names, dates, locations, events, k
 
       deleteUser: 'Delete user',
       userDetails: 'View user details',
+      editUser: 'Edit user',
+      userUpdated: 'User information updated',
+      remark: 'Administrator remark',
+      passwordUnchangedPlaceholder: 'Leave blank to keep the current password',
       deleteUserConfirmation: 'Are you sure you want to delete this user?',
 
       createNewUser: 'Create new user',

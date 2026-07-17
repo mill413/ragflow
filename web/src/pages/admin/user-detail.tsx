@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 
-import { LucideArrowLeft, LucideDot } from 'lucide-react';
+import { LucideArrowLeft, LucideDot, LucidePencil } from 'lucide-react';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createColumnHelper,
   flexRender,
@@ -20,6 +20,16 @@ import Spotlight from '@/components/spotlight';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -31,15 +41,28 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import {
   getUserDetails,
+  listDepartments,
   listUserAgents,
   listUserDatasets,
+  updateUser,
 } from '@/services/admin-service';
+import { rsaPsw } from '@/utils';
 
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
+import DepartmentTreeSelect from './components/department-tree-select';
+import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 
 const ASSET_NAMES = ['dataset', 'flow'];
@@ -301,6 +324,18 @@ function AdminUserDetail() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { id } = useParams();
+  const queryClient = useQueryClient();
+  const [{ userInfo }] = useContext(CurrentUserInfoContext);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    email: '',
+    nickname: '',
+    password: '',
+    departmentId: '',
+    isActive: true,
+    isSuperuser: false,
+    remark: '',
+  });
 
   const { data: { detail, datasets, agents } = {} } = useQuery({
     queryKey: ['admin/userDetail', id],
@@ -320,6 +355,51 @@ function AdminUserDetail() {
     enabled: !!id,
     retry: false,
   });
+  const { data: departments = [] } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
+    retry: false,
+  });
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      updateUser(id!, {
+        email: editForm.email.trim(),
+        nickname: editForm.nickname.trim(),
+        password: editForm.password
+          ? (rsaPsw(editForm.password) as string)
+          : undefined,
+        departmentId: editForm.departmentId || null,
+        isActive: editForm.isActive,
+        isSuperuser: editForm.isSuperuser,
+        remark: editForm.remark.trim(),
+      }),
+    onSuccess: (response) => {
+      const nextEmail = response.data.data.email;
+      queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
+      message.success(t('admin.userUpdated'));
+      setEditOpen(false);
+      if (nextEmail !== id) {
+        navigate(`${Routes.AdminUserManagement}/${nextEmail}`, {
+          replace: true,
+        });
+      }
+    },
+  });
+  const openEdit = () => {
+    if (!detail) return;
+    setEditForm({
+      email: detail.email,
+      nickname: detail.nickname || '',
+      password: '',
+      departmentId: detail.department_id || '',
+      isActive: parseBooleanish(detail.is_active),
+      isSuperuser: detail.is_superuser,
+      remark: detail.remark || '',
+    });
+    setEditOpen(true);
+  };
+  const isMe = detail?.email === userInfo?.email;
 
   return (
     <section className="px-10 py-5 size-full flex flex-col">
@@ -368,6 +448,11 @@ function AdminUserDetail() {
                 )
               }
             </EnterpriseFeature>
+
+            <Button className="ml-auto" variant="outline" onClick={openEdit}>
+              <LucidePencil />
+              {t('admin.editUser')}
+            </Button>
           </section>
 
           <section className="flex items-start px-14 space-x-14">
@@ -443,6 +528,134 @@ function AdminUserDetail() {
           </Tabs>
         </CardContent>
       </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('admin.editUser')}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-5 px-6 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label>{t('admin.email')}</Label>
+              <Input
+                value={editForm.email}
+                onChange={(event) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    email: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.nickname')}</Label>
+              <Input
+                value={editForm.nickname}
+                onChange={(event) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    nickname: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.department')}</Label>
+              <DepartmentTreeSelect
+                departments={departments}
+                value={editForm.departmentId}
+                placeholder={t('admin.noDepartment')}
+                onChange={(departmentId) =>
+                  setEditForm((form) => ({ ...form, departmentId }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.status')}</Label>
+              <Select
+                disabled={isMe}
+                value={editForm.isActive ? 'active' : 'inactive'}
+                onValueChange={(value) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    isActive: value === 'active',
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">{t('admin.active')}</SelectItem>
+                  <SelectItem value="inactive">
+                    {t('admin.inactive')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t('admin.userType')}</Label>
+              <Select
+                disabled={isMe}
+                value={editForm.isSuperuser ? 'admin' : 'user'}
+                onValueChange={(value) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    isSuperuser: value === 'admin',
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">{t('admin.superuser')}</SelectItem>
+                  <SelectItem value="user">{t('admin.normalUser')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>{t('admin.password')}</Label>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder={t('admin.passwordUnchangedPlaceholder')}
+                value={editForm.password}
+                onChange={(event) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    password: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>{t('admin.remark')}</Label>
+              <Textarea
+                rows={3}
+                value={editForm.remark}
+                onChange={(event) =>
+                  setEditForm((form) => ({
+                    ...form,
+                    remark: event.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              {t('admin.cancel')}
+            </Button>
+            <Button
+              disabled={!editForm.email.trim() || updateMutation.isPending}
+              onClick={() => updateMutation.mutate()}
+            >
+              {t('admin.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

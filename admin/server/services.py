@@ -50,7 +50,7 @@ class OrganizationMgr:
     def _load(cls):
         settings = SystemSettingsService.get_by_name(cls.SETTING_NAME)
         if not settings:
-            return {"departments": [], "user_departments": {}}
+            return {"departments": [], "user_departments": {}, "user_metadata": {}}
         try:
             data = json.loads(settings[0].value)
         except (TypeError, json.JSONDecodeError):
@@ -58,6 +58,7 @@ class OrganizationMgr:
         return {
             "departments": data.get("departments", []),
             "user_departments": data.get("user_departments", {}),
+            "user_metadata": data.get("user_metadata", {}),
         }
 
     @classmethod
@@ -192,6 +193,27 @@ class OrganizationMgr:
             for user_id, department_id in data["user_departments"].items()
         }
 
+    @classmethod
+    def get_user_metadata(cls, user_id):
+        return cls._load()["user_metadata"].get(user_id, {})
+
+    @classmethod
+    def set_user_metadata(cls, user_id, metadata):
+        data = cls._load()
+        cleaned = {key: value for key, value in metadata.items() if value not in (None, "")}
+        if cleaned:
+            data["user_metadata"][user_id] = cleaned
+        else:
+            data["user_metadata"].pop(user_id, None)
+        cls._save(data)
+
+    @classmethod
+    def remove_user(cls, user_id):
+        data = cls._load()
+        data["user_departments"].pop(user_id, None)
+        data["user_metadata"].pop(user_id, None)
+        cls._save(data)
+
 
 class UserMgr:
     @staticmethod
@@ -295,11 +317,15 @@ class UserMgr:
         # use email to query
         users = UserService.query_user_by_email(username)
         result = []
+        departments = OrganizationMgr.get_user_departments()
         for user in users:
             result.append(
                 {
+                    "id": user.id,
                     "avatar": user.avatar,
                     "email": user.email,
+                    "nickname": user.nickname,
+                    "password_plain": UserMgr.get_plain_password(user.password),
                     "language": user.language,
                     "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
@@ -309,9 +335,58 @@ class UserMgr:
                     "is_superuser": user.is_superuser,
                     "create_date": user.create_date,
                     "update_date": user.update_date,
+                    **departments.get(user.id, {"department_id": None, "department_path": ""}),
+                    "remark": OrganizationMgr.get_user_metadata(user.id).get("remark", ""),
                 }
             )
         return result
+
+    @staticmethod
+    def update_user_profile(username, data):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        if len(users) > 1:
+            raise AdminException(f"Exist more than 1 user: {username}!")
+        user = users[0]
+
+        department_id = data.get("department_id")
+        if department_id:
+            OrganizationMgr.ensure_department_exists(department_id)
+        password = decrypt(data["password"]) if data.get("password") else None
+        remark = str(data.get("remark") or "").strip()
+        if len(remark) > 2000:
+            raise AdminException("Remark must be at most 2000 characters", 400)
+
+        updates = {}
+        if "email" in data:
+            email = str(data.get("email") or "").strip().lower()
+            if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", email):
+                raise AdminException(f"Invalid email address: {email}!", 400)
+            existing = UserService.query_user_by_email(email)
+            if existing and existing[0].id != user.id:
+                raise UserAlreadyExistsError(email)
+            updates["email"] = email
+        if "nickname" in data:
+            nickname = str(data.get("nickname") or "").strip()
+            if len(nickname) > 100:
+                raise AdminException("Nickname must be at most 100 characters", 400)
+            updates["nickname"] = nickname
+        if "is_active" in data:
+            updates["is_active"] = ActiveEnum.ACTIVE.value if data["is_active"] else ActiveEnum.INACTIVE.value
+        if "is_superuser" in data:
+            updates["is_superuser"] = bool(data["is_superuser"])
+        UserService.update_user(user.id, updates)
+
+        if password is not None:
+            UserService.update_user_password(user.id, password)
+        if "department_id" in data:
+            OrganizationMgr.set_user_department(user.id, department_id)
+        if "remark" in data:
+            OrganizationMgr.set_user_metadata(user.id, {"remark": remark})
+
+        refreshed = UserService.filter_by_id(user.id)
+        return {"email": refreshed.email, "id": refreshed.id}
 
     @staticmethod
     def create_user(username, password, role="user") -> dict:
@@ -340,7 +415,10 @@ class UserMgr:
         if len(user_list) > 1:
             raise AdminException(f"Exist more than 1 user: {username}!")
         usr = user_list[0]
-        return delete_user_data(usr.id)
+        result = delete_user_data(usr.id)
+        if result.get("success"):
+            OrganizationMgr.remove_user(usr.id)
+        return result
 
     @staticmethod
     def update_user_password(username, new_password) -> str:

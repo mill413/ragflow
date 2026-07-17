@@ -53,9 +53,15 @@ declare namespace AdminService {
   };
 
   export type UserDetail = {
+    id: string;
     avatar?: string;
     create_date: string;
     email: string;
+    nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
+    remark?: string;
     is_active: '0' | '1';
     is_anonymous: '0' | '1';
     is_superuser: boolean;

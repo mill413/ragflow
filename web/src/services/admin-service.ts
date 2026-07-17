@@ -183,6 +183,22 @@ export const getUserDetails = (email: string) =>
   request.get<ResponseData<[AdminService.UserDetail]>>(
     adminGetUserDetails(email),
   );
+export const updateUser = (
+  email: string,
+  data: {
+    email: string;
+    nickname: string;
+    departmentId: string | null;
+    isActive: boolean;
+    isSuperuser: boolean;
+    password?: string;
+    remark?: string;
+  },
+) =>
+  request.patch<ResponseData<{ id: string; email: string }>>(
+    adminGetUserDetails(email),
+    data,
+  );
 export const listUserDatasets = (email: string) =>
   request.get<ResponseData<AdminService.ListUserDatasetItem[]>>(
     adminListUserDatasets(email),

@@ -154,6 +154,24 @@ def delete_user(username):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/users/<username>", methods=["PATCH"])
+@login_required
+@check_admin_auth
+def update_user(username):
+    try:
+        data = request.get_json() or {}
+        if current_user.email == username:
+            if "is_active" in data and not bool(data["is_active"]):
+                return error_response("Can't deactivate current user", 409)
+            if "is_superuser" in data and not bool(data["is_superuser"]):
+                return error_response("Can't revoke current administrator", 409)
+        return success_response(UserMgr.update_user_profile(username, data))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/users/<username>/password", methods=["PUT"])
 @login_required
 @check_admin_auth
