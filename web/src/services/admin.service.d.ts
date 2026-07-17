@@ -15,11 +15,21 @@ declare namespace AdminService {
     last_login_time: string;
     login_channel: unknown;
     nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
     password: string;
     status: '0' | '1';
     timezone: string;
     update_date: [string];
     update_time: [number];
+  };
+
+  export type Department = {
+    id: string;
+    name: string;
+    parent_id?: string;
+    path: string;
   };
 
   export type ListUsersItem = {

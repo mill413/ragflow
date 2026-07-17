@@ -7,6 +7,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   LucideMonitor,
   LucideBoxes,
+  LucideBuilding2,
   LucideServerCrash,
   LucideSquareUserRound,
   LucideUserCog,
@@ -46,6 +47,11 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminUserManagement,
         name: t('admin.userManagement'),
         icon: <LucideUserCog className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminDepartments,
+        name: t('admin.departmentManagement'),
+        icon: <LucideBuilding2 className="size-[1em]" />,
       },
       {
         path: Routes.AdminResourceManagement,

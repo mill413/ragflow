@@ -24,7 +24,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import UserMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.versions import get_ragflow_version
@@ -93,10 +93,14 @@ def create_user():
         username = data["username"]
         password = data["password"]
         role = data.get("role", "user")
+        department_id = data.get("department_id")
+        if department_id:
+            OrganizationMgr.ensure_department_exists(department_id)
 
         res = UserMgr.create_user(username, password, role)
         if res["success"]:
             user_info = res["user_info"]
+            OrganizationMgr.set_user_department(user_info["id"], department_id)
             user_info.pop("password")  # do not return password
             return success_response(user_info, "User created successfully")
         else:
@@ -106,6 +110,31 @@ def create_user():
         return error_response(e.message, e.code)
     except Exception as e:
         return error_response(str(e))
+
+
+@admin_bp.route("/users/<username>/department", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_user_department(username):
+    try:
+        OrganizationMgr.set_user_department_by_email(username, (request.get_json() or {}).get("department_id"))
+        return success_response(True)
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/users/<username>/login-url", methods=["POST"])
+@login_required
+@check_admin_auth
+def get_user_login_url(username):
+    try:
+        return success_response(UserMgr.get_user_login_url(username))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
 
 
 @admin_bp.route("/users/<username>", methods=["DELETE"])
@@ -231,6 +260,51 @@ def get_user_agents(username):
         agents_list = UserServiceMgr.get_user_agents(username)
         return success_response(agents_list)
 
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_departments():
+    return success_response(OrganizationMgr.list_departments())
+
+
+@admin_bp.route("/departments", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_department():
+    try:
+        data = request.get_json() or {}
+        return success_response(OrganizationMgr.create_department(data.get("name"), data.get("parent_id")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments/<department_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_department(department_id):
+    try:
+        data = request.get_json() or {}
+        return success_response(OrganizationMgr.update_department(department_id, data.get("name"), data.get("parent_id")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments/<department_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_department(department_id):
+    try:
+        return success_response(OrganizationMgr.delete_department(department_id))
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:

@@ -1,4 +1,10 @@
-import { useContext, useLayoutEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
@@ -22,6 +28,7 @@ import {
 import {
   LucideClipboardList,
   LucideDot,
+  LucideExternalLink,
   LucideTrash2,
   LucideUserLock,
   LucideUserPlus,
@@ -83,10 +90,13 @@ import {
   createUser,
   deleteUser,
   grantSuperuser,
+  getUserLoginUrl,
+  listDepartments,
   listRoles,
   listUsers,
   revokeSuperuser,
   updateUserPassword,
+  updateUserDepartment,
   updateUserRole,
   updateUserStatus,
 } from '@/services/admin-service';
@@ -113,6 +123,7 @@ const columnHelper = createColumnHelper<AdminService.ListUsersItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListUsersItem>([
   'email',
   'nickname',
+  'department_path',
 ]);
 
 const STATUS_FILTER_OPTIONS = [
@@ -150,6 +161,11 @@ function AdminUserManagement() {
     queryFn: async () => (await listUsers()).data.data,
     retry: false,
     placeholderData: keepPreviousData,
+  });
+  const { data: departments } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
+    retry: false,
   });
 
   // Delete user mutation
@@ -192,12 +208,14 @@ function AdminUserManagement() {
       email,
       password,
       role,
+      departmentId,
     }: {
       email: string;
       password: string;
       role?: string;
+      departmentId?: string;
     }) => {
-      await createUser(email, rsaPsw(password) as string);
+      await createUser(email, rsaPsw(password) as string, departmentId);
 
       if (IS_ENTERPRISE && role) {
         await updateUserRoleMutation.mutateAsync({ email, role });
@@ -228,6 +246,32 @@ function AdminUserManagement() {
     retry: false,
   });
 
+  const updateDepartmentMutation = useMutation({
+    mutationFn: ({
+      email,
+      departmentId,
+    }: {
+      email: string;
+      departmentId?: string;
+    }) => updateUserDepartment(email, departmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
+    },
+    retry: false,
+  });
+
+  const openUserHome = useCallback(async (email: string) => {
+    const target = window.open('about:blank', '_blank');
+    try {
+      const { url } = (await getUserLoginUrl(email)).data.data;
+      if (target)
+        target.location.href = new URL(url, window.location.origin).toString();
+    } catch (error) {
+      target?.close();
+      throw error;
+    }
+  }, []);
+
   // Update user status mutation
   const updateUserStatusMutation = useMutation({
     mutationFn: (data: { email: string; isActive: boolean }) =>
@@ -245,6 +289,43 @@ function AdminUserManagement() {
       }),
       columnHelper.accessor('nickname', {
         header: t('admin.nickname'),
+      }),
+
+      columnHelper.accessor('password_plain', {
+        header: t('admin.password'),
+        cell: ({ cell }) => cell.getValue() || '-',
+      }),
+
+      columnHelper.accessor('department_path', {
+        header: t('admin.department'),
+        cell: ({ row }) => (
+          <Select
+            disabled={updateDepartmentMutation.isPending}
+            value={row.original.department_id || 'none'}
+            onValueChange={(value) =>
+              updateDepartmentMutation.mutate({
+                email: row.original.email,
+                departmentId: value === 'none' ? undefined : value,
+              })
+            }
+          >
+            <SelectTrigger className="min-w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t('admin.noDepartment')}</SelectItem>
+              {departments?.map((department) => (
+                <SelectItem key={department.id} value={department.id}>
+                  {department.path}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+        filterFn: createColumnFilterFn(
+          (row, id, filterValue) => row.getValue(id) === filterValue,
+          { autoRemove: (value) => !value },
+        ),
       }),
 
       ...(IS_ENTERPRISE
@@ -436,6 +517,16 @@ function AdminUserManagement() {
                 <LucideClipboardList />
               </Button>
 
+              <Button
+                variant="transparent"
+                size="icon"
+                className="border-0"
+                title={t('admin.openRagflow')}
+                onClick={() => openUserHome(row.original.email)}
+              >
+                <LucideExternalLink />
+              </Button>
+
               {!isMe && (
                 <>
                   <Button
@@ -474,6 +565,9 @@ function AdminUserManagement() {
       userInfo?.email,
       updateUserStatusMutation,
       setSuperuserMutation,
+      updateDepartmentMutation,
+      departments,
+      openUserHome,
       navigate,
     ],
   );
@@ -586,6 +680,38 @@ function AdminUserManagement() {
                         </section>
                       )}
                     </EnterpriseFeature>
+
+                    <section>
+                      <div className="font-bold mb-3">
+                        {t('admin.department')}
+                      </div>
+                      <RadioGroup
+                        value={
+                          (table
+                            .getColumn('department_path')
+                            ?.getFilterValue() as string) ?? ''
+                        }
+                        onValueChange={(value) =>
+                          table
+                            .getColumn('department_path')
+                            ?.setFilterValue(value)
+                        }
+                      >
+                        <Label className="flex items-center space-x-2">
+                          <RadioGroupItem value="" />
+                          <span>{t('admin.all')}</span>
+                        </Label>
+                        {departments?.map((department) => (
+                          <Label
+                            key={department.id}
+                            className="flex items-center space-x-2"
+                          >
+                            <RadioGroupItem value={department.path} />
+                            <span>{department.path}</span>
+                          </Label>
+                        ))}
+                      </RadioGroup>
+                    </section>
 
                     <section>
                       <div className="font-bold mb-3">{t('admin.status')}</div>

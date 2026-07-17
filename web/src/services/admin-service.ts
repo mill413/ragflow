@@ -110,6 +110,10 @@ const {
   adminDeleteUser,
   adminListUserDatasets,
   adminListUserAgents,
+  adminUpdateUserDepartment,
+  adminGetUserLoginUrl,
+  adminDepartments,
+  adminDepartment,
   adminListManagedResources,
   adminListFailedDocuments,
 
@@ -158,10 +162,15 @@ export const logout = () => request.get<ResponseData<boolean>>(adminLogout);
 export const listUsers = () =>
   request.get<ResponseData<AdminService.ListUsersItem[]>>(adminListUsers, {});
 
-export const createUser = (email: string, password: string) =>
+export const createUser = (
+  email: string,
+  password: string,
+  departmentId?: string,
+) =>
   request.post<ResponseData<boolean>>(adminCreateUser, {
     username: email,
     password,
+    department_id: departmentId || null,
   });
 
 export const grantSuperuser = (email: string) =>
@@ -182,6 +191,32 @@ export const listUserAgents = (email: string) =>
   request.get<ResponseData<AdminService.ListUserAgentItem[]>>(
     adminListUserAgents(email),
   );
+export const updateUserDepartment = (email: string, departmentId?: string) =>
+  request.put<ResponseData<boolean>>(adminUpdateUserDepartment(email), {
+    department_id: departmentId || null,
+  });
+export const getUserLoginUrl = (email: string) =>
+  request.post<ResponseData<{ url: string; email: string }>>(
+    adminGetUserLoginUrl(email),
+  );
+export const listDepartments = () =>
+  request.get<ResponseData<AdminService.Department[]>>(adminDepartments);
+export const createDepartment = (name: string, parentId?: string) =>
+  request.post<ResponseData<AdminService.Department>>(adminDepartments, {
+    name,
+    parent_id: parentId || null,
+  });
+export const updateDepartment = (
+  departmentId: string,
+  name: string,
+  parentId?: string,
+) =>
+  request.put<ResponseData<AdminService.Department>>(
+    adminDepartment(departmentId),
+    { name, parent_id: parentId || null },
+  );
+export const deleteDepartment = (departmentId: string) =>
+  request.delete<ResponseData<boolean>>(adminDepartment(departmentId));
 export const listManagedResources = (params: {
   type: AdminService.ManagedResourceType;
   page: number;

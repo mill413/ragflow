@@ -14,17 +14,20 @@
 #  limitations under the License.
 #
 
+import base64
+import binascii
 import json
 import os
 import logging
 import re
+import uuid
 from typing import Any
 
 from peewee import Case, fn
 
 from common.constants import ActiveEnum, StatusEnum
 from api.db import CanvasCategory, TenantPermission
-from api.db.services import UserService
+from api.db.services import UserService, generate_access_token
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.user_service import TenantService, UserTenantService
@@ -39,11 +42,152 @@ from api.common.exceptions import AdminException, UserAlreadyExistsError, UserNo
 from config import SERVICE_CONFIGS
 
 
+class OrganizationMgr:
+    SETTING_NAME = "admin.organization"
+
+    @classmethod
+    def _load(cls):
+        settings = SystemSettingsService.get_by_name(cls.SETTING_NAME)
+        if not settings:
+            return {"departments": [], "user_departments": {}}
+        try:
+            data = json.loads(settings[0].value)
+        except (TypeError, json.JSONDecodeError):
+            data = {}
+        return {
+            "departments": data.get("departments", []),
+            "user_departments": data.get("user_departments", {}),
+        }
+
+    @classmethod
+    def _save(cls, data):
+        value = json.dumps(data, ensure_ascii=False)
+        settings = SystemSettingsService.get_by_name(cls.SETTING_NAME)
+        if settings:
+            setting = settings[0].to_dict()
+            setting["value"] = value
+            SystemSettingsService.update_by_name(cls.SETTING_NAME, setting)
+        else:
+            SystemSettingsService.save(
+                name=cls.SETTING_NAME,
+                source="admin",
+                data_type="json",
+                value=value,
+            )
+
+    @staticmethod
+    def _department_map(data):
+        return {department["id"]: department for department in data["departments"]}
+
+    @classmethod
+    def _build_path(cls, data, name, parent_id):
+        if not parent_id:
+            return name
+        parent = cls._department_map(data).get(parent_id)
+        if not parent:
+            raise AdminException("Parent department not found", 404)
+        return f'{parent["path"]}/{name}'
+
+    @classmethod
+    def list_departments(cls):
+        return sorted(cls._load()["departments"], key=lambda department: department["path"])
+
+    @classmethod
+    def ensure_department_exists(cls, department_id):
+        if department_id not in cls._department_map(cls._load()):
+            raise AdminException("Department not found", 404)
+
+    @classmethod
+    def create_department(cls, name, parent_id=None):
+        data = cls._load()
+        name = str(name or "").strip()
+        if not name:
+            raise AdminException("Department name is required", 400)
+        department = {
+            "id": uuid.uuid4().hex,
+            "name": name,
+            "parent_id": parent_id or None,
+            "path": cls._build_path(data, name, parent_id),
+        }
+        data["departments"].append(department)
+        cls._save(data)
+        return department
+
+    @classmethod
+    def update_department(cls, department_id, name, parent_id=None):
+        data = cls._load()
+        departments = cls._department_map(data)
+        department = departments.get(department_id)
+        if not department:
+            raise AdminException("Department not found", 404)
+        if parent_id == department_id:
+            raise AdminException("Department cannot be its own parent", 400)
+        if parent_id:
+            ancestor = departments.get(parent_id)
+            while ancestor:
+                if ancestor["id"] == department_id:
+                    raise AdminException("Department cannot be moved below its child", 400)
+                ancestor = departments.get(ancestor.get("parent_id"))
+        old_path = department["path"]
+        department["name"] = str(name or department["name"]).strip()
+        department["parent_id"] = parent_id or None
+        department["path"] = cls._build_path(data, department["name"], parent_id)
+        for child in data["departments"]:
+            if child["path"].startswith(f"{old_path}/"):
+                child["path"] = f'{department["path"]}{child["path"][len(old_path):]}'
+        cls._save(data)
+        return department
+
+    @classmethod
+    def delete_department(cls, department_id):
+        data = cls._load()
+        if department_id not in cls._department_map(data):
+            raise AdminException("Department not found", 404)
+        if any(department.get("parent_id") == department_id for department in data["departments"]):
+            raise AdminException("Department still has child departments", 409)
+        if department_id in data["user_departments"].values():
+            raise AdminException("Department still has users", 409)
+        data["departments"] = [department for department in data["departments"] if department["id"] != department_id]
+        cls._save(data)
+        return True
+
+    @classmethod
+    def set_user_department(cls, user_id, department_id=None):
+        data = cls._load()
+        if department_id and department_id not in cls._department_map(data):
+            raise AdminException("Department not found", 404)
+        if department_id:
+            data["user_departments"][user_id] = department_id
+        else:
+            data["user_departments"].pop(user_id, None)
+        cls._save(data)
+
+    @classmethod
+    def set_user_department_by_email(cls, email, department_id=None):
+        users = UserService.query_user_by_email(email)
+        if not users:
+            raise UserNotFoundError(email)
+        cls.set_user_department(users[0].id, department_id)
+
+    @classmethod
+    def get_user_departments(cls):
+        data = cls._load()
+        departments = cls._department_map(data)
+        return {
+            user_id: {
+                "department_id": department_id,
+                "department_path": departments.get(department_id, {}).get("path", ""),
+            }
+            for user_id, department_id in data["user_departments"].items()
+        }
+
+
 class UserMgr:
     @staticmethod
     def get_all_users():
         users = UserService.get_all_users()
         usage_by_user = UserMgr.get_user_usage([user.id for user in users])
+        departments_by_user = OrganizationMgr.get_user_departments()
         result = []
         for user in users:
             result.append(
@@ -55,10 +199,36 @@ class UserMgr:
                     "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
                     "is_superuser": user.is_superuser,
+                    "password_plain": UserMgr.get_plain_password(user.password),
+                    **departments_by_user.get(user.id, {"department_id": None, "department_path": ""}),
                     **usage_by_user[user.id],
                 }
             )
         return result
+
+    @staticmethod
+    def get_plain_password(password):
+        prefix = "{noop}"
+        password = str(password or "")
+        if not password.startswith(prefix):
+            return ""
+        encoded = password[len(prefix) :]
+        try:
+            return base64.b64decode(encoded, validate=True).decode("utf-8")
+        except (binascii.Error, ValueError, UnicodeDecodeError):
+            return encoded
+
+    @staticmethod
+    def get_user_login_url(username):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        user = users[0]
+        if user.is_active == ActiveEnum.INACTIVE.value:
+            raise AdminException("User is inactive", 409)
+        user.access_token = generate_access_token(user.id)
+        user.save()
+        return {"url": f"/?auth={user.get_id()}", "email": user.email}
 
     @staticmethod
     def get_user_usage(user_ids):
