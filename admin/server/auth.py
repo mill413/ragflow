@@ -36,49 +36,39 @@ from common import settings
 
 
 def setup_auth(login_manager):
+    def load_user_from_token(jwt_token):
+        from itsdangerous.url_safe import URLSafeTimedSerializer as Serializer
+
+        try:
+            if jwt_token.startswith("Bearer "):
+                jwt_token = jwt_token[7:]
+
+            jwt_token = jwt_token.strip()
+            if not jwt_token:
+                logging.warning("Authentication attempt with empty JWT token")
+                return None
+
+            jwt = Serializer(secret_key=settings.get_secret_key())
+            access_token = str(jwt.loads(jwt_token))
+            user_id = get_user_id_from_access_token(access_token)
+            if not user_id:
+                logging.warning("Authentication attempt with invalid access token format")
+                return None
+
+            users = UserService.query(id=user_id, status=StatusEnum.VALID.value)
+            return users[0] if users else None
+        except Exception as e:
+            logging.warning(f"load_user got exception {e}")
+            return None
+
+    @login_manager.user_loader
+    def load_user_from_session(session_token):
+        return load_user_from_token(session_token)
+
     @login_manager.request_loader
     def load_user(web_request):
-        # Authorization header contains JWT-encoded access token
-        # First decode JWT to get the UUID, then query database
-        from itsdangerous.url_safe import URLSafeTimedSerializer as Serializer
-        from common import settings
-
         authorization = web_request.headers.get("Authorization")
-        if authorization:
-            try:
-                # Strip "Bearer " prefix if present
-                jwt_token = authorization
-                if jwt_token.startswith("Bearer "):
-                    jwt_token = jwt_token[7:]
-
-                jwt_token = jwt_token.strip()
-                if not jwt_token:
-                    logging.warning("Authentication attempt with empty JWT token")
-                    return None
-
-                # Decode JWT to get the UUID access_token
-                jwt = Serializer(secret_key=settings.get_secret_key())
-                access_token = str(jwt.loads(jwt_token))
-
-                if not access_token or not access_token.strip():
-                    logging.warning("Authentication attempt with empty access token after JWT decode")
-                    return None
-
-                user_id = get_user_id_from_access_token(access_token)
-                if not user_id:
-                    logging.warning("Authentication attempt with invalid access token format")
-                    return None
-
-                user = UserService.query(id=user_id, status=StatusEnum.VALID.value)
-                if user:
-                    return user[0]
-                else:
-                    return None
-            except Exception as e:
-                logging.warning(f"load_user got exception {e}")
-                return None
-        else:
-            return None
+        return load_user_from_token(authorization) if authorization else None
 
 
 def init_default_admin():
