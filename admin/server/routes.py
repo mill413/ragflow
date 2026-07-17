@@ -270,7 +270,7 @@ def get_user_agents(username):
 @login_required
 @check_admin_auth
 def list_departments():
-    return success_response(OrganizationMgr.list_departments())
+    return success_response(OrganizationMgr.list_departments(request.args.get("q", "")))
 
 
 @admin_bp.route("/departments", methods=["POST"])

@@ -21,6 +21,7 @@ import os
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from peewee import Case, fn
@@ -89,8 +90,14 @@ class OrganizationMgr:
         return f'{parent["path"]}/{name}'
 
     @classmethod
-    def list_departments(cls):
-        return sorted(cls._load()["departments"], key=lambda department: department["path"])
+    def list_departments(cls, query=""):
+        departments = cls._load()["departments"]
+        query = str(query or "").strip().casefold()
+        if query:
+            departments = [
+                department for department in departments if query in str(department.get("name", "")).casefold()
+            ]
+        return sorted(departments, key=lambda department: department["path"])
 
     @classmethod
     def ensure_department_exists(cls, department_id):
@@ -103,11 +110,14 @@ class OrganizationMgr:
         name = str(name or "").strip()
         if not name:
             raise AdminException("Department name is required", 400)
+        now = datetime.now(timezone.utc).isoformat()
         department = {
             "id": uuid.uuid4().hex,
             "name": name,
             "parent_id": parent_id or None,
             "path": cls._build_path(data, name, parent_id),
+            "created_at": now,
+            "updated_at": now,
         }
         data["departments"].append(department)
         cls._save(data)
@@ -132,6 +142,7 @@ class OrganizationMgr:
         department["name"] = str(name or department["name"]).strip()
         department["parent_id"] = parent_id or None
         department["path"] = cls._build_path(data, department["name"], parent_id)
+        department["updated_at"] = datetime.now(timezone.utc).isoformat()
         for child in data["departments"]:
             if child["path"].startswith(f"{old_path}/"):
                 child["path"] = f'{department["path"]}{child["path"][len(old_path):]}'

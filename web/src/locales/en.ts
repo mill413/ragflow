@@ -3452,8 +3452,16 @@ Important structured information may include: names, dates, locations, events, k
       noDepartment: 'No department',
       departmentDescription:
         'Manage the internal department hierarchy and user assignments without changing the RAGFlow database schema.',
+      searchDepartment: 'Search departments',
+      query: 'Search',
+      save: 'Save',
       newDepartment: 'New department',
       editDepartment: 'Edit department',
+      deleteDepartment: 'Delete department',
+      deleteDepartmentConfirmation:
+        'Are you sure you want to delete department “{{name}}”?',
+      departmentSaved: 'Department saved',
+      departmentDeleted: 'Department deleted',
       departmentName: 'Department name',
       departmentPath: 'Department path',
       parentDepartment: 'Parent department',

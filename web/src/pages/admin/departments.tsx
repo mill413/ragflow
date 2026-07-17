@@ -2,9 +2,27 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -16,6 +34,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import message from '@/components/ui/message';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -36,38 +55,66 @@ import {
   createDepartment,
   deleteDepartment,
   listDepartments,
-  listUsers,
   updateDepartment,
 } from '@/services/admin-service';
+import { formatDate } from '@/utils/date';
+
+type DepartmentTreeNode = AdminService.Department & {
+  children: DepartmentTreeNode[];
+};
 
 export default function AdminDepartments() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<AdminService.Department>();
+  const [deleting, setDeleting] = useState<AdminService.Department>();
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('none');
+  const [searchInput, setSearchInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   const { data: departments = [] } = useQuery({
-    queryKey: ['admin/departments'],
-    queryFn: async () => (await listDepartments()).data.data,
+    queryKey: ['admin/departments', query],
+    queryFn: async () => (await listDepartments(query)).data.data,
     retry: false,
   });
-  const { data: users = [] } = useQuery({
-    queryKey: ['admin/listUsers'],
-    queryFn: async () => (await listUsers()).data.data,
-    retry: false,
-  });
-  const userCounts = useMemo(
-    () =>
-      users.reduce<Record<string, number>>((counts, user) => {
-        if (user.department_id) {
-          counts[user.department_id] = (counts[user.department_id] ?? 0) + 1;
+
+  const departmentRows = useMemo(() => {
+    const nodes = new Map<string, DepartmentTreeNode>();
+    departments.forEach((department) =>
+      nodes.set(department.id, { ...department, children: [] }),
+    );
+
+    const roots: DepartmentTreeNode[] = [];
+    nodes.forEach((node) => {
+      const parent = node.parent_id ? nodes.get(node.parent_id) : undefined;
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    });
+
+    const sortNodes = (items: DepartmentTreeNode[]) => {
+      items.sort((left, right) => left.path.localeCompare(right.path));
+      items.forEach((item) => sortNodes(item.children));
+    };
+    sortNodes(roots);
+
+    const rows: Array<{
+      department: DepartmentTreeNode;
+      depth: number;
+    }> = [];
+    const visit = (items: DepartmentTreeNode[], depth: number) => {
+      items.forEach((department) => {
+        rows.push({ department, depth });
+        if (!collapsedIds.has(department.id)) {
+          visit(department.children, depth + 1);
         }
-        return counts;
-      }, {}),
-    [users],
-  );
+      });
+    };
+    visit(roots, 0);
+    return rows;
+  }, [collapsedIds, departments]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -81,6 +128,7 @@ export default function AdminDepartments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin/departments'] });
       queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
+      message.success(t('admin.departmentSaved'));
       setDialogOpen(false);
     },
   });
@@ -88,6 +136,8 @@ export default function AdminDepartments() {
     mutationFn: deleteDepartment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin/departments'] });
+      message.success(t('admin.departmentDeleted'));
+      setDeleting(undefined);
     },
   });
 
@@ -103,75 +153,122 @@ export default function AdminDepartments() {
     setParentId(department.parent_id || 'none');
     setDialogOpen(true);
   };
+  const toggleDepartment = (departmentId: string) => {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (next.has(departmentId)) next.delete(departmentId);
+      else next.add(departmentId);
+      return next;
+    });
+  };
+  const applySearch = () => setQuery(searchInput.trim());
 
   return (
     <Card className="!shadow-none relative h-full bg-transparent overflow-hidden">
       <Spotlight />
       <ScrollArea className="size-full">
-        <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardHeader className="space-y-6">
           <div>
             <CardTitle>{t('admin.departmentManagement')}</CardTitle>
             <div className="mt-2 text-sm text-text-secondary">
               {t('admin.departmentDescription')}
             </div>
           </div>
-          <Button onClick={openCreate}>
-            <Plus /> {t('admin.newDepartment')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              className="w-64 bg-bg-input border-border-button"
+              value={searchInput}
+              placeholder={t('admin.searchDepartment')}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') applySearch();
+              }}
+            />
+            <Button variant="outline" onClick={applySearch}>
+              <Search /> {t('admin.query')}
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus /> {t('admin.newDepartment')}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('admin.departmentName')}</TableHead>
-                <TableHead>{t('admin.departmentPath')}</TableHead>
-                <TableHead>{t('admin.parentDepartment')}</TableHead>
-                <TableHead>{t('admin.departmentUsers')}</TableHead>
-                <TableHead>{t('admin.actions')}</TableHead>
+                <TableHead className="w-[28%]">
+                  {t('admin.department')}
+                </TableHead>
+                <TableHead className="w-[36%]">
+                  {t('admin.departmentPath')}
+                </TableHead>
+                <TableHead className="w-[22%]">
+                  {t('admin.createTime')}
+                </TableHead>
+                <TableHead className="w-40">{t('admin.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {departments.length ? (
-                departments.map((department) => (
-                  <TableRow key={department.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="size-4 text-text-secondary" />
-                        {department.name}
-                      </div>
-                    </TableCell>
-                    <TableCell>{department.path}</TableCell>
-                    <TableCell>
-                      {departments.find(
-                        (item) => item.id === department.parent_id,
-                      )?.path || '-'}
-                    </TableCell>
-                    <TableCell>{userCounts[department.id] ?? 0}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="transparent"
-                          size="icon"
-                          onClick={() => openEdit(department)}
+              {departmentRows.length ? (
+                departmentRows.map(({ department, depth }) => {
+                  const hasChildren = department.children.length > 0;
+                  const collapsed = collapsedIds.has(department.id);
+                  return (
+                    <TableRow key={department.id} className="group/row">
+                      <TableCell className="font-medium">
+                        <div
+                          className="flex items-center gap-2"
+                          style={{ paddingLeft: `${depth * 24}px` }}
                         >
-                          <Pencil />
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="icon"
-                          disabled={(userCounts[department.id] ?? 0) > 0}
-                          onClick={() => deleteMutation.mutate(department.id)}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          {hasChildren ? (
+                            <Button
+                              variant="transparent"
+                              size="icon"
+                              className="size-7 shrink-0 border-0"
+                              onClick={() => toggleDepartment(department.id)}
+                            >
+                              {collapsed ? <ChevronRight /> : <ChevronDown />}
+                            </Button>
+                          ) : (
+                            <span className="size-7 shrink-0" />
+                          )}
+                          <Building2 className="size-4 shrink-0 text-text-secondary" />
+                          <span>{department.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{department.path}</TableCell>
+                      <TableCell>
+                        {department.created_at
+                          ? formatDate(department.created_at)
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+                          <Button
+                            variant="transparent"
+                            size="icon"
+                            title={t('admin.editDepartment')}
+                            onClick={() => openEdit(department)}
+                          >
+                            <Pencil />
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="icon"
+                            title={t('admin.deleteDepartment')}
+                            onClick={() => setDeleting(department)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={4}
                     className="h-40 text-center text-text-secondary"
                   >
                     {t('common.noData')}
@@ -227,11 +324,41 @@ export default function AdminDepartments() {
               disabled={!name.trim() || saveMutation.isPending}
               onClick={() => saveMutation.mutate()}
             >
-              {t('admin.confirm')}
+              {t('admin.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('admin.deleteDepartment')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('admin.deleteDepartmentConfirmation', {
+                name: deleting?.name,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('admin.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-state-error hover:bg-state-error/90"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleting) deleteMutation.mutate(deleting.id);
+              }}
+            >
+              {t('admin.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

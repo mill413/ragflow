@@ -30,6 +30,8 @@ declare namespace AdminService {
     name: string;
     parent_id?: string;
     path: string;
+    created_at?: string;
+    updated_at?: string;
   };
 
   export type ListUsersItem = {

@@ -199,8 +199,10 @@ export const getUserLoginUrl = (email: string) =>
   request.post<ResponseData<{ url: string; email: string }>>(
     adminGetUserLoginUrl(email),
   );
-export const listDepartments = () =>
-  request.get<ResponseData<AdminService.Department[]>>(adminDepartments);
+export const listDepartments = (query?: string) =>
+  request.get<ResponseData<AdminService.Department[]>>(adminDepartments, {
+    params: { q: query || undefined },
+  });
 export const createDepartment = (name: string, parentId?: string) =>
   request.post<ResponseData<AdminService.Department>>(adminDepartments, {
     name,
