@@ -17,7 +17,7 @@ import logging
 import os
 import pathlib
 
-from api.common.check_team_permission import check_file_team_permission
+from api.common.check_team_permission import check_file_read_permission, check_file_team_permission
 from api.db import FileType
 from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService
@@ -159,6 +159,8 @@ def list_files(tenant_id: str, args: dict):
     e, file = FileService.get_by_id(pf_id)
     if not e:
         return False, "Folder not found!"
+    if file.tenant_id != tenant_id:
+        return False, "No authorization."
 
     files, total = FileService.get_by_pf_id(tenant_id, pf_id, page_number, items_per_page, orderby, desc, keywords)
 
@@ -169,7 +171,7 @@ def list_files(tenant_id: str, args: dict):
     return True, {"total": total, "files": files, "parent_folder": parent_folder.to_json()}
 
 
-def get_parent_folder(file_id: str, user_id: str = None):
+def get_parent_folder(file_id: str, user_id: str = None, tenant_id: str = None):
     """
     Get parent folder of a file with permission check.
 
@@ -177,21 +179,21 @@ def get_parent_folder(file_id: str, user_id: str = None):
     :param user_id: user ID for permission validation
     :return: (success, result) or (success, error_message)
     """
-    from api.common.check_team_permission import check_file_team_permission
-
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Folder not found!"
 
     # Permission check
-    if user_id and not check_file_team_permission(file, user_id):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if user_id and not check_file_read_permission(file, user_id):
         return False, "No authorization."
 
     parent_folder = FileService.get_parent_folder(file_id)
     return True, {"parent_folder": parent_folder.to_json()}
 
 
-def get_all_parent_folders(file_id: str, user_id: str = None):
+def get_all_parent_folders(file_id: str, user_id: str = None, tenant_id: str = None):
     """
     Get all ancestor folders of a file with permission check.
 
@@ -199,14 +201,14 @@ def get_all_parent_folders(file_id: str, user_id: str = None):
     :param user_id: user ID for permission validation
     :return: (success, result) or (success, error_message)
     """
-    from api.common.check_team_permission import check_file_team_permission
-
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Folder not found!"
 
     # Permission check
-    if user_id and not check_file_team_permission(file, user_id):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if user_id and not check_file_read_permission(file, user_id):
         return False, "No authorization."
 
     parent_folders = FileService.get_all_parent_folders(file_id)
@@ -591,7 +593,7 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
     return await thread_pool_exec(_move_or_rename_sync)
 
 
-def get_file_content(uid: str, file_id: str):
+def get_file_content(uid: str, file_id: str, tenant_id: str = None):
     """
     Get file content and metadata for download.
 
@@ -602,6 +604,8 @@ def get_file_content(uid: str, file_id: str):
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Document not found!"
-    if not check_file_team_permission(file, uid):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if not check_file_read_permission(file, uid):
         return False, "No authorization."
     return True, file

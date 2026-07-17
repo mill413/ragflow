@@ -105,6 +105,10 @@ def _load_file_api_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "api.apps", apps_pkg)
     api_pkg.apps = apps_pkg
 
+    workspace_access_mod = ModuleType("api.apps.workspace_access")
+    workspace_access_mod.workspace_required = lambda **_kwargs: lambda func: func
+    monkeypatch.setitem(sys.modules, "api.apps.workspace_access", workspace_access_mod)
+
     services_pkg = ModuleType("api.apps.services")
     services_pkg.__path__ = [str(repo_root / "api" / "apps" / "services")]
     monkeypatch.setitem(sys.modules, "api.apps.services", services_pkg)
@@ -129,12 +133,12 @@ def _load_file_api_module(monkeypatch):
     file_api_service_mod.list_files = lambda _tenant_id, _args: (True, {"files": [], "total": 0})
     file_api_service_mod.delete_files = _delete_files
     file_api_service_mod.move_files = _move_files
-    file_api_service_mod.get_file_content = lambda _tenant_id, _file_id: (
+    file_api_service_mod.get_file_content = lambda _user_id, _file_id, _tenant_id=None: (
         True,
         SimpleNamespace(parent_id="bucket1", location="path1", name="doc.txt", type="doc"),
     )
-    file_api_service_mod.get_parent_folder = lambda _file_id, user_id=None: (True, {"parent_folder": {"id": "parent1"}})
-    file_api_service_mod.get_all_parent_folders = lambda _file_id, user_id=None: (True, {"parent_folders": [{"id": "root"}]})
+    file_api_service_mod.get_parent_folder = lambda _file_id, user_id=None, tenant_id=None: (True, {"parent_folder": {"id": "parent1"}})
+    file_api_service_mod.get_all_parent_folders = lambda _file_id, user_id=None, tenant_id=None: (True, {"parent_folders": [{"id": "root"}]})
     monkeypatch.setitem(sys.modules, "api.apps.services.file_api_service", file_api_service_mod)
     services_pkg.file_api_service = file_api_service_mod
 

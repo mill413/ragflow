@@ -18,7 +18,7 @@ import logging
 from quart import request
 
 from api.apps import login_required
-from api.apps.model_workspace import model_workspace_required
+from api.apps.workspace_access import workspace_required
 from api.apps.services import models_api_service
 from api.utils.api_utils import (
     add_tenant_id_to_kwargs,
@@ -31,7 +31,7 @@ from api.utils.api_utils import (
 @manager.route("/models", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@model_workspace_required()
+@workspace_required()
 def get_added_models(tenant_id: str):
     """
     List tenant all added models.
@@ -98,7 +98,7 @@ def get_added_models(tenant_id: str):
 @manager.route("/models/default", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@model_workspace_required()
+@workspace_required()
 def get_default_models(tenant_id: str):
     """
     List tenant default models.
@@ -154,7 +154,7 @@ def get_default_models(tenant_id: str):
 @manager.route("/models/default", methods=["PATCH"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@model_workspace_required(write=True)
+@workspace_required(write=True)
 async def set_default_models(tenant_id: str):
     """
     Set or clear a tenant default model.

@@ -62,6 +62,7 @@ type FilesTableProps = Pick<
   Pick<UseRowSelectionType, 'rowSelection' | 'setRowSelection'> &
   UseMoveDocumentShowType & {
     connectKnowledgeModal: UseHandleConnectToKnowledgeReturnType;
+    readOnly: boolean;
   };
 
 export function FilesTable({
@@ -74,6 +75,7 @@ export function FilesTable({
   setRowSelection,
   showMoveFileModal,
   connectKnowledgeModal,
+  readOnly,
 }: FilesTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -192,7 +194,9 @@ export function FilesTable({
         const isSkillsFolder = isFolder && name.toLowerCase() === 'skills';
 
         const handleNameClick = () => {
-          if (isSkillsFolder) {
+          if (row.original.source_type === 'workspace') {
+            navigate(`/files?workspaceId=${encodeURIComponent(id)}`);
+          } else if (isSkillsFolder) {
             navigate('/files/skills');
           } else if (isFolder) {
             navigateToOtherFolder(id);
@@ -287,6 +291,7 @@ export function FilesTable({
             showConnectToKnowledgeModal={showConnectToKnowledgeModal}
             showFileRenameModal={showFileRenameModal}
             showMoveFileModal={showMoveFileModal}
+            readOnly={readOnly}
           />
         );
       },
@@ -320,7 +325,12 @@ export function FilesTable({
         isFolderType(type) && name.toLowerCase() === 'skills';
       // Skills folder is not selectable when enabled (it's a special entry)
       // When disabled, it's already filtered out
-      return !isKnowledgeBaseType(row.original.source_type) && !isSkillsFolder;
+      return (
+        !readOnly &&
+        row.original.source_type !== 'workspace' &&
+        !isKnowledgeBaseType(row.original.source_type) &&
+        !isSkillsFolder
+      );
     },
     state: {
       sorting,

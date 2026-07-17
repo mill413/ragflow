@@ -10,9 +10,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRowSelection } from '@/hooks/logic-hooks/use-row-selection';
-import { useFetchFileList } from '@/hooks/use-file-request';
+import { useFetchFileList, useFileWorkspace } from '@/hooks/use-file-request';
+import { useFetchUserInfo } from '@/hooks/use-user-setting-request';
+import { Routes } from '@/routes';
 import { LucidePlus } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 import { CreateFolderDialog } from './create-folder-dialog';
 import { FileBreadcrumb } from './file-breadcrumb';
 import { FilesTable } from './files-table';
@@ -29,6 +33,22 @@ import { useHandleUploadFile } from './use-upload-file';
 
 export default function Files() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { data: userInfo } = useFetchUserInfo();
+  const { workspaceId, targetWorkspace, isWorkspaceOverview } =
+    useFileWorkspace();
+  const previousWorkspaceId = useRef(workspaceId);
+  const canManageFiles =
+    !isWorkspaceOverview &&
+    targetWorkspace?.type === 'personal' &&
+    targetWorkspace.value === userInfo.id;
+
+  useEffect(() => {
+    if (previousWorkspaceId.current !== workspaceId) {
+      previousWorkspaceId.current = workspaceId;
+      navigate(Routes.Files, { replace: true });
+    }
+  }, [navigate, workspaceId]);
   const {
     fileUploadVisible,
     hideFileUploadModal,
@@ -108,23 +128,25 @@ export default function Files() {
           showFilter={false}
           icon={'file'}
         >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <LucidePlus />
-                {t('knowledgeDetails.addFile')}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuItem onClick={showFileUploadModal}>
-                {t('fileManager.uploadFile')}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={showFolderCreateModal}>
-                {t('fileManager.newFolder')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canManageFiles && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <LucidePlus />
+                  {t('knowledgeDetails.addFile')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56">
+                <DropdownMenuItem onClick={showFileUploadModal}>
+                  {t('fileManager.uploadFile')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={showFolderCreateModal}>
+                  {t('fileManager.newFolder')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </ListFilterBar>
 
         {!rowSelectionIsEmpty && (
@@ -143,6 +165,7 @@ export default function Files() {
           setRowSelection={setRowSelection}
           showMoveFileModal={showMoveFileModal}
           connectKnowledgeModal={connectKnowledgeModal}
+          readOnly={!canManageFiles}
         />
       </div>
 

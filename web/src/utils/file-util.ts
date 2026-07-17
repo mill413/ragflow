@@ -105,10 +105,11 @@ async function fetchPreviewBlob(
   id: string,
   resource: 'document' | 'files',
   mimeType?: FileMimeType,
+  workspaceId?: string,
 ) {
   const response =
     resource === 'files'
-      ? await fileManagerService.getFile({}, id)
+      ? await fileManagerService.getFile({ workspace_id: workspaceId }, id)
       : await fileManagerService.getDocumentFile({}, id);
   const blob = new Blob([response.data], {
     type: mimeType || response.data.type,
@@ -120,8 +121,14 @@ async function fetchPreviewBlob(
 export async function previewHtmlFile(
   id: string,
   resource: 'document' | 'files' = 'document',
+  workspaceId?: string,
 ) {
-  const blob = await fetchPreviewBlob(id, resource, FileMimeType.Html);
+  const blob = await fetchPreviewBlob(
+    id,
+    resource,
+    FileMimeType.Html,
+    workspaceId,
+  );
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

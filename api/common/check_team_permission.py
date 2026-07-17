@@ -45,3 +45,10 @@ def check_file_team_permission(file: dict | File, other: str) -> bool:
             return True
 
     return False
+
+
+def check_file_read_permission(file: dict | File, user_id: str) -> bool:
+    file = file.to_dict() if isinstance(file, File) else file
+    if file["tenant_id"] in WorkspaceAccessService.list_visible_workspace_ids(user_id):
+        return True
+    return check_file_team_permission(file, user_id)

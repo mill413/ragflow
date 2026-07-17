@@ -1047,6 +1047,7 @@ class ListFileReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     parent_id: Annotated[str | None, Field(default=None)]
+    workspace_id: Annotated[str | None, Field(default=None)]
     keywords: Annotated[str, Field(default="")]
     page: Annotated[int, Field(default=1, ge=1)]
     page_size: Annotated[int, Field(default=15, ge=1)]

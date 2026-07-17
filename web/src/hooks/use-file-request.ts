@@ -23,6 +23,7 @@ import {
   useHandleSearchChange,
 } from './logic-hooks';
 import { useSetPaginationParams } from './route-hook';
+import { AllWorkspacesId, useWorkspace } from './use-workspace';
 
 export const enum FileApiAction {
   UploadFile = 'uploadFile',
@@ -42,6 +43,30 @@ export const useGetFolderId = () => {
   const id = searchParams.get('folderId') as string;
 
   return id ?? '';
+};
+
+export const useFileWorkspace = () => {
+  const workspace = useWorkspace();
+  const [searchParams] = useSearchParams();
+  const routeWorkspaceId = searchParams.get('workspaceId') || undefined;
+  const routeWorkspace = workspace.options.find(
+    (option) =>
+      option.value !== AllWorkspacesId && option.value === routeWorkspaceId,
+  );
+  const targetWorkspace = workspace.isAllWorkspaces
+    ? routeWorkspace
+    : workspace.selectedWorkspace;
+
+  return {
+    ...workspace,
+    targetWorkspaceId: targetWorkspace?.value,
+    targetWorkspace,
+    isWorkspaceOverview:
+      workspace.isAllWorkspaces && targetWorkspace === undefined,
+    visibleWorkspaceOptions: workspace.options.filter(
+      (option) => option.value !== AllWorkspacesId,
+    ),
+  };
 };
 
 export const useUploadFile = () => {
@@ -148,13 +173,14 @@ export const useCreateFolder = () => {
 
 export const useFetchParentFolderList = () => {
   const id = useGetFolderId();
+  const { targetWorkspaceId } = useFileWorkspace();
   const { data } = useQuery<IFolder[]>({
-    queryKey: [FileApiAction.FetchParentFolderList, id],
+    queryKey: [FileApiAction.FetchParentFolderList, id, targetWorkspaceId],
     initialData: [],
     enabled: !!id,
     queryFn: async () => {
       const { data } = await fileManagerService.getAllParentFolder(
-        {},
+        { workspace_id: targetWorkspaceId },
         `${id}/ancestors`,
       );
 
@@ -178,12 +204,23 @@ export const useFetchFileList = () => {
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const id = useGetFolderId();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
+  const {
+    workspaceId,
+    targetWorkspaceId,
+    isWorkspaceOverview,
+    visibleWorkspaceOptions,
+  } = useFileWorkspace();
 
   const { data, isFetching: loading } = useQuery<IFetchFileListResult>({
     queryKey: [
       FileApiAction.FetchFileList,
       {
         id,
+        workspaceId,
+        targetWorkspaceId,
+        visibleWorkspaceIds: visibleWorkspaceOptions.map(
+          (option) => option.value,
+        ),
         debouncedSearchString,
         ...pagination,
       },
@@ -191,8 +228,44 @@ export const useFetchFileList = () => {
     initialData: { files: [], parent_folder: {} as IFolder, total: 0 },
     gcTime: 0,
     queryFn: async () => {
+      if (isWorkspaceOverview) {
+        const keyword = debouncedSearchString.trim().toLocaleLowerCase();
+        const workspaceFiles = visibleWorkspaceOptions
+          .filter((option) =>
+            option.label.toLocaleLowerCase().includes(keyword),
+          )
+          .map<IFile>((option) => ({
+            id: option.value,
+            parent_id: option.value,
+            tenant_id: option.value,
+            created_by: option.value,
+            name: option.label,
+            type: 'folder',
+            source_type: 'workspace',
+            workspace_type: option.type as 'personal' | 'team',
+            size: 0,
+            location: '',
+            kbs_info: [],
+            create_date: '',
+            create_time: 0,
+            update_date: '',
+            update_time: 0,
+          }));
+        const start = (pagination.current - 1) * pagination.pageSize;
+        return {
+          files: workspaceFiles.slice(start, start + pagination.pageSize),
+          parent_folder: {} as IFolder,
+          total: workspaceFiles.length,
+        };
+      }
+
+      if (!targetWorkspaceId) {
+        return { files: [], parent_folder: {} as IFolder, total: 0 };
+      }
+
       const { data } = await fileManagerService.listFile({
         parent_id: id,
+        workspace_id: targetWorkspaceId,
         keywords: debouncedSearchString,
         page_size: pagination.pageSize,
         page: pagination.current,
@@ -248,6 +321,7 @@ export const useDeleteFile = () => {
 };
 
 export const useDownloadFile = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const {
     data,
     isPending: loading,
@@ -255,7 +329,10 @@ export const useDownloadFile = () => {
   } = useMutation({
     mutationKey: [FileApiAction.DownloadFile],
     mutationFn: async (params: { id: string; filename?: string }) => {
-      const response = await fileManagerService.getFile({}, params.id);
+      const response = await fileManagerService.getFile(
+        { workspace_id: targetWorkspaceId },
+        params.id,
+      );
       const blob = new Blob([response.data], { type: response.data.type });
       downloadFileFromBlob(blob, params.filename);
     },

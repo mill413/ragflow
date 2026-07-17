@@ -1,16 +1,25 @@
-import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
-import { useFetchParentFolderList } from '@/hooks/use-file-request';
+import {
+  useFetchParentFolderList,
+  useFileWorkspace,
+} from '@/hooks/use-file-request';
 import { Routes } from '@/routes';
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 
 export const useNavigateToOtherFolder = () => {
-  const { navigateToFiles } = useNavigatePage();
+  const navigate = useNavigate();
+  const { isAllWorkspaces, targetWorkspaceId } = useFileWorkspace();
 
   const navigateToOtherFolder = useCallback(
     (folderId: string) => {
-      navigateToFiles(folderId);
+      const search = new URLSearchParams({ folderId });
+      if (isAllWorkspaces && targetWorkspaceId) {
+        search.set('workspaceId', targetWorkspaceId);
+      }
+      navigate(`${Routes.Files}?${search.toString()}`);
     },
-    [navigateToFiles],
+    [isAllWorkspaces, navigate, targetWorkspaceId],
   );
 
   return navigateToOtherFolder;
@@ -18,11 +27,35 @@ export const useNavigateToOtherFolder = () => {
 
 export const useSelectBreadcrumbItems = () => {
   const parentFolderList = useFetchParentFolderList();
+  const { t } = useTranslation();
+  const { isAllWorkspaces, targetWorkspace, targetWorkspaceId } =
+    useFileWorkspace();
 
-  return parentFolderList.length === 1
-    ? []
-    : parentFolderList.map((x) => ({
-        title: x.name === '/' ? 'root' : x.name,
-        path: `${Routes.Files}?folderId=${x.id}`,
-      }));
+  const workspaceSearch =
+    isAllWorkspaces && targetWorkspaceId
+      ? `workspaceId=${encodeURIComponent(targetWorkspaceId)}`
+      : '';
+  const breadcrumbFolders = (
+    parentFolderList.length === 1 ? [] : parentFolderList
+  ).filter((folder) => !isAllWorkspaces || folder.name !== '/');
+  const folderItems = breadcrumbFolders.map((folder) => ({
+    title: folder.name === '/' ? 'root' : folder.name,
+    path: `${Routes.Files}?${workspaceSearch ? `${workspaceSearch}&` : ''}folderId=${folder.id}`,
+  }));
+
+  if (isAllWorkspaces && targetWorkspace) {
+    return [
+      {
+        title: t('knowledgeList.allWorkspaces'),
+        path: Routes.Files,
+      },
+      {
+        title: targetWorkspace.label,
+        path: `${Routes.Files}?${workspaceSearch}`,
+      },
+      ...folderItems,
+    ];
+  }
+
+  return folderItems;
 };

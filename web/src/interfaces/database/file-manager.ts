@@ -14,6 +14,7 @@ export interface IFile {
   update_time: number;
   source_type: string;
   has_child_folder?: boolean;
+  workspace_type?: 'personal' | 'team';
 }
 
 export interface IFolder {

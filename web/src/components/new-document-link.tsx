@@ -12,6 +12,7 @@ interface IProps extends React.PropsWithChildren {
   documentId?: string;
   resource?: 'document' | 'files';
   className?: string;
+  workspaceId?: string;
 }
 
 const NewDocumentLink = ({
@@ -23,11 +24,14 @@ const NewDocumentLink = ({
   documentName,
   resource = 'document',
   className,
+  workspaceId,
 }: IProps) => {
   let nextLink = link;
   const extension = getExtension(documentName);
   if (!link) {
-    nextLink = `/document/${documentId}?ext=${extension}&resource=${resource}`;
+    const search = new URLSearchParams({ ext: extension, resource });
+    if (workspaceId) search.set('workspace_id', workspaceId);
+    nextLink = `/document/${documentId}?${search.toString()}`;
   }
 
   return (

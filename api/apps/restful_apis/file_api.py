@@ -40,6 +40,7 @@ from api.utils.web_utils import CONTENT_TYPE_MAP, apply_safe_file_response_heade
 from common import settings
 from common.misc_utils import thread_pool_exec
 from api.apps.services import file_api_service
+from api.apps.workspace_access import workspace_required
 
 
 @manager.route("/files", methods=["POST"])  # noqa: F821
@@ -99,6 +100,7 @@ async def create_or_upload(tenant_id: str = None):
 @manager.route("/files", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@workspace_required()
 async def list_files(tenant_id: str = None):
     """
     List files under a folder.
@@ -262,7 +264,8 @@ async def move(tenant_id: str = None):
 @manager.route("/files/<file_id>", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-async def download(tenant_id: str = None, file_id: str = None):
+@workspace_required()
+async def download(tenant_id: str = None, file_id: str = None, workspace_actor_id: str = None):
     """
     Download a file.
     ---
@@ -283,7 +286,7 @@ async def download(tenant_id: str = None, file_id: str = None):
         description: File stream.
     """
     try:
-        success, result = file_api_service.get_file_content(tenant_id, file_id)
+        success, result = file_api_service.get_file_content(workspace_actor_id, file_id, tenant_id)
         if not success:
             return get_error_data_result(message=result)
 
@@ -317,7 +320,8 @@ async def download(tenant_id: str = None, file_id: str = None):
 @manager.route("/files/<file_id>/parent", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-async def parent_folder(tenant_id: str = None, file_id: str = None):
+@workspace_required()
+async def parent_folder(tenant_id: str = None, file_id: str = None, workspace_actor_id: str = None):
     """
     Get parent folder of a file.
     ---
@@ -335,7 +339,7 @@ async def parent_folder(tenant_id: str = None, file_id: str = None):
         description: Parent folder information.
     """
     try:
-        success, result = file_api_service.get_parent_folder(file_id, user_id=tenant_id)
+        success, result = file_api_service.get_parent_folder(file_id, user_id=workspace_actor_id, tenant_id=tenant_id)
         if success:
             return get_result(data=result)
         else:
@@ -348,7 +352,8 @@ async def parent_folder(tenant_id: str = None, file_id: str = None):
 @manager.route("/files/<file_id>/ancestors", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-async def ancestors(tenant_id: str = None, file_id: str = None):
+@workspace_required()
+async def ancestors(tenant_id: str = None, file_id: str = None, workspace_actor_id: str = None):
     """
     Get all ancestor folders of a file.
     ---
@@ -366,7 +371,7 @@ async def ancestors(tenant_id: str = None, file_id: str = None):
         description: List of ancestor folders.
     """
     try:
-        success, result = file_api_service.get_all_parent_folders(file_id, user_id=tenant_id)
+        success, result = file_api_service.get_all_parent_folders(file_id, user_id=workspace_actor_id, tenant_id=tenant_id)
         if success:
             return get_result(data=result)
         else:

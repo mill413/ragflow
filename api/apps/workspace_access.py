@@ -25,8 +25,8 @@ from api.utils.api_utils import get_error_data_result
 from common.constants import RetCode
 
 
-def model_workspace_required(*, write: bool = False):
-    """Resolve and authorize the workspace used by model configuration APIs."""
+def workspace_required(*, write: bool = False):
+    """Resolve and authorize a workspace-scoped API request."""
 
     def decorator(func):
         @wraps(func)
@@ -48,6 +48,8 @@ def model_workspace_required(*, write: bool = False):
                 return get_error_data_result(message="Permission denied", code=RetCode.FORBIDDEN)
 
             kwargs["tenant_id"] = target_id
+            if "workspace_actor_id" in inspect.signature(func).parameters:
+                kwargs["workspace_actor_id"] = actor_id
             if inspect.iscoroutinefunction(func):
                 return await func(**kwargs)
             return func(**kwargs)
