@@ -20,6 +20,7 @@ import asyncio
 
 from common.constants import LLMType, ActiveStatusEnum, ModelVerifyStatusEnum
 from common.settings import FACTORY_LLM_INFOS
+from api.constants import SUPPORTED_MODEL_PROVIDERS
 from api.db.joint_services.tenant_model_service import resolve_model_config, delete_models_by_instance_ids, delete_instances_by_provider_ids
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
@@ -80,7 +81,7 @@ def list_providers(tenant_id: str, all_available: bool = False):
     if all_available:
         providers = []
         for factory_info in FACTORY_LLM_INFOS:
-            if factory_info["name"] in ["Youdao", "FastEmbed", "BAAI", "Builtin", "siliconflow_intl"]:
+            if factory_info["name"] not in SUPPORTED_MODEL_PROVIDERS:
                 continue
             model_types = sorted(set(model_type for llm in factory_info.get("llm", []) for model_type in _factory_model_types(llm))) if factory_info.get("llm", []) else []
             if factory_info["name"] in ["MinerU", "PaddleOCR", "OpenDataLoader"]:
@@ -100,7 +101,7 @@ def list_providers(tenant_id: str, all_available: bool = False):
     providers = []
     factory_info_mapping = {f["name"]: f for f in FACTORY_LLM_INFOS}
     for name in factory_names:
-        if name not in ["Youdao", "FastEmbed", "BAAI", "Builtin", "siliconflow_intl"] and factory_info_mapping.get(name):
+        if name in SUPPORTED_MODEL_PROVIDERS and factory_info_mapping.get(name):
             factory_info = factory_info_mapping[name]
             provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, name)
             has_instance = bool(provider_obj and TenantModelInstanceService.get_all_by_provider_id(provider_obj.id))
@@ -129,7 +130,7 @@ def add_provider(tenant_id: str, provider_name: str):
     if not FACTORY_LLM_INFOS:
         return False, "No providers found"
     # Check if factory is allowed
-    allowed_factories = [f["name"] for f in FACTORY_LLM_INFOS]
+    allowed_factories = [f["name"] for f in FACTORY_LLM_INFOS if f["name"] in SUPPORTED_MODEL_PROVIDERS]
     if provider_name not in allowed_factories:
         return False, f"Provider '{provider_name}' is not allowed"
 

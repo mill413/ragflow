@@ -14,20 +14,6 @@ import translation_en from './en';
 const languageImports: Record<string, () => Promise<{ default: any }>> = {
   [LanguageAbbreviation.En]: () => import('./en'),
   [LanguageAbbreviation.Zh]: () => import('./zh'),
-  [LanguageAbbreviation.ZhTraditional]: () => import('./zh-traditional'),
-  [LanguageAbbreviation.Id]: () => import('./id'),
-  [LanguageAbbreviation.Ja]: () => import('./ja'),
-  [LanguageAbbreviation.Es]: () => import('./es'),
-  [LanguageAbbreviation.Vi]: () => import('./vi'),
-  [LanguageAbbreviation.Ru]: () => import('./ru'),
-  [LanguageAbbreviation.PtBr]: () => import('./pt-br'),
-  [LanguageAbbreviation.De]: () => import('./de'),
-  [LanguageAbbreviation.Fr]: () => import('./fr'),
-  [LanguageAbbreviation.It]: () => import('./it'),
-  [LanguageAbbreviation.Bg]: () => import('./bg'),
-  [LanguageAbbreviation.Ar]: () => import('./ar'),
-  [LanguageAbbreviation.Tr]: () => import('./tr'),
-  [LanguageAbbreviation.Ko]: () => import('./ko'),
 };
 
 const supportedLanguageCodes: Intl.UnicodeBCP47LocaleIdentifier[] =
@@ -45,8 +31,12 @@ export const supportedLanguages = supportedLanguageCodes.map((code) => {
   };
 });
 
-export const DEFAULT_LANGUAGE_CODE =
-  import.meta.env.VITE_DEFAULT_LANGUAGE_CODE || LanguageAbbreviation.Zh;
+const configuredDefaultLanguage = import.meta.env.VITE_DEFAULT_LANGUAGE_CODE;
+export const DEFAULT_LANGUAGE_CODE = supportedLanguageCodes.includes(
+  configuredDefaultLanguage,
+)
+  ? configuredDefaultLanguage
+  : LanguageAbbreviation.Zh;
 
 export const resolveLanguageCode = (language?: string) =>
   supportedLanguageCodes.includes(language || '')
@@ -60,7 +50,7 @@ const resources = {
 const updateDocumentLocale = (lng: string) => {
   document.documentElement.lang = lng;
   document.documentElement.dir = 'ltr';
-  dayjs.locale(lng === 'zh' ? 'zh-cn' : lng);
+  dayjs.locale(lng === LanguageAbbreviation.Zh ? 'zh-cn' : lng);
 };
 
 i18n
@@ -103,7 +93,7 @@ export const loadLanguageAsync = async (lng: string): Promise<void> => {
 };
 
 export const changeLanguageAsync = async (lng: string): Promise<void> => {
-  const normalizedLng = lng;
+  const normalizedLng = resolveLanguageCode(lng);
 
   if (
     normalizedLng !== LanguageAbbreviation.En &&
@@ -112,15 +102,15 @@ export const changeLanguageAsync = async (lng: string): Promise<void> => {
     await loadLanguageAsync(normalizedLng);
   }
 
-  storage.setLanguage(lng);
+  storage.setLanguage(normalizedLng);
 
-  updateDocumentLocale(lng);
+  updateDocumentLocale(normalizedLng);
 
   await i18n.changeLanguage(normalizedLng);
 };
 
 export const initLanguage = async (): Promise<void> => {
-  const currentLng = storage.getLanguage() || DEFAULT_LANGUAGE_CODE;
+  const currentLng = resolveLanguageCode(storage.getLanguage());
 
   await changeLanguageAsync(currentLng);
 };

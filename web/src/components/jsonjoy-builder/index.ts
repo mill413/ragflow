@@ -11,7 +11,6 @@ import SchemaVisualEditor, {
   type SchemaVisualEditorProps,
 } from './components/schema-editor/schema-visual-editor';
 
-export * from './i18n/locales/de';
 export * from './i18n/locales/en';
 export * from './i18n/translation-context';
 export * from './i18n/translation-keys';

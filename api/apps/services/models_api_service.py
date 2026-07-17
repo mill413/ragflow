@@ -16,7 +16,8 @@
 import logging
 import os
 
-from api.db.joint_services.tenant_model_service import ensure_mineru_from_env, ensure_opendataloader_from_env, ensure_paddleocr_from_env, resolve_model_id
+from api.constants import SUPPORTED_MODEL_PROVIDERS
+from api.db.joint_services.tenant_model_service import ensure_mineru_from_env, resolve_model_id
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
 from api.db.services.tenant_model_service import TenantModelService
@@ -122,6 +123,8 @@ def _get_model_info(tenant_id: str, default_model: str, model_type: str, model_i
         }
 
     # Check if the provider exists for the tenant
+    if provider_name not in SUPPORTED_MODEL_PROVIDERS:
+        return None
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
     if not provider_obj:
         logging.warning(f"Provider '{provider_name}' not found for tenant '{tenant_id}'")
@@ -166,6 +169,9 @@ def _check_model_available(tenant_id: str, provider_name: str, instance_name: st
     is_tei_builtin_embedding = model_type == LLMType.EMBEDDING.value and "tei-" in compose_profiles and model_name == os.getenv("TEI_MODEL", "") and (provider_name == "Builtin" or not provider_name)
     if is_tei_builtin_embedding:
         return True, None
+
+    if provider_name not in SUPPORTED_MODEL_PROVIDERS:
+        return False, f"Provider '{provider_name}' is not supported"
 
     # Check provider
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
@@ -256,6 +262,8 @@ def set_tenant_default_models(tenant_id: str, model_provider: str, model_instanc
             return False, f"Provider id '{model_obj.provider_id}' not found for model_id '{model_id}'"
         if provider_obj.tenant_id != tenant_id:
             return False, "Permission denied"
+        if provider_obj.provider_name not in SUPPORTED_MODEL_PROVIDERS:
+            return False, f"Provider '{provider_obj.provider_name}' is not supported"
 
         instance_ok, instance_obj = TenantModelInstanceService.get_by_id(model_obj.instance_id)
         if not instance_ok:
@@ -303,12 +311,10 @@ def list_tenant_added_models(tenant_id: str, model_type_filter: str = None):
         return False, "Tenant not found"
 
     ensure_mineru_from_env(tenant_id)
-    ensure_paddleocr_from_env(tenant_id)
-    ensure_opendataloader_from_env(tenant_id)
 
     model_type_filter_bin = calculate_model_type(model_type_filter.lower()) if model_type_filter else None
 
-    providers = TenantModelProviderService.get_by_tenant_id(tenant_id)
+    providers = [provider for provider in TenantModelProviderService.get_by_tenant_id(tenant_id) if provider.provider_name in SUPPORTED_MODEL_PROVIDERS]
     if not providers:
         return True, []
 

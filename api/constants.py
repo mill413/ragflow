@@ -27,3 +27,11 @@ FILE_NAME_LEN_LIMIT = 255
 MEMORY_NAME_LIMIT = 128
 NICKNAME_MAX_LENGTH = 100
 MEMORY_SIZE_LIMIT = 10 * 1024 * 1024  # Byte
+
+SUPPORTED_MODEL_PROVIDERS = frozenset(
+    {
+        "MinerU",
+        "OpenAI-API-Compatible",
+        "Xinference",
+    }
+)
