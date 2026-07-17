@@ -66,6 +66,31 @@ declare namespace AdminService {
     title: string;
   };
 
+  export type ManagedResourceType =
+    | 'dataset'
+    | 'chat'
+    | 'agent'
+    | 'search'
+    | 'memory';
+
+  export type ManagedResourceItem = {
+    id: string;
+    name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    creator_id?: string;
+    creator_name?: string;
+    permission: 'me' | 'team';
+    create_date: string;
+    update_date: string;
+  };
+
+  export type ManagedResourceList = {
+    resources: ManagedResourceItem[];
+    total: number;
+  };
+
   export type TaskExecutorHeartbeatItem = {
     name: string;
     boot_at: string;

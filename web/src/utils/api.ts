@@ -434,6 +434,7 @@ export default {
     `${restAPIv1}/admin/users/${username}/datasets`,
   adminListUserAgents: (username: string) =>
     `${restAPIv1}/admin/users/${username}/agents`,
+  adminListManagedResources: `${restAPIv1}/admin/resources`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>

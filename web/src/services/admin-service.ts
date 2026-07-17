@@ -110,6 +110,7 @@ const {
   adminDeleteUser,
   adminListUserDatasets,
   adminListUserAgents,
+  adminListManagedResources,
 
   adminListServices,
   adminShowServiceDetails,
@@ -178,6 +179,16 @@ export const listUserDatasets = (email: string) =>
 export const listUserAgents = (email: string) =>
   request.get<ResponseData<AdminService.ListUserAgentItem[]>>(
     adminListUserAgents(email),
+  );
+export const listManagedResources = (params: {
+  type: AdminService.ManagedResourceType;
+  page: number;
+  pageSize: number;
+  keywords?: string;
+}) =>
+  request.get<ResponseData<AdminService.ManagedResourceList>>(
+    adminListManagedResources,
+    { params },
   );
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });

@@ -20,7 +20,10 @@ import logging
 import re
 from typing import Any
 
-from common.constants import ActiveEnum
+from peewee import fn
+
+from common.constants import ActiveEnum, StatusEnum
+from api.db import CanvasCategory, TenantPermission
 from api.db.services import UserService
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
@@ -28,7 +31,7 @@ from api.db.services.user_service import TenantService, UserTenantService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken
+from api.db.db_models import APIToken, Dialog, Knowledgebase, Memory, Search, Tenant, User, UserCanvas
 from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
@@ -266,6 +269,123 @@ class UserServiceMgr:
 
         tenants: list[dict[str, Any]] = UserTenantService.list_memberships_by_user_id(user.id)
         return tenants
+
+
+class ResourceMgr:
+    """Read-only global resource inventory for the admin console."""
+
+    RESOURCE_SPECS = {
+        "dataset": {
+            "model": Knowledgebase,
+            "name_field": Knowledgebase.name,
+            "workspace_field": Knowledgebase.tenant_id,
+            "permission_field": Knowledgebase.permission,
+            "creator_field": Knowledgebase.created_by,
+        },
+        "chat": {
+            "model": Dialog,
+            "name_field": Dialog.name,
+            "workspace_field": Dialog.tenant_id,
+        },
+        "agent": {
+            "model": UserCanvas,
+            "name_field": UserCanvas.title,
+            "workspace_field": UserCanvas.user_id,
+            "permission_field": UserCanvas.permission,
+            "extra_filter": UserCanvas.canvas_category == CanvasCategory.Agent.value,
+        },
+        "search": {
+            "model": Search,
+            "name_field": Search.name,
+            "workspace_field": Search.tenant_id,
+            "creator_field": Search.created_by,
+        },
+        "memory": {
+            "model": Memory,
+            "name_field": Memory.name,
+            "workspace_field": Memory.tenant_id,
+            "permission_field": Memory.permissions,
+        },
+    }
+
+    @classmethod
+    def list_resources(cls, resource_type: str, page: int, page_size: int, keywords: str = "") -> dict[str, Any]:
+        spec = cls.RESOURCE_SPECS.get(resource_type)
+        if not spec:
+            raise AdminException(f"Unsupported resource type: {resource_type}")
+
+        model = spec["model"]
+        name_field = spec["name_field"]
+        workspace_field = spec["workspace_field"]
+        permission_field = spec.get("permission_field")
+        creator_field = spec.get("creator_field")
+
+        fields = [
+            model.id,
+            name_field.alias("name"),
+            workspace_field.alias("workspace_id"),
+            model.create_date,
+            model.update_date,
+        ]
+        if permission_field is not None:
+            fields.append(permission_field.alias("permission"))
+        if creator_field is not None:
+            fields.append(creator_field.alias("creator_id"))
+
+        query = model.select(*fields)
+        if hasattr(model, "status"):
+            query = query.where(model.status == StatusEnum.VALID.value)
+        if spec.get("extra_filter") is not None:
+            query = query.where(spec["extra_filter"])
+        keywords = str(keywords or "").strip().lower()
+        if keywords:
+            query = query.where(fn.LOWER(name_field).contains(keywords))
+
+        total = query.count()
+        rows = list(query.order_by(model.create_time.desc()).paginate(page, page_size).dicts())
+        cls._attach_ownership(rows)
+        for row in rows:
+            if not row.get("permission"):
+                row["permission"] = (
+                    TenantPermission.ME.value if row["workspace_type"] == "personal" else TenantPermission.TEAM.value
+                )
+
+        return {"resources": rows, "total": total}
+
+    @staticmethod
+    def _attach_ownership(rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+
+        workspace_ids = {row["workspace_id"] for row in rows}
+        creator_ids = {row.get("creator_id") for row in rows if row.get("creator_id")}
+        user_ids = workspace_ids | creator_ids
+
+        users = {
+            user.id: user
+            for user in User.select(User.id, User.nickname, User.email).where(
+                (User.id.in_(user_ids)) & (User.status == StatusEnum.VALID.value)
+            )
+        }
+        tenants = {
+            tenant.id: tenant.name
+            for tenant in Tenant.select(Tenant.id, Tenant.name).where(
+                (Tenant.id.in_(workspace_ids)) & (Tenant.status == StatusEnum.VALID.value)
+            )
+        }
+
+        for row in rows:
+            workspace_id = row["workspace_id"]
+            personal_owner = users.get(workspace_id)
+            if personal_owner:
+                row["workspace_type"] = "personal"
+                row["workspace_name"] = personal_owner.nickname or personal_owner.email
+            else:
+                row["workspace_type"] = "team"
+                row["workspace_name"] = tenants.get(workspace_id) or workspace_id
+
+            creator = users.get(row.get("creator_id"))
+            row["creator_name"] = (creator.nickname or creator.email) if creator else ""
 
 
 class ServiceMgr:

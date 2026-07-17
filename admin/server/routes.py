@@ -24,7 +24,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, ServiceMgr, UserServiceMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import UserMgr, ServiceMgr, UserServiceMgr, ResourceMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.versions import get_ragflow_version
@@ -234,6 +234,25 @@ def get_user_agents(username):
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_resources():
+    try:
+        resource_type = request.args.get("type", "dataset")
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        keywords = request.args.get("keywords", "")
+        return success_response(ResourceMgr.list_resources(resource_type, page, page_size, keywords))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list admin resources")
         return error_response(str(e), 500)
 
 
