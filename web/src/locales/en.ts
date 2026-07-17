@@ -3283,6 +3283,8 @@ Important structured information may include: names, dates, locations, events, k
     admin: {
       loginTitle: 'Admin console',
       title: 'RAGFlow',
+      expandSidebar: 'Expand sidebar',
+      collapseSidebar: 'Collapse sidebar',
       confirm: 'Confirm',
       close: 'Close',
       yes: 'Yes',

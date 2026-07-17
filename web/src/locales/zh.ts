@@ -2857,6 +2857,8 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
     admin: {
       loginTitle: '管理员控制台',
       title: 'RAGFlow',
+      expandSidebar: '展开侧栏',
+      collapseSidebar: '收起侧栏',
       confirm: '确认',
       close: '关闭',
       yes: '是',
