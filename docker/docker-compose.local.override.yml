@@ -1,6 +1,14 @@
 services:
   ragflow-cpu:
     image: ${RAGFLOW_LOCAL_IMAGE:-ragflow-local:dev}
+    ports: !override
+      - "18082:80"
+      - "18443:443"
+      - "19380:9380"
+      - "19381:9381"
+      - "19382:9382"
+      - "19384:9384"
+      - "19383:9383"
     command:
       - --disable-taskexecutor
       - --disable-datasync
