@@ -3374,6 +3374,25 @@ Important structured information may include: names, dates, locations, events, k
 
         saveConfiguration: 'Save configuration',
         saving: 'Saving...',
+        configurationUpdated: 'Sandbox configuration updated successfully',
+        configurationUpdateFailed:
+          'Failed to update configuration: {{message}}',
+        runtimeSettings: 'Runtime settings',
+        authentication: 'Authentication',
+        authenticationDescription:
+          'Choose one authentication method for the SSH connection.',
+        passwordAuthentication: 'Password',
+        privateKeyAuthentication: 'Private key',
+        encryptedPrivateKeyTip:
+          'Only required when the private key itself is encrypted.',
+        execution: 'Execution',
+        executionDescription:
+          'Configure the remote workspace and language runtimes used on the SSH host.',
+        deploymentDefaults: 'Deployment defaults',
+        deploymentDefaultsDescription:
+          'Read-only values loaded from the current environment for the default executor-manager deployment.',
+        minimum: 'Minimum: {{value}}',
+        maximum: 'Maximum: {{value}}',
 
         testConnectionResultModal: {
           title: 'Connection test result',
