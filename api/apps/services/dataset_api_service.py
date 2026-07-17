@@ -63,6 +63,25 @@ _INDEX_TYPE_TO_DISPLAY_NAME = {
 }
 
 
+def _select_workspace_embedding_model(requested_model_id: str | None, workspace_id: str, workspace_type: WorkspaceType, tenant):
+    default_model_id = getattr(tenant, "tenant_embd_id", None) or getattr(tenant, "embd_id", None)
+    selected_model_id = requested_model_id or default_model_id
+    if not selected_model_id:
+        return None, None
+
+    available, error = verify_embedding_availability(selected_model_id, workspace_id)
+    if available:
+        return selected_model_id, None
+
+    if workspace_type == WorkspaceType.TEAM and default_model_id and default_model_id != selected_model_id:
+        default_available, default_error = verify_embedding_availability(default_model_id, workspace_id)
+        if default_available:
+            return default_model_id, None
+        return None, default_error
+
+    return None, error
+
+
 async def create_dataset(user_id: str, workspace_id: str, req: dict):
     """
     Create a new dataset.
@@ -113,12 +132,10 @@ async def create_dataset(user_id: str, workspace_id: str, req: dict):
     ok, t = TenantService.get_by_id(workspace_id)
     if not ok:
         return False, "Tenant not found"
-    if not create_dict.get("embd_id"):
-        create_dict["embd_id"] = t.embd_id
-    else:
-        ok, err = verify_embedding_availability(create_dict["embd_id"], workspace_id)
-        if not ok:
-            return False, err
+    embedding_model_id, err = _select_workspace_embedding_model(create_dict.get("embd_id"), workspace_id, workspace_type, t)
+    if err:
+        return False, err
+    create_dict["embd_id"] = embedding_model_id or ""
 
     if not KnowledgebaseService.save(**create_dict):
         return False, "Failed to save dataset"

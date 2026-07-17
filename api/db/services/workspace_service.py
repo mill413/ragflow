@@ -350,19 +350,17 @@ class TeamService:
             TenantLLM.insert(**data).execute()
 
         model_id_map: dict[str, str] = {}
-        providers = TenantModelProvider.select().where(TenantModelProvider.tenant_id == source_tenant_id)
+        providers = list(TenantModelProvider.select().where(TenantModelProvider.tenant_id == source_tenant_id))
         for source_provider in providers:
             provider_id = get_uuid()
             TenantModelProvider.insert(id=provider_id, provider_name=source_provider.provider_name, tenant_id=target_tenant_id).execute()
-            instances = TenantModelInstance.select().where(TenantModelInstance.provider_id == source_provider.id)
+            instances = list(TenantModelInstance.select().where(TenantModelInstance.provider_id == source_provider.id))
             for source_instance in instances:
+                models = list(TenantModel.select().where(TenantModel.instance_id == source_instance.id))
                 instance_id = get_uuid()
                 instance_data = source_instance.to_dict()
                 instance_data.update({"id": instance_id, "provider_id": provider_id})
                 TenantModelInstance.insert(**instance_data).execute()
-                models = TenantModel.select().where(
-                    (TenantModel.provider_id == source_provider.id) & (TenantModel.instance_id == source_instance.id)
-                )
                 for source_model in models:
                     model_id = get_uuid()
                     model_data = source_model.to_dict()
