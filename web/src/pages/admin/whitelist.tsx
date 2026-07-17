@@ -171,7 +171,6 @@ function AdminWhitelist() {
     () => [
       columnHelper.accessor('email', {
         header: t('admin.email'),
-        enableSorting: false,
       }),
       columnHelper.accessor('create_date', {
         header: t('admin.createDate'),
@@ -223,8 +222,6 @@ function AdminWhitelist() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-
-    enableSorting: false,
   });
 
   return (

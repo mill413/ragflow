@@ -1,4 +1,10 @@
-import { useDeferredValue, useState } from 'react';
+import {
+  type Dispatch,
+  type SetStateAction,
+  useDeferredValue,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +18,7 @@ import {
 
 import Spotlight from '@/components/spotlight';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
@@ -31,8 +38,23 @@ import {
   listFailedDocuments,
   listManagedResources,
 } from '@/services/admin-service';
+import { getSortIcon } from './utils';
 
 type KnowledgeTab = 'datasets' | 'failures';
+type SortState = { key: string; direction: 'asc' | 'desc' };
+
+function sortRows<T>(rows: T[], sort: SortState): T[] {
+  return [...rows].sort((left, right) => {
+    const leftValue = (left as Record<string, unknown>)[sort.key];
+    const rightValue = (right as Record<string, unknown>)[sort.key];
+    const result = String(leftValue ?? '').localeCompare(
+      String(rightValue ?? ''),
+      undefined,
+      { numeric: true },
+    );
+    return sort.direction === 'asc' ? result : -result;
+  });
+}
 
 export default function AdminResources() {
   const { t } = useTranslation();
@@ -41,6 +63,14 @@ export default function AdminResources() {
   const deferredKeywords = useDeferredValue(keywords);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [datasetSort, setDatasetSort] = useState<SortState>({
+    key: 'update_date',
+    direction: 'desc',
+  });
+  const [failureSort, setFailureSort] = useState<SortState>({
+    key: 'create_date',
+    direction: 'desc',
+  });
 
   const { data: summary } = useQuery({
     queryKey: ['admin/monitoring'],
@@ -98,6 +128,35 @@ export default function AdminResources() {
   ];
   const total = tab === 'datasets' ? datasetData?.total : failureData?.total;
   const isFetching = tab === 'datasets' ? datasetsFetching : failuresFetching;
+  const sortedDatasets = useMemo(
+    () => sortRows(datasetData?.resources ?? [], datasetSort),
+    [datasetData?.resources, datasetSort],
+  );
+  const sortedFailures = useMemo(
+    () => sortRows(failureData?.documents ?? [], failureSort),
+    [failureData?.documents, failureSort],
+  );
+  const toggleSort = (
+    setter: Dispatch<SetStateAction<SortState>>,
+    key: string,
+  ) => {
+    setter((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+  const sortButton = (
+    label: string,
+    state: SortState,
+    setter: Dispatch<SetStateAction<SortState>>,
+    key: string,
+  ) => (
+    <Button variant="ghost" onClick={() => toggleSort(setter, key)}>
+      {label}
+      {getSortIcon(state.key === key ? state.direction : false)}
+    </Button>
+  );
 
   return (
     <Card className="!shadow-none relative h-full flex flex-col border-0.5 border-border-button bg-transparent rounded-xl overflow-hidden">
@@ -164,29 +223,75 @@ export default function AdminResources() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('admin.name')}</TableHead>
-                  <TableHead>{t('admin.workspaceOwner')}</TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.visibility')}
+                    {sortButton(
+                      t('admin.name'),
+                      datasetSort,
+                      setDatasetSort,
+                      'name',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.documentCount')}
+                    {sortButton(
+                      t('admin.workspaceOwner'),
+                      datasetSort,
+                      setDatasetSort,
+                      'workspace_name',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.chunkCount')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.visibility'),
+                      datasetSort,
+                      setDatasetSort,
+                      'permission',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.storage')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.documentCount'),
+                      datasetSort,
+                      setDatasetSort,
+                      'doc_num',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.parseStatus')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.chunkCount'),
+                      datasetSort,
+                      setDatasetSort,
+                      'chunk_num',
+                    )}
                   </TableHead>
-                  <TableHead>{t('admin.lastUpdateTime')}</TableHead>
+                  <TableHead>
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.storage'),
+                      datasetSort,
+                      setDatasetSort,
+                      'storage_bytes',
+                    )}
+                  </TableHead>
+                  <TableHead>
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.parseStatus'),
+                      datasetSort,
+                      setDatasetSort,
+                      'failed_documents',
+                    )}
+                  </TableHead>
+                  <TableHead>
+                    {sortButton(
+                      t('admin.lastUpdateTime'),
+                      datasetSort,
+                      setDatasetSort,
+                      'update_date',
+                    )}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                {datasetData?.resources.length ? (
-                  datasetData.resources.map((dataset) => (
+                {sortedDatasets.length ? (
+                  sortedDatasets.map((dataset) => (
                     <TableRow key={dataset.id}>
                       <TableCell>
                         <div className="font-medium">
@@ -262,24 +367,58 @@ export default function AdminResources() {
               <TableHeader>
                 <TableRow>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.fileName')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.fileName'),
+                      failureSort,
+                      setFailureSort,
+                      'name',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.dataset')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.dataset'),
+                      failureSort,
+                      setFailureSort,
+                      'dataset_name',
+                    )}
                   </TableHead>
-                  <TableHead>{t('admin.workspaceOwner')}</TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.fileSize')}
+                    {sortButton(
+                      t('admin.workspaceOwner'),
+                      failureSort,
+                      setFailureSort,
+                      'workspace_name',
+                    )}
                   </TableHead>
                   <TableHead>
-                    {t('admin.knowledgeMonitoring.failureReason')}
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.fileSize'),
+                      failureSort,
+                      setFailureSort,
+                      'size',
+                    )}
                   </TableHead>
-                  <TableHead>{t('admin.createTime')}</TableHead>
+                  <TableHead>
+                    {sortButton(
+                      t('admin.knowledgeMonitoring.failureReason'),
+                      failureSort,
+                      setFailureSort,
+                      'failure_reason',
+                    )}
+                  </TableHead>
+                  <TableHead>
+                    {sortButton(
+                      t('admin.createTime'),
+                      failureSort,
+                      setFailureSort,
+                      'create_date',
+                    )}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                {failureData?.documents.length ? (
-                  failureData.documents.map((document) => (
+                {sortedFailures.length ? (
+                  sortedFailures.map((document) => (
                     <TableRow key={document.id}>
                       <TableCell>
                         <div className="font-medium">{document.name}</div>

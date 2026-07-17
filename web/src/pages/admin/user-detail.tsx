@@ -26,8 +26,8 @@ import {
   Table,
   TableBody,
   TableCell,
-  // TableHead,
-  // TableHeader,
+  TableHead,
+  TableHeader,
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,10 +40,7 @@ import {
 
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
-import {
-  // getSortIcon,
-  parseBooleanish,
-} from './utils';
+import { getSortIcon, parseBooleanish } from './utils';
 
 const ASSET_NAMES = ['dataset', 'flow'];
 
@@ -130,14 +127,12 @@ function UserDatasetTable(props: {
 
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-
-    enableSorting: false,
   });
 
   return (
     <section className="space-y-4">
       <Table>
-        {/* <TableHeader>
+        <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
@@ -163,7 +158,7 @@ function UserDatasetTable(props: {
               ))}
             </TableRow>
           ))}
-        </TableHeader> */}
+        </TableHeader>
 
         <TableBody>
           {table.getRowModel().rows?.length ? (
@@ -237,31 +232,38 @@ function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
 
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-
-    enableSorting: false,
   });
 
   return (
     <section className="space-y-4">
       <Table>
-        {/* <TableHeader>
+        <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : (
-                    <>
+                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                    <Button
+                      variant="ghost"
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
                       {flexRender(
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                    </>
+                      {getSortIcon(header.column.getIsSorted())}
+                    </Button>
+                  ) : (
+                    flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )
                   )}
                 </TableHead>
               ))}
             </TableRow>
           ))}
-        </TableHeader> */}
+        </TableHeader>
 
         <TableBody>
           {table.getRowModel().rows?.length ? (

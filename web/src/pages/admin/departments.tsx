@@ -58,10 +58,12 @@ import {
   updateDepartment,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
+import { getSortIcon } from './utils';
 
 type DepartmentTreeNode = AdminService.Department & {
   children: DepartmentTreeNode[];
 };
+type DepartmentSortKey = 'name' | 'path' | 'created_at';
 
 export default function AdminDepartments() {
   const { t } = useTranslation();
@@ -74,6 +76,10 @@ export default function AdminDepartments() {
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<{
+    key: DepartmentSortKey;
+    direction: 'asc' | 'desc';
+  }>({ key: 'path', direction: 'asc' });
 
   const { data: departments = [] } = useQuery({
     queryKey: ['admin/departments', query],
@@ -95,7 +101,14 @@ export default function AdminDepartments() {
     });
 
     const sortNodes = (items: DepartmentTreeNode[]) => {
-      items.sort((left, right) => left.path.localeCompare(right.path));
+      items.sort((left, right) => {
+        const result = String(left[sort.key] ?? '').localeCompare(
+          String(right[sort.key] ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return sort.direction === 'asc' ? result : -result;
+      });
       items.forEach((item) => sortNodes(item.children));
     };
     sortNodes(roots);
@@ -114,7 +127,7 @@ export default function AdminDepartments() {
     };
     visit(roots, 0);
     return rows;
-  }, [collapsedIds, departments]);
+  }, [collapsedIds, departments, sort]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -162,6 +175,13 @@ export default function AdminDepartments() {
     });
   };
   const applySearch = () => setQuery(searchInput.trim());
+  const toggleSort = (key: DepartmentSortKey) => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
 
   return (
     <Card className="!shadow-none relative h-full bg-transparent overflow-hidden">
@@ -197,13 +217,27 @@ export default function AdminDepartments() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[28%]">
-                  {t('admin.department')}
+                  <Button variant="ghost" onClick={() => toggleSort('name')}>
+                    {t('admin.department')}
+                    {getSortIcon(sort.key === 'name' ? sort.direction : false)}
+                  </Button>
                 </TableHead>
                 <TableHead className="w-[36%]">
-                  {t('admin.departmentPath')}
+                  <Button variant="ghost" onClick={() => toggleSort('path')}>
+                    {t('admin.departmentPath')}
+                    {getSortIcon(sort.key === 'path' ? sort.direction : false)}
+                  </Button>
                 </TableHead>
                 <TableHead className="w-[22%]">
-                  {t('admin.createTime')}
+                  <Button
+                    variant="ghost"
+                    onClick={() => toggleSort('created_at')}
+                  >
+                    {t('admin.createTime')}
+                    {getSortIcon(
+                      sort.key === 'created_at' ? sort.direction : false,
+                    )}
+                  </Button>
                 </TableHead>
                 <TableHead className="w-40">{t('admin.actions')}</TableHead>
               </TableRow>

@@ -105,6 +105,7 @@ import {
   createColumnFilterFn,
   createFuzzySearchFn,
   EMPTY_DATA,
+  getSortIcon,
   IS_ENTERPRISE,
   parseBooleanish,
 } from './utils';
@@ -786,12 +787,24 @@ function AdminUserManagement() {
                           USER_TABLE_COLUMN_CLASSES[header.column.id],
                         )}
                       >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
+                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                          <Button
+                            variant="ghost"
+                            className="-ml-3 whitespace-nowrap"
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            {flexRender(
                               header.column.columnDef.header,
                               header.getContext(),
                             )}
+                            {getSortIcon(header.column.getIsSorted())}
+                          </Button>
+                        ) : (
+                          flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )
+                        )}
                       </TableHead>
                     ))}
                   </TableRow>

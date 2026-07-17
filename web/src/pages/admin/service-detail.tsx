@@ -1,6 +1,7 @@
 import { isPlainObject } from 'lodash';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -9,29 +10,64 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { getSortIcon } from './utils';
 
 interface ServiceDetailProps {
   content?: any;
 }
 
 function ServiceDetail({ content }: ServiceDetailProps) {
+  const [sort, setSort] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  }>({ key: '', direction: 'asc' });
   const contentElement = useMemo(() => {
-    if (Array.isArray(content) && content.every(isPlainObject)) {
+    if (
+      Array.isArray(content) &&
+      content.length > 0 &&
+      content.every(isPlainObject)
+    ) {
       const headers = Object.keys(content[0]);
+      const rows = sort.key
+        ? [...content].sort((left, right) => {
+            const result = String(left[sort.key] ?? '').localeCompare(
+              String(right[sort.key] ?? ''),
+              undefined,
+              { numeric: true },
+            );
+            return sort.direction === 'asc' ? result : -result;
+          })
+        : content;
 
       return (
         <Table rootClassName="min-w-max">
           <TableHeader>
             <TableRow>
               {headers.map((header) => (
-                <TableHead key={header}>{header}</TableHead>
+                <TableHead key={header}>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      setSort((current) => ({
+                        key: header,
+                        direction:
+                          current.key === header && current.direction === 'asc'
+                            ? 'desc'
+                            : 'asc',
+                      }))
+                    }
+                  >
+                    {header}
+                    {getSortIcon(sort.key === header ? sort.direction : false)}
+                  </Button>
+                </TableHead>
               ))}
             </TableRow>
           </TableHeader>
 
           <TableBody>
-            {content.map((item) => (
-              <TableRow key={item.id as string}>
+            {rows.map((item, index) => (
+              <TableRow key={(item.id as string) ?? index}>
                 {headers.map((header: string) => (
                   <TableCell key={header}>{item[header] as string}</TableCell>
                 ))}
@@ -81,7 +117,7 @@ function ServiceDetail({ content }: ServiceDetailProps) {
     }
 
     return content;
-  }, [content]);
+  }, [content, sort]);
 
   return contentElement;
 }
