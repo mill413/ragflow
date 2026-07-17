@@ -23,7 +23,6 @@ from datetime import datetime
 import base64
 
 from quart import make_response, redirect, request, session
-from werkzeug.security import check_password_hash, generate_password_hash
 
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
@@ -41,6 +40,7 @@ from api.utils.api_utils import (
     validate_request,
 )
 from api.utils.nickname_validation import validate_nickname
+from api.utils.password import store_password, verify_password
 from api.utils.crypt import decrypt
 from rag.utils.redis_conn import REDIS_CONN
 from api.apps import login_required, current_user, login_user, logout_user
@@ -328,7 +328,7 @@ async def setting_user():
     password_changed = False
     if request_data.get("password"):
         new_password = request_data.get("new_password")
-        if not check_password_hash(current_user.password, decrypt(request_data["password"])):
+        if not verify_password(current_user.password, decrypt(request_data["password"])):
             return get_json_result(
                 data=False,
                 code=RetCode.AUTHENTICATION_ERROR,
@@ -336,7 +336,7 @@ async def setting_user():
             )
 
         if new_password:
-            update_dict["password"] = generate_password_hash(decrypt(new_password))
+            update_dict["password"] = store_password(decrypt(new_password))
             password_changed = True
 
     for k in request_data.keys():

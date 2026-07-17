@@ -20,7 +20,6 @@ import logging
 import re
 from typing import Any
 
-from werkzeug.security import check_password_hash
 from common.constants import ActiveEnum
 from api.db.services import UserService
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
@@ -31,6 +30,7 @@ from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
 from api.db.db_models import APIToken
 from api.utils.crypt import decrypt
+from api.utils.password import verify_password
 from api.utils import health_utils
 
 from api.common.exceptions import AdminException, UserAlreadyExistsError, UserNotFoundError
@@ -117,9 +117,7 @@ class UserMgr:
         # check new_password different from old.
         usr = user_list[0]
         psw = decrypt(new_password)
-        # SSO-provisioned users (OIDC/OAuth) have no local password (usr.password is None):
-        # skip the equality check, which would otherwise crash inside werkzeug's split().
-        if usr.password and check_password_hash(usr.password, psw):
+        if verify_password(usr.password, psw):
             return "Same password, no need to update!"
         # update password
         UserService.update_user_password(usr.id, psw)
