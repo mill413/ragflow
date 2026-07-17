@@ -26,14 +26,21 @@ export function DatasetCard({
         description: `${dataset.document_count} ${t('knowledgeDetails.files')}`,
       }}
       moreDropdown={
-        <DatasetDropdown
-          showDatasetRenameModal={showDatasetRenameModal}
-          dataset={dataset}
-        >
-          <MoreButton></MoreButton>
-        </DatasetDropdown>
+        dataset.capabilities?.update || dataset.capabilities?.delete ? (
+          <DatasetDropdown
+            showDatasetRenameModal={showDatasetRenameModal}
+            dataset={dataset}
+          >
+            <MoreButton></MoreButton>
+          </DatasetDropdown>
+        ) : undefined
       }
-      sharedBadge={<SharedBadge>{dataset.nickname}</SharedBadge>}
+      sharedBadge={
+        <SharedBadge>
+          {dataset.workspace_name || dataset.nickname}
+          {dataset.creator_name ? ` · ${dataset.creator_name}` : ''}
+        </SharedBadge>
+      }
       onClick={navigateToDataset(dataset.id)}
     />
   );

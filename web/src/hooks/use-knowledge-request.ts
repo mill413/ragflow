@@ -59,6 +59,7 @@ import {
 } from './logic-hooks';
 import { extractParserConfigExt } from './parser-config-utils';
 import { useSetPaginationParams } from './route-hook';
+import { useWorkspace } from './use-workspace';
 
 export const enum KnowledgeApiAction {
   FetchKnowledgeListByPage = 'fetchKnowledgeListByPage',
@@ -154,6 +155,7 @@ export const useTestRetrieval = () => {
 };
 
 export const useFetchNextKnowledgeListByPage = () => {
+  const { workspaceId, workspaceType } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -166,6 +168,7 @@ export const useFetchNextKnowledgeListByPage = () => {
         debouncedSearchString,
         ...pagination,
         filterValue,
+        workspaceId,
       },
     ],
     initialData: {
@@ -181,6 +184,8 @@ export const useFetchNextKnowledgeListByPage = () => {
           keywords: debouncedSearchString,
           owner_ids: filterValue.owner as string[],
         },
+        scope: workspaceType,
+        workspace_id: workspaceType === 'team' ? workspaceId : undefined,
       });
 
       return { kbs: data?.data, total_datasets: data?.total_datasets };
@@ -218,6 +223,7 @@ export const useCreateKnowledge = () => {
     mutationFn: async (params: {
       id?: string;
       name: string;
+      workspace_id?: string;
       embedding_model?: string;
       chunk_method?: string;
       parseType?: ParseType;

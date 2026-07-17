@@ -29,6 +29,8 @@ import ThemeButton from './theme-button';
 import { useHeaderNavLayout } from './use-header-nav-layout';
 
 import { supportedLanguages } from '@/locales/config';
+import { useWorkspace } from '@/hooks/use-workspace';
+import { useListTeamInvitations } from '@/hooks/use-user-setting-request';
 
 export function Header({
   className,
@@ -42,9 +44,17 @@ export function Header({
   } = useFetchUserInfo();
 
   const { data: tenantData } = useListTenant();
+  const { data: teamInvitations } = useListTeamInvitations();
+  const {
+    workspaceId,
+    options: workspaceOptions,
+    setWorkspaceId,
+  } = useWorkspace();
   const hasNotification = useMemo(
-    () => tenantData?.some((x) => x.role === TenantRole.Invite),
-    [tenantData],
+    () =>
+      teamInvitations.length > 0 ||
+      tenantData?.some((x) => x.role === TenantRole.Invite),
+    [teamInvitations, tenantData],
   );
 
   const currentLanguage = supportedLanguages.find((x) => x.code === language);
@@ -100,6 +110,18 @@ export function Header({
           )}
           data-testid="auth-status"
         >
+          <select
+            aria-label="workspace"
+            className="hidden h-8 max-w-40 rounded-md border border-border-default bg-bg-input px-2 text-sm md:block"
+            value={workspaceId}
+            onChange={(event) => setWorkspaceId(event.target.value)}
+          >
+            {workspaceOptions.map((workspace) => (
+              <option key={workspace.value} value={workspace.value}>
+                {workspace.label}
+              </option>
+            ))}
+          </select>
           {!isCompact && (
             <>
               <a

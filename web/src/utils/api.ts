@@ -15,13 +15,20 @@ export default {
   loginChannel: (channel: string) => `${restAPIv1}/auth/login/${channel}`,
 
   // team
-  addTenantUser: (tenantId: string) => `${restAPIv1}/tenants/${tenantId}/users`,
+  addTenantUser: (tenantId: string) =>
+    `${restAPIv1}/teams/${tenantId}/invitations`,
   listTenantUser: (tenantId: string) =>
-    `${restAPIv1}/tenants/${tenantId}/users`,
+    `${restAPIv1}/teams/${tenantId}/members`,
   deleteTenantUser: (tenantId: string) =>
-    `${restAPIv1}/tenants/${tenantId}/users`,
-  listTenant: `${restAPIv1}/tenants`,
-  agreeTenant: (tenantId: string) => `${restAPIv1}/tenants/${tenantId}`,
+    `${restAPIv1}/teams/${tenantId}/members`,
+  listTenant: `${restAPIv1}/teams`,
+  listTeamInvitations: `${restAPIv1}/teams/invitations`,
+  createTeam: `${restAPIv1}/teams`,
+  team: (tenantId: string) => `${restAPIv1}/teams/${tenantId}`,
+  agreeTenant: (tenantId: string) =>
+    `${restAPIv1}/teams/${tenantId}/invitations/accept`,
+  teamMember: (tenantId: string, userId: string) =>
+    `${restAPIv1}/teams/${tenantId}/members/${userId}`,
 
   // llm model
   listAllAddedModels: `${restAPIv1}/models`,

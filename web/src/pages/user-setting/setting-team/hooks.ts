@@ -8,8 +8,8 @@ import {
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export const useAddUser = () => {
-  const { addTenantUser } = useAddTenantUser();
+export const useAddUser = (tenantId?: string) => {
+  const { addTenantUser } = useAddTenantUser(tenantId);
   const {
     visible: addingTenantModalVisible,
     hideModal: hideAddingTenantModal,
@@ -43,9 +43,7 @@ export const useHandleDeleteUser = () => {
     showDeleteConfirm({
       title: t('setting.sureDelete'),
       onOk: async () => {
-        const code = await deleteTenantUser({ userId });
-        if (code === 0) {
-        }
+        await deleteTenantUser({ userId });
         return;
       },
     });

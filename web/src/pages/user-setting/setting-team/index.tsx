@@ -1,104 +1,182 @@
+import Spotlight from '@/components/spotlight';
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  useFetchUserInfo,
-  useListTenantUser,
-} from '@/hooks/use-user-setting-request';
-import { useTranslation } from 'react-i18next';
-
-import Spotlight from '@/components/spotlight';
 import { SearchInput } from '@/components/ui/input';
-import { UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import {
+  useCreateTeam,
+  useDeleteTeam,
+  useFetchUserInfo,
+  useListTenant,
+  useUpdateTeam,
+} from '@/hooks/use-user-setting-request';
+import { Pencil, Plus, Trash2, UserPlus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ProfileSettingWrapperCard } from '../components/user-setting-header';
 import AddingUserModal from './add-user-modal';
 import { useAddUser } from './hooks';
+import { TeamNameModal } from './team-name-modal';
 import TenantTable from './tenant-table';
 import UserTable from './user-table';
 
 const UserSettingTeam = () => {
   const { data: userInfo } = useFetchUserInfo();
+  const { data: teams } = useListTenant();
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchUser, setSearchUser] = useState('');
-  useListTenantUser();
+  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [teamModalMode, setTeamModalMode] = useState<
+    'create' | 'rename' | null
+  >(null);
+  const selectedTeam = useMemo(
+    () => teams.find((team) => team.tenant_id === selectedTeamId),
+    [selectedTeamId, teams],
+  );
+  const canManage = Boolean(selectedTeam?.capabilities?.manage_members);
+  const canTransfer = selectedTeam?.role === 'owner';
+  const { createTeam, loading: creating } = useCreateTeam();
+  const { updateTeam, loading: updating } = useUpdateTeam();
+  const { deleteTeam } = useDeleteTeam();
   const {
     addingTenantModalVisible,
     hideAddingTenantModal,
     showAddingTenantModal,
     handleAddUserOk,
-  } = useAddUser();
+  } = useAddUser(selectedTeamId);
+
+  useEffect(() => {
+    if (
+      !selectedTeamId ||
+      !teams.some((team) => team.tenant_id === selectedTeamId)
+    ) {
+      setSelectedTeamId(teams[0]?.tenant_id || '');
+    }
+  }, [selectedTeamId, teams]);
+
+  const saveTeamName = async (name: string) => {
+    if (teamModalMode === 'create') {
+      const response = await createTeam(name);
+      if (response?.code === 0 && response.data?.tenant_id)
+        setSelectedTeamId(response.data.tenant_id);
+    } else if (selectedTeam) {
+      await updateTeam({ tenantId: selectedTeam.tenant_id, name });
+    }
+    setTeamModalMode(null);
+  };
 
   return (
-    // <div className="w-full flex flex-col gap-4 relative">
-    //   <Spotlight />
-    //   <UserSettingHeader
-    //     name={userInfo?.nickname + ' ' + t('setting.workspace')}
-    //   />
     <ProfileSettingWrapperCard
       header={
-        <header>
+        <header className="flex items-center justify-between">
           <h2 className="text-2xl font-medium text-text-primary">
-            {userInfo?.nickname + ' ' + t('setting.workspace')}
+            {userInfo?.nickname} {t('setting.workspace')}
           </h2>
+          <Button onClick={() => setTeamModalMode('create')}>
+            <Plus className="h-4 w-4" />
+            {t('setting.createTeam')}
+          </Button>
         </header>
       }
     >
       <Spotlight />
-
-      <div className="h-full overflow-x-hidden overflow-y-auto">
-        <Card className="bg-transparent border-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
-            {/* <User className="mr-2 h-5 w-5 text-[#1677ff]" /> */}
-            <CardTitle className="text-base">
-              {t('setting.teamMembers')}
-            </CardTitle>
-
-            <section className="flex gap-4 items-center">
-              <SearchInput
-                className="bg-bg-input border-border-default w-32"
-                placeholder={t('common.search')}
-                value={searchUser}
-                onChange={(e) => setSearchUser(e.target.value)}
-              />
-              <Button onClick={showAddingTenantModal}>
-                <UserPlus className=" h-4 w-4" />
-                {t('setting.invite')}
-              </Button>
-            </section>
+      <div className="h-full overflow-y-auto">
+        <Card className="border-none bg-transparent">
+          <CardHeader className="flex flex-row items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base">
+                {t('setting.teamMembers')}
+              </CardTitle>
+              <select
+                className="h-9 rounded-md border border-border-default bg-bg-input px-3"
+                value={selectedTeamId}
+                onChange={(event) => setSelectedTeamId(event.target.value)}
+              >
+                {!teams.length && (
+                  <option value="">{t('common.noData')}</option>
+                )}
+                {teams.map((team) => (
+                  <option key={team.tenant_id} value={team.tenant_id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+              {selectedTeam?.capabilities?.update && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setTeamModalMode('rename')}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
+              {selectedTeam?.capabilities?.delete && (
+                <ConfirmDeleteDialog
+                  title={t('setting.deleteTeam')}
+                  onOk={() => deleteTeam(selectedTeam.tenant_id)}
+                >
+                  <Button variant="ghost" size="icon">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </ConfirmDeleteDialog>
+              )}
+            </div>
+            {selectedTeam && (
+              <section className="flex items-center gap-4">
+                <SearchInput
+                  className="w-32 bg-bg-input"
+                  value={searchUser}
+                  onChange={(event) => setSearchUser(event.target.value)}
+                />
+                <Button disabled={!canManage} onClick={showAddingTenantModal}>
+                  <UserPlus className="h-4 w-4" />
+                  {t('setting.invite')}
+                </Button>
+              </section>
+            )}
           </CardHeader>
-
           <CardContent className="p-4 pt-0">
-            <UserTable searchUser={searchUser}></UserTable>
+            {selectedTeam && (
+              <UserTable
+                searchUser={searchUser}
+                tenantId={selectedTeamId}
+                canManage={canManage}
+                canTransfer={canTransfer}
+              />
+            )}
           </CardContent>
         </Card>
-
-        <Card className="bg-transparent border-none mt-8">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
-            {/* <Users className="mr-2 h-5 w-5 text-[#1677ff]" /> */}
-            <CardTitle className="text-base w-fit">
+        <Card className="mt-8 border-none bg-transparent">
+          <CardHeader className="flex flex-row items-center justify-between p-4">
+            <CardTitle className="text-base">
               {t('setting.joinedTeams')}
             </CardTitle>
             <SearchInput
-              className="bg-bg-input border-border-default w-32"
+              className="w-32 bg-bg-input"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t('common.search')}
+              onChange={(event) => setSearchTerm(event.target.value)}
             />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <TenantTable searchTerm={searchTerm}></TenantTable>
+            <TenantTable searchTerm={searchTerm} />
           </CardContent>
         </Card>
       </div>
-
       {addingTenantModalVisible && (
         <AddingUserModal
           visible
           hideModal={hideAddingTenantModal}
           onOk={handleAddUserOk}
-        ></AddingUserModal>
+        />
       )}
+      <TeamNameModal
+        open={teamModalMode !== null}
+        initialName={teamModalMode === 'rename' ? selectedTeam?.name : ''}
+        loading={creating || updating}
+        onClose={() => setTeamModalMode(null)}
+        onOk={saveTeamName}
+      />
     </ProfileSettingWrapperCard>
   );
 };

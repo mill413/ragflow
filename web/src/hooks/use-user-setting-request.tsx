@@ -18,9 +18,14 @@ import {
 import userService, {
   addTenantUser,
   agreeTenant,
+  createTeam,
+  deleteTeam,
   deleteTenantUser,
   listTenant,
+  listTeamInvitations,
   listTenantUser,
+  updateTeam,
+  updateTeamMember,
 } from '@/services/user-service';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
@@ -42,6 +47,11 @@ export const enum UserSettingApiAction {
   DeleteTenantUser = 'deleteTenantUser',
   ListTenant = 'listTenant',
   AgreeTenant = 'agreeTenant',
+  ListTeamInvitations = 'listTeamInvitations',
+  CreateTeam = 'createTeam',
+  UpdateTeam = 'updateTeam',
+  DeleteTeam = 'deleteTeam',
+  UpdateTeamMember = 'updateTeamMember',
   SetLangfuseConfig = 'setLangfuseConfig',
   DeleteLangfuseConfig = 'deleteLangfuseConfig',
   ListPipelines = 'listPipelines',
@@ -165,8 +175,11 @@ export const useSelectParserList = (): Array<{
   const parserList = useMemo(() => {
     // Go backend: prefer the dynamic pipeline catalog from the API.
     if (backendLang === 'go') {
-      const pipelineList: Array<{ parser_id: string; title: string; dsl: Record<string, any> }> =
-        pipelineListData?.data ?? [];
+      const pipelineList: Array<{
+        parser_id: string;
+        title: string;
+        dsl: Record<string, any>;
+      }> = pipelineListData?.data ?? [];
       if (pipelineList.length > 0) {
         const labelFromAPI = (parserId: string, title: string) => {
           const key = `knowledgeConfiguration.parserLabel.${parserId}`;
@@ -329,9 +342,7 @@ export const useCreateSystemToken = () => {
   return { data, loading, createToken: mutateAsync };
 };
 
-export const useListTenantUser = () => {
-  const { data: tenantInfo } = useFetchTenantInfo();
-  const tenantId = tenantInfo.tenant_id;
+export const useListTenantUser = (tenantId?: string) => {
   const {
     data,
     isFetching: loading,
@@ -342,7 +353,7 @@ export const useListTenantUser = () => {
     gcTime: 0,
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data } = await listTenantUser(tenantId);
+      const { data } = await listTenantUser(tenantId!);
 
       return data?.data ?? [];
     },
@@ -351,8 +362,7 @@ export const useListTenantUser = () => {
   return { data, loading, refetch };
 };
 
-export const useAddTenantUser = () => {
-  const { data: tenantInfo } = useFetchTenantInfo();
+export const useAddTenantUser = (tenantId?: string) => {
   const queryClient = useQueryClient();
   const {
     data,
@@ -361,7 +371,8 @@ export const useAddTenantUser = () => {
   } = useMutation({
     mutationKey: [UserSettingApiAction.AddTenantUser],
     mutationFn: async (email: string) => {
-      const { data } = await addTenantUser(tenantInfo.tenant_id, email);
+      if (!tenantId) return -1;
+      const { data } = await addTenantUser(tenantId, email);
       if (data.code === 0) {
         queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTenantUser],
@@ -403,6 +414,9 @@ export const useDeleteTenantUser = () => {
         });
         queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTenant],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [UserSettingApiAction.ListTeamInvitations],
         });
       }
       return data?.data ?? [];
@@ -451,12 +465,107 @@ export const useAgreeTenant = () => {
         queryClient.invalidateQueries({
           queryKey: [UserSettingApiAction.ListTenant],
         });
+        queryClient.invalidateQueries({
+          queryKey: [UserSettingApiAction.ListTeamInvitations],
+        });
       }
       return data?.data ?? [];
     },
   });
 
   return { data, loading, agreeTenant: mutateAsync };
+};
+
+export const useListTeamInvitations = () => {
+  const { data, isFetching: loading } = useQuery<ITenant[]>({
+    queryKey: [UserSettingApiAction.ListTeamInvitations],
+    initialData: [],
+    queryFn: async () => {
+      const { data } = await listTeamInvitations();
+      return data?.data ?? [];
+    },
+  });
+  return { data, loading };
+};
+
+const useRefreshTeams = () => {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({
+      queryKey: [UserSettingApiAction.ListTenant],
+    });
+    queryClient.invalidateQueries({
+      queryKey: [UserSettingApiAction.ListTeamInvitations],
+    });
+  };
+};
+
+export const useCreateTeam = () => {
+  const refresh = useRefreshTeams();
+  const mutation = useMutation({
+    mutationKey: [UserSettingApiAction.CreateTeam],
+    mutationFn: async (name: string) => (await createTeam(name)).data,
+    onSuccess: refresh,
+  });
+  return { createTeam: mutation.mutateAsync, loading: mutation.isPending };
+};
+
+export const useUpdateTeam = () => {
+  const refresh = useRefreshTeams();
+  const mutation = useMutation({
+    mutationKey: [UserSettingApiAction.UpdateTeam],
+    mutationFn: async ({
+      tenantId,
+      name,
+    }: {
+      tenantId: string;
+      name: string;
+    }) => (await updateTeam(tenantId, name)).data,
+    onSuccess: refresh,
+  });
+  return { updateTeam: mutation.mutateAsync, loading: mutation.isPending };
+};
+
+export const useDeleteTeam = () => {
+  const refresh = useRefreshTeams();
+  const mutation = useMutation({
+    mutationKey: [UserSettingApiAction.DeleteTeam],
+    mutationFn: async (tenantId: string) => (await deleteTeam(tenantId)).data,
+    onSuccess: refresh,
+  });
+  return { deleteTeam: mutation.mutateAsync, loading: mutation.isPending };
+};
+
+export const useUpdateTeamMember = (tenantId?: string) => {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationKey: [UserSettingApiAction.UpdateTeamMember, tenantId],
+    mutationFn: async ({
+      userId,
+      role,
+      transferOwnership,
+    }: {
+      userId: string;
+      role?: 'admin' | 'normal';
+      transferOwnership?: boolean;
+    }) => {
+      if (!tenantId) return;
+      return (
+        await updateTeamMember(tenantId, userId, {
+          role,
+          transfer_ownership: transferOwnership,
+        })
+      ).data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: [UserSettingApiAction.ListTenantUser, tenantId],
+      }),
+  });
+  return {
+    updateTeamMember: mutation.mutateAsync,
+    loading: mutation.isPending,
+  };
 };
 
 export const useSetLangfuseConfig = () => {

@@ -47,6 +47,11 @@ export interface IDataset {
   update_time: number;
   vector_similarity_weight: number;
   connectors: IConnector[];
+  workspace_name?: string;
+  workspace_type?: 'personal' | 'team';
+  creator_name?: string;
+  creator_avatar?: string;
+  capabilities?: { read: boolean; update: boolean; delete: boolean };
 }
 
 interface Parserconfig {

@@ -94,14 +94,23 @@ export const deleteTenantUser = ({
 }: {
   tenantId: string;
   userId: string;
-}) =>
-  request.delete(api.deleteTenantUser(tenantId), {
-    data: { userId },
-  });
+}) => request.delete(`${api.deleteTenantUser(tenantId)}/${userId}`);
 
 export const listTenant = () => request.get(api.listTenant);
+export const listTeamInvitations = () => request.get(api.listTeamInvitations);
 
 export const agreeTenant = (tenantId: string) =>
-  request.patch(api.agreeTenant(tenantId));
+  post(api.agreeTenant(tenantId), {});
+
+export const createTeam = (name: string) => post(api.createTeam, { name });
+export const updateTeam = (tenantId: string, name: string) =>
+  request.patch(api.team(tenantId), { name });
+export const deleteTeam = (tenantId: string) =>
+  request.delete(api.team(tenantId));
+export const updateTeamMember = (
+  tenantId: string,
+  userId: string,
+  data: { role?: 'admin' | 'normal'; transfer_ownership?: boolean },
+) => request.patch(api.teamMember(tenantId, userId), data);
 
 export default userService;

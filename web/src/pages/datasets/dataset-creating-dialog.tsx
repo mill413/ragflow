@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { FormLayout } from '@/constants/form';
 import { ParseType } from '@/constants/knowledge';
 import { useFetchDefaultModelDictionary } from '@/hooks/use-llm-request';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { omit } from 'lodash';
@@ -40,6 +41,7 @@ const ChunkMethodName = 'chunk_method';
 export function InputForm({ onOk }: IModalProps<any>) {
   const { t } = useTranslation();
   const defaultModelDictionary = useFetchDefaultModelDictionary();
+  const { workspaceId, options } = useWorkspace();
 
   const FormSchema = z
     .object({
@@ -49,6 +51,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
           message: t('knowledgeList.namePlaceholder'),
         })
         .trim(),
+      workspace_id: z.string().min(1),
       parseType: z.nativeEnum(ParseType).optional(),
       embedding_model: z
         .string()
@@ -85,6 +88,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
     resolver: zodResolver(FormSchema),
     defaultValues: {
       name: '',
+      workspace_id: workspaceId,
       parseType: ParseType.BuiltIn,
       [ChunkMethodName]: '',
       embedding_model: defaultModelDictionary?.embd_id,
@@ -111,6 +115,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
     }
   }, [parseType, form, defaultModelDictionary]);
 
+  useEffect(() => {
+    if (workspaceId) form.setValue('workspace_id', workspaceId);
+  }, [form, workspaceId]);
+
   return (
     <Form {...form}>
       <form
@@ -131,6 +139,29 @@ export function InputForm({ onOk }: IModalProps<any>) {
                   placeholder={t('knowledgeList.namePlaceholder')}
                   {...field}
                 />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="workspace_id"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel required>{t('setting.workspace')}</FormLabel>
+              <FormControl>
+                <select
+                  className="h-9 w-full rounded-md border border-border-default bg-bg-input px-3"
+                  {...field}
+                >
+                  {options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </FormControl>
               <FormMessage />
             </FormItem>

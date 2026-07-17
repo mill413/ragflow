@@ -17,6 +17,7 @@ export const useSearchKnowledge = () => {
 
 export interface Iknowledge {
   name: string;
+  workspace_id?: string;
   embedding_model?: string;
   chunk_method?: string;
   parseType?: ParseType;

@@ -92,5 +92,8 @@ export interface ITenant {
   nickname: string;
   role: string;
   tenant_id: string;
+  name: string;
+  workspace_type?: 'team';
+  capabilities?: Record<string, boolean>;
   update_date: string;
 }
