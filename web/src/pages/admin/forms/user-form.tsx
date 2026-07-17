@@ -26,6 +26,7 @@ import {
 import { listDepartments, listRoles } from '@/services/admin-service';
 
 import EnterpriseFeature from '../components/enterprise-feature';
+import DepartmentTreeSelect from '../components/department-tree-select';
 import { IS_ENTERPRISE } from '../utils';
 
 interface CreateUserFormData {
@@ -99,26 +100,13 @@ export const CreateUserForm = ({
                 {t('admin.department')}
               </FormLabel>
               <FormControl>
-                <Select
-                  value={field.value || 'none'}
-                  onValueChange={(value) =>
-                    field.onChange(value === 'none' ? '' : value)
-                  }
-                >
-                  <SelectTrigger className="w-full h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-bg-base">
-                    <SelectItem value="none">
-                      {t('admin.noDepartment')}
-                    </SelectItem>
-                    {departments?.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
-                        {department.path}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <DepartmentTreeSelect
+                  departments={departments ?? []}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder={t('admin.noDepartment')}
+                  className="h-10"
+                />
               </FormControl>
             </FormItem>
           )}

@@ -27,6 +27,7 @@ interface TreeSelectProps {
   showSearch?: boolean;
   className?: string;
   defaultExpandAll?: boolean;
+  selectableParents?: boolean;
   renderSelected?: (node: TreeSelectNode | undefined) => React.ReactNode;
   testId?: string;
 }
@@ -41,6 +42,7 @@ export function TreeSelect({
   showSearch,
   className,
   defaultExpandAll,
+  selectableParents = false,
   renderSelected,
   testId,
 }: TreeSelectProps) {
@@ -97,7 +99,7 @@ export function TreeSelect({
   const handleSelect = useCallback(
     (node: TreeSelectNode) => {
       if (node.disabled) return;
-      if (isLeaf(node)) {
+      if (isLeaf(node) || selectableParents) {
         onChange?.(node.id);
         setOpen(false);
         setSearchTerm('');
@@ -105,7 +107,7 @@ export function TreeSelect({
         handleToggle(node.id);
       }
     },
-    [isLeaf, onChange, handleToggle],
+    [isLeaf, onChange, handleToggle, selectableParents],
   );
 
   const handleClear = useCallback(
@@ -180,7 +182,14 @@ export function TreeSelect({
               }}
               onClick={() => handleSelect(node)}
             >
-              <span className="w-4 h-4 mr-0.5 flex-shrink-0 flex items-center justify-center">
+              <span
+                className="w-4 h-4 mr-0.5 flex-shrink-0 flex items-center justify-center"
+                onClick={(event) => {
+                  if (leaf) return;
+                  event.stopPropagation();
+                  handleToggle(node.id);
+                }}
+              >
                 {!leaf && (
                   <>
                     {expanded ? (
@@ -200,7 +209,7 @@ export function TreeSelect({
         );
       });
     },
-    [isLeaf, visibleExpandedIds, value, handleSelect],
+    [isLeaf, visibleExpandedIds, value, handleSelect, handleToggle],
   );
 
   return (

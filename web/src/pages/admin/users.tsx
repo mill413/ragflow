@@ -117,6 +117,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import EnterpriseFeature from './components/enterprise-feature';
+import DepartmentTreeSelect from './components/department-tree-select';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 
 const columnHelper = createColumnHelper<AdminService.ListUsersItem>();
@@ -136,7 +137,7 @@ const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
   email: 'min-w-44',
   nickname: 'min-w-24',
   password_plain: 'min-w-40',
-  department_path: 'min-w-52',
+  department_path: 'min-w-40',
   is_active: 'w-32 min-w-32',
   is_superuser: 'w-36 min-w-36',
   teams_total: 'w-24 min-w-24 text-center',
@@ -313,28 +314,19 @@ function AdminUserManagement() {
       columnHelper.accessor('department_path', {
         header: t('admin.department'),
         cell: ({ row }) => (
-          <Select
+          <DepartmentTreeSelect
+            departments={departments ?? []}
             disabled={updateDepartmentMutation.isPending}
-            value={row.original.department_id || 'none'}
-            onValueChange={(value) =>
+            value={row.original.department_id}
+            placeholder={t('admin.noDepartment')}
+            className="w-40"
+            onChange={(departmentId) =>
               updateDepartmentMutation.mutate({
                 email: row.original.email,
-                departmentId: value === 'none' ? undefined : value,
+                departmentId: departmentId || undefined,
               })
             }
-          >
-            <SelectTrigger className="w-52 [&>span]:truncate">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">{t('admin.noDepartment')}</SelectItem>
-              {departments?.map((department) => (
-                <SelectItem key={department.id} value={department.id}>
-                  {department.path}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         ),
         filterFn: createColumnFilterFn(
           (row, id, filterValue) => row.getValue(id) === filterValue,
@@ -688,32 +680,28 @@ function AdminUserManagement() {
                       <div className="font-bold mb-3">
                         {t('admin.department')}
                       </div>
-                      <RadioGroup
+                      <DepartmentTreeSelect
+                        departments={departments ?? []}
                         value={
-                          (table
-                            .getColumn('department_path')
-                            ?.getFilterValue() as string) ?? ''
+                          departments?.find(
+                            (department) =>
+                              department.path ===
+                              table
+                                .getColumn('department_path')
+                                ?.getFilterValue(),
+                          )?.id
                         }
-                        onValueChange={(value) =>
+                        placeholder={t('admin.all')}
+                        onChange={(departmentId) =>
                           table
                             .getColumn('department_path')
-                            ?.setFilterValue(value)
+                            ?.setFilterValue(
+                              departments?.find(
+                                (department) => department.id === departmentId,
+                              )?.path ?? '',
+                            )
                         }
-                      >
-                        <Label className="flex items-center space-x-2">
-                          <RadioGroupItem value="" />
-                          <span>{t('admin.all')}</span>
-                        </Label>
-                        {departments?.map((department) => (
-                          <Label
-                            key={department.id}
-                            className="flex items-center space-x-2"
-                          >
-                            <RadioGroupItem value={department.path} />
-                            <span>{department.path}</span>
-                          </Label>
-                        ))}
-                      </RadioGroup>
+                      />
                     </section>
 
                     <section>
