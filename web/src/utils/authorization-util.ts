@@ -1,6 +1,10 @@
 import { Authorization, Token, UserInfo } from '@/constants/authorization';
 import { getSearchValue } from './common-util';
 const KeySet = [Authorization, Token, UserInfo];
+const AdminAuthorization = 'adminAuthorization';
+const AdminToken = 'adminToken';
+const AdminUserInfo = 'adminUserInfo';
+const AdminKeySet = [AdminAuthorization, AdminToken, AdminUserInfo];
 
 const storage = {
   getAuthorization: () => {
@@ -57,6 +61,30 @@ export const getAuthorization = () => {
 };
 
 export default storage;
+
+export const adminAuthorizationUtil = {
+  getAuthorization: () => localStorage.getItem(AdminAuthorization),
+  getToken: () => localStorage.getItem(AdminToken),
+  getUserInfoObject: () => {
+    const userInfo = localStorage.getItem(AdminUserInfo);
+    return userInfo ? JSON.parse(userInfo) : null;
+  },
+  setItems: ({
+    Authorization: authorization,
+    Token: token,
+    userInfo,
+  }: Record<string, string>) => {
+    localStorage.setItem(AdminAuthorization, authorization);
+    localStorage.setItem(AdminToken, token);
+    localStorage.setItem(AdminUserInfo, userInfo);
+  },
+  removeAll: () => {
+    AdminKeySet.forEach((key) => localStorage.removeItem(key));
+  },
+};
+
+export const getAdminAuthorization = () =>
+  adminAuthorizationUtil.getAuthorization() || '';
 
 // Will not jump to the login page
 export function redirectToLogin() {

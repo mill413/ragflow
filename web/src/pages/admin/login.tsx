@@ -25,11 +25,10 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Authorization } from '@/constants/authorization';
 
-import { useAuth } from '@/hooks/auth-hooks';
 import { cn } from '@/lib/utils';
 import { Routes } from '@/routes';
 import { rsaPsw } from '@/utils';
-import authorizationUtil from '@/utils/authorization-util';
+import { adminAuthorizationUtil } from '@/utils/authorization-util';
 
 import { login } from '@/services/admin-service';
 
@@ -42,7 +41,7 @@ function AdminLogin() {
   const navigate = useNavigate();
   const [, setCurrentUserInfo] = useContext(CurrentUserInfoContext);
   const { t } = useTranslation('translation', { keyPrefix: 'login' });
-  const { isLogin } = useAuth();
+  const isLogin = !!adminAuthorizationUtil.getAuthorization();
 
   const loginMutation = useMutation({
     mutationKey: ['adminLogin'],
@@ -68,7 +67,7 @@ function AdminLogin() {
           source: 'serverRequest',
         });
 
-        authorizationUtil.setItems({
+        adminAuthorizationUtil.setItems({
           Authorization: authorization as string,
           Token: token,
           userInfo: JSON.stringify({
