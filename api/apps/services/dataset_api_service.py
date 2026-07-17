@@ -436,10 +436,7 @@ def list_datasets(tenant_id: str, args: dict):
     personal_user_id = tenant_id
     if scope == "personal":
         workspace_id = workspace_id or tenant_id
-        if (
-            WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.PERSONAL
-            or workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
-        ):
+        if WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.PERSONAL or workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id):
             return False, "No authorization."
         tenant_ids = []
         personal_user_id = workspace_id
@@ -455,7 +452,20 @@ def list_datasets(tenant_id: str, args: dict):
     else:
         tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
         tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]
-    kbs, total = KnowledgebaseService.get_list(tenant_ids, personal_user_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
+
+    kbs, total = KnowledgebaseService.get_list(
+        tenant_ids,
+        personal_user_id,
+        page,
+        page_size,
+        orderby,
+        desc,
+        kb_id,
+        name,
+        keywords,
+        parser_id,
+        include_private=WorkspaceAccessService.is_superuser(tenant_id),
+    )
     workspaces = TenantService.get_by_ids([m["tenant_id"] for m in kbs])
     workspace_map = {m.id: m.to_dict() for m in workspaces}
     creators = UserService.get_by_ids([m["created_by"] for m in kbs])

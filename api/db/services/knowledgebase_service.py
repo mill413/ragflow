@@ -74,7 +74,7 @@ class KnowledgebaseService(CommonService):
     model = Knowledgebase
 
     @classmethod
-    def _visibility_and_status_filter(cls, joined_tenant_ids, user_id):
+    def _visibility_and_status_filter(cls, joined_tenant_ids, user_id, include_private=False):
         """
         Build a Peewee filter expression representing knowledgebase visibility
         for a given user, combined with a valid-status constraint.
@@ -82,9 +82,14 @@ class KnowledgebaseService(CommonService):
         Visibility rules:
         - Team KBs (`permission == TenantPermission.TEAM`) owned by any tenant in `joined_tenant_ids`
         - KBs owned by the current user (`tenant_id == user_id`)
+        - All KBs in the requested workspaces when `include_private` is true
         Always constrained to `StatusEnum.VALID`.
         """
-        return ((cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value)
+        if include_private:
+            visibility = cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)
+        else:
+            visibility = (cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.tenant_id == user_id)
+        return visibility & (cls.model.status == StatusEnum.VALID.value)
 
     @classmethod
     @DB.connection_context()
@@ -449,7 +454,7 @@ class KnowledgebaseService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def get_list(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, id, name, keywords, parser_id=None):
+    def get_list(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, id, name, keywords, parser_id=None, include_private=False):
         # Get list of knowledge bases with filtering and pagination
         # Args:
         #     joined_tenant_ids: List of tenant IDs
@@ -475,7 +480,7 @@ class KnowledgebaseService(CommonService):
         if parser_id:
             kbs = kbs.where(cls.model.parser_id == parser_id)
 
-        kbs = kbs.where(cls._visibility_and_status_filter(joined_tenant_ids, user_id))
+        kbs = kbs.where(cls._visibility_and_status_filter(joined_tenant_ids, user_id, include_private))
 
         if desc:
             kbs = kbs.order_by(cls.model.getter_by(orderby).desc())
