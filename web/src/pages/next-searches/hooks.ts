@@ -95,7 +95,7 @@ interface SearchListResponse {
 }
 
 export const useFetchSearchList = () => {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { handleInputChange, searchString, pagination, setPagination } =
     useHandleSearchChange();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -121,7 +121,7 @@ export const useFetchSearchList = () => {
             keywords: debouncedSearchString,
             page_size: pagination.pageSize,
             page: pagination.current,
-            owner_ids: workspaceId ? [workspaceId] : undefined,
+            owner_ids: workspaceFilterId ? [workspaceFilterId] : undefined,
           },
           paramsSerializer: { indexes: null },
         },

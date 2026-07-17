@@ -4,13 +4,20 @@ import { useTranslation } from 'react-i18next';
 
 const WorkspaceStorageKey = 'activeWorkspaceId';
 const WorkspaceChangeEvent = 'ragflow-workspace-change';
+export const AllWorkspacesId = '__all__';
 
 export const useWorkspace = () => {
   const { t } = useTranslation();
   const { data: workspaces } = useListWorkspace();
   const options = useMemo(
-    () =>
-      workspaces.map((workspace) => ({
+    () => [
+      {
+        value: AllWorkspacesId,
+        label: t('knowledgeList.allWorkspaces'),
+        type: 'all' as const,
+        capabilities: undefined,
+      },
+      ...workspaces.map((workspace) => ({
         value: workspace.tenant_id,
         label: t(
           workspace.workspace_type === 'team'
@@ -21,10 +28,11 @@ export const useWorkspace = () => {
         type: workspace.workspace_type,
         capabilities: workspace.capabilities,
       })),
+    ],
     [t, workspaces],
   );
   const [workspaceId, setWorkspaceIdState] = useState(
-    () => localStorage.getItem(WorkspaceStorageKey) || '',
+    () => localStorage.getItem(WorkspaceStorageKey) || AllWorkspacesId,
   );
 
   useEffect(() => {
@@ -50,9 +58,12 @@ export const useWorkspace = () => {
 
   const selected =
     options.find((item) => item.value === workspaceId) || options[0];
+  const isAllWorkspaces = selected?.value === AllWorkspacesId;
   return {
-    workspaceId: selected?.value || '',
-    workspaceType: selected?.type || 'personal',
+    workspaceId: selected?.value || AllWorkspacesId,
+    workspaceFilterId: isAllWorkspaces ? undefined : selected?.value,
+    workspaceType: selected?.type || 'all',
+    isAllWorkspaces,
     canCreateSharedResource: Boolean(
       selected?.capabilities?.create_shared_resource,
     ),

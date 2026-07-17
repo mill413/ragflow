@@ -381,6 +381,7 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       noMoreData: `That's all. Nothing more.`,
       parserRequired: 'Chunk method is required',
       dataFlowRequired: 'Data flow is required',
+      allWorkspaces: 'All',
       teamWorkspace: 'Team-{{name}}',
       personalWorkspace: 'Personal-{{name}}',
     },

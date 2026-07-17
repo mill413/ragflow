@@ -131,7 +131,7 @@ const buildAgentListParams = ({
 };
 
 export const useFetchAgentListByPage = () => {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -146,7 +146,7 @@ export const useFetchAgentListByPage = () => {
     pageSize: pagination.pageSize,
     keywords: debouncedSearchString,
     canvasCategory: canvasCategory.length === 1 ? canvasCategory[0] : undefined,
-    ownerIds: workspaceId ? [workspaceId] : undefined,
+    ownerIds: workspaceFilterId ? [workspaceFilterId] : undefined,
     tags,
   });
 

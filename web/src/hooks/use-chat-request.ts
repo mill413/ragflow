@@ -64,7 +64,7 @@ export const useGetChatSearchParams = () => {
 };
 
 export const useFetchChatList = () => {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -95,7 +95,7 @@ export const useFetchChatList = () => {
             keywords: debouncedSearchString,
             page_size: pagination.pageSize,
             page: pagination.current,
-            owner_ids: workspaceId ? [workspaceId] : undefined,
+            owner_ids: workspaceFilterId ? [workspaceFilterId] : undefined,
           },
           data: {},
           paramsSerializer: { indexes: null },

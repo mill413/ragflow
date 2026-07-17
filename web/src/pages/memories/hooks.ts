@@ -55,7 +55,7 @@ export const useCreateMemory = () => {
 };
 
 export const useFetchMemoryList = () => {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { handleInputChange, searchString, pagination, setPagination } =
     useHandleSearchChange();
   const { filterValue, handleFilterSubmit } = useHandleFilterSubmit();
@@ -73,7 +73,7 @@ export const useFetchMemoryList = () => {
     page: pagination.current,
     memory_type: memoryType.length > 0 ? memoryType.join(',') : undefined,
     storage_type: storageType.length === 1 ? storageType[0] : undefined,
-    owner_ids: workspaceId || undefined,
+    owner_ids: workspaceFilterId,
   };
 
   const { data, isLoading, isError, refetch } = useQuery<

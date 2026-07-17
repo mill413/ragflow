@@ -341,6 +341,7 @@ export default {
       noMoreData: '没有更多数据了',
       parserRequired: '分块方法必填',
       dataFlowRequired: '数据流必填',
+      allWorkspaces: '全部',
       teamWorkspace: '团队-{{name}}',
       personalWorkspace: '个人-{{name}}',
     },

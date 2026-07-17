@@ -155,7 +155,7 @@ export const useTestRetrieval = () => {
 };
 
 export const useFetchNextKnowledgeListByPage = () => {
-  const { workspaceId, workspaceType } = useWorkspace();
+  const { workspaceId, workspaceFilterId, workspaceType } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -186,7 +186,7 @@ export const useFetchNextKnowledgeListByPage = () => {
           owner_ids: filterValue.owner as string[],
         },
         scope: workspaceType,
-        workspace_id: workspaceId,
+        workspace_id: workspaceFilterId,
       });
 
       return { kbs: data?.data, total_datasets: data?.total_datasets };

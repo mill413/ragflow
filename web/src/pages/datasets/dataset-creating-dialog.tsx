@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { FormLayout } from '@/constants/form';
 import { ParseType } from '@/constants/knowledge';
 import { useFetchDefaultModelDictionary } from '@/hooks/use-llm-request';
-import { useWorkspace } from '@/hooks/use-workspace';
+import { AllWorkspacesId, useWorkspace } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { omit } from 'lodash';
@@ -42,6 +42,16 @@ export function InputForm({ onOk }: IModalProps<any>) {
   const { t } = useTranslation();
   const defaultModelDictionary = useFetchDefaultModelDictionary();
   const { workspaceId, options } = useWorkspace();
+  const writableWorkspaceOptions = options.filter(
+    (option) =>
+      option.value !== AllWorkspacesId &&
+      option.capabilities?.create_knowledgebase,
+  );
+  const defaultWorkspaceId =
+    writableWorkspaceOptions.find((option) => option.value === workspaceId)
+      ?.value ||
+    writableWorkspaceOptions[0]?.value ||
+    '';
 
   const FormSchema = z
     .object({
@@ -88,7 +98,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
     resolver: zodResolver(FormSchema),
     defaultValues: {
       name: '',
-      workspace_id: workspaceId,
+      workspace_id: defaultWorkspaceId,
       parseType: ParseType.BuiltIn,
       [ChunkMethodName]: '',
       embedding_model: defaultModelDictionary?.embd_id,
@@ -116,8 +126,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
   }, [parseType, form, defaultModelDictionary]);
 
   useEffect(() => {
-    if (workspaceId) form.setValue('workspace_id', workspaceId);
-  }, [form, workspaceId]);
+    if (defaultWorkspaceId) {
+      form.setValue('workspace_id', defaultWorkspaceId);
+    }
+  }, [defaultWorkspaceId, form]);
 
   return (
     <Form {...form}>
@@ -156,7 +168,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
                   className="h-9 w-full rounded-md border border-border-default bg-bg-input px-3"
                   {...field}
                 >
-                  {options.map((option) => (
+                  {writableWorkspaceOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
