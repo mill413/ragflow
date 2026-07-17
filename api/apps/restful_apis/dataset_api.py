@@ -142,9 +142,8 @@ async def create(tenant_id: str = None):
         return get_error_argument_result(err)
 
     try:
-        if not tenant_id:
-            tenant_id = current_user.id
-        success, result = await dataset_api_service.create_dataset(tenant_id, req)
+        workspace_id = req.pop("workspace_id", None) or current_user.id
+        success, result = await dataset_api_service.create_dataset(current_user.id, workspace_id, req)
         if success:
             return get_result(data=result)
         else:

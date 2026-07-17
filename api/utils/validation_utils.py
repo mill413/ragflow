@@ -529,6 +529,7 @@ class CreateDatasetReq(Base):
     """Request model for creating a dataset."""
 
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=DATASET_NAME_LIMIT), Field(...)]
+    workspace_id: Annotated[str | None, Field(default=None, min_length=32, max_length=32)]
     avatar: Annotated[str | None, Field(default=None, max_length=65535)]
     description: Annotated[str | None, Field(default=None, max_length=65535)]
     embedding_model: Annotated[str | None, Field(default=None, max_length=255, serialization_alias="embd_id")]
@@ -1001,6 +1002,8 @@ class ListDatasetReq(BaseListReq):
     """Request model for listing datasets."""
 
     include_parsing_status: Annotated[bool, Field(default=False)]
+    scope: Annotated[Literal["all", "personal", "team"], Field(default="all")]
+    workspace_id: Annotated[str | None, Field(default=None, min_length=32, max_length=32)]
     ext: Annotated[dict, Field(default={})]
 
 

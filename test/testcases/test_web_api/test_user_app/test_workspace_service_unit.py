@@ -35,6 +35,7 @@ def workspace_dependencies(monkeypatch):
         ("owner-1", "team-1"): SimpleNamespace(user_id="owner-1", tenant_id="team-1", role=UserTenantRole.OWNER, status=StatusEnum.VALID.value),
         ("admin-1", "team-1"): SimpleNamespace(user_id="admin-1", tenant_id="team-1", role=UserTenantRole.ADMIN, status=StatusEnum.VALID.value),
         ("member-1", "team-1"): SimpleNamespace(user_id="member-1", tenant_id="team-1", role=UserTenantRole.NORMAL, status=StatusEnum.VALID.value),
+        ("member-2", "team-1"): SimpleNamespace(user_id="member-2", tenant_id="team-1", role=UserTenantRole.NORMAL, status=StatusEnum.VALID.value),
         ("invite-1", "team-1"): SimpleNamespace(user_id="invite-1", tenant_id="team-1", role=UserTenantRole.INVITE, status=StatusEnum.VALID.value),
     }
 
@@ -95,8 +96,10 @@ def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_
     assert WorkspaceAccessService.get_knowledgebase_capabilities("user-1", personal_kb) == {"read": True, "update": True, "delete": True}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("outsider", personal_kb) == {"read": False, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("member-1", team_kb) == {"read": True, "update": True, "delete": True}
+    assert WorkspaceAccessService.get_knowledgebase_capabilities("member-2", team_kb) == {"read": True, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("admin-1", team_kb) == {"read": True, "update": True, "delete": True}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("invite-1", team_kb) == {"read": False, "update": False, "delete": False}
+    assert WorkspaceAccessService.get_knowledgebase_capabilities("outsider", team_kb) == {"read": False, "update": False, "delete": False}
 
 
 def test_workspace_capabilities_distinguish_member_and_manager(workspace_dependencies):

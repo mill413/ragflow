@@ -18,8 +18,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
+from api.db.db_models import DB, Knowledgebase, Tenant, TenantLLM, TenantModel, TenantModelInstance, TenantModelProvider, UserTenant
 from api.db.services.user_service import TenantService, UserService, UserTenantService
 from common.constants import StatusEnum
+from common.misc_utils import get_uuid
 
 
 class WorkspaceAccessService:
@@ -131,3 +133,247 @@ class WorkspaceAccessService:
             "update": cls.can_update_knowledgebase(user_id, knowledgebase),
             "delete": cls.can_delete_knowledgebase(user_id, knowledgebase),
         }
+
+
+class TeamService:
+    TENANT_CONFIG_FIELDS = (
+        "public_key",
+        "llm_id",
+        "tenant_llm_id",
+        "embd_id",
+        "tenant_embd_id",
+        "asr_id",
+        "tenant_asr_id",
+        "img2txt_id",
+        "tenant_img2txt_id",
+        "rerank_id",
+        "tenant_rerank_id",
+        "tts_id",
+        "tenant_tts_id",
+        "ocr_id",
+        "tenant_ocr_id",
+        "parser_ids",
+    )
+
+    @classmethod
+    def create(cls, owner_id: str, name: str) -> dict[str, Any]:
+        name = str(name or "").strip()
+        if not name or len(name) > 100:
+            raise ValueError("Team name must contain between 1 and 100 characters.")
+        personal_membership = TenantService.get_personal_by_user_id(owner_id)
+        exists, personal = TenantService.get_by_id(owner_id)
+        if not personal_membership or not exists:
+            raise LookupError("Personal workspace not found.")
+        tenant_id = get_uuid()
+        with DB.atomic():
+            model_id_map = cls._copy_model_config(owner_id, tenant_id)
+            payload = {field: getattr(personal, field, None) for field in cls.TENANT_CONFIG_FIELDS}
+            for field in ("tenant_llm_id", "tenant_embd_id", "tenant_asr_id", "tenant_img2txt_id", "tenant_rerank_id", "tenant_tts_id", "tenant_ocr_id"):
+                if payload.get(field) in model_id_map:
+                    payload[field] = model_id_map[payload[field]]
+            payload.update({"id": tenant_id, "name": name, "status": StatusEnum.VALID.value})
+            TenantService.insert(**payload)
+            UserTenantService.insert(
+                id=get_uuid(),
+                user_id=owner_id,
+                tenant_id=tenant_id,
+                invited_by=owner_id,
+                role=UserTenantRole.OWNER,
+                status=StatusEnum.VALID.value,
+            )
+        return cls.get(owner_id, tenant_id)
+
+    @staticmethod
+    def _copy_model_config(source_tenant_id: str, target_tenant_id: str) -> dict[str, str]:
+        for source in TenantLLM.select().where(TenantLLM.tenant_id == source_tenant_id):
+            data = source.to_dict()
+            data["tenant_id"] = target_tenant_id
+            TenantLLM.insert(**data).execute()
+
+        model_id_map: dict[str, str] = {}
+        providers = TenantModelProvider.select().where(TenantModelProvider.tenant_id == source_tenant_id)
+        for source_provider in providers:
+            provider_id = get_uuid()
+            TenantModelProvider.insert(id=provider_id, provider_name=source_provider.provider_name, tenant_id=target_tenant_id).execute()
+            instances = TenantModelInstance.select().where(TenantModelInstance.provider_id == source_provider.id)
+            for source_instance in instances:
+                instance_id = get_uuid()
+                instance_data = source_instance.to_dict()
+                instance_data.update({"id": instance_id, "provider_id": provider_id})
+                TenantModelInstance.insert(**instance_data).execute()
+                models = TenantModel.select().where(
+                    (TenantModel.provider_id == source_provider.id) & (TenantModel.instance_id == source_instance.id)
+                )
+                for source_model in models:
+                    model_id = get_uuid()
+                    model_data = source_model.to_dict()
+                    model_data.update({"id": model_id, "provider_id": provider_id, "instance_id": instance_id})
+                    TenantModel.insert(**model_data).execute()
+                    model_id_map[source_model.id] = model_id
+        return model_id_map
+
+    @classmethod
+    def list_by_user_id(cls, user_id: str) -> list[dict[str, Any]]:
+        teams = []
+        for workspace in TenantService.list_accessible_by_user_id(user_id):
+            if workspace["tenant_id"] == user_id:
+                continue
+            item = dict(workspace)
+            item["workspace_type"] = WorkspaceType.TEAM
+            item["capabilities"] = WorkspaceAccessService.get_workspace_capabilities(user_id, item["tenant_id"])
+            teams.append(item)
+        return teams
+
+    @classmethod
+    def list_invitations(cls, user_id: str) -> list[dict[str, Any]]:
+        invitations = []
+        for membership in UserTenantService.list_memberships_by_user_id(user_id):
+            if membership["role"] != UserTenantRole.INVITE or membership["status"] != StatusEnum.VALID.value:
+                continue
+            tenant_id = membership["tenant_id"]
+            if WorkspaceAccessService.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
+                continue
+            invitations.append(
+                {
+                    "tenant_id": tenant_id,
+                    "name": membership["name"],
+                    "role": UserTenantRole.INVITE,
+                    "invited_by": membership["invited_by"],
+                    "workspace_type": WorkspaceType.TEAM,
+                }
+            )
+        return invitations
+
+    @classmethod
+    def get(cls, user_id: str, tenant_id: str) -> dict[str, Any]:
+        if WorkspaceAccessService.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
+            raise LookupError("Team not found.")
+        if not WorkspaceAccessService.is_member(user_id, tenant_id):
+            raise PermissionError("No authorization.")
+        exists, tenant = TenantService.get_by_id(tenant_id)
+        if not exists:
+            raise LookupError("Team not found.")
+        result = tenant.to_dict()
+        result["tenant_id"] = result.pop("id")
+        membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
+        result["role"] = WorkspaceAccessService._value(membership, "role")
+        result["workspace_type"] = WorkspaceType.TEAM
+        result["capabilities"] = WorkspaceAccessService.get_workspace_capabilities(user_id, tenant_id)
+        return result
+
+    @classmethod
+    def update(cls, actor_id: str, tenant_id: str, name: str) -> dict[str, Any]:
+        if not WorkspaceAccessService.can_manage_workspace(actor_id, tenant_id):
+            raise PermissionError("No authorization.")
+        name = str(name or "").strip()
+        if not name or len(name) > 100:
+            raise ValueError("Team name must contain between 1 and 100 characters.")
+        TenantService.update_by_id(tenant_id, {"name": name})
+        return cls.get(actor_id, tenant_id)
+
+    @classmethod
+    def list_members(cls, actor_id: str, tenant_id: str) -> list[dict[str, Any]]:
+        if not WorkspaceAccessService.is_member(actor_id, tenant_id):
+            raise PermissionError("No authorization.")
+        return UserTenantService.get_by_tenant_id(tenant_id)
+
+    @classmethod
+    def invite(cls, actor_id: str, tenant_id: str, email: str):
+        if not WorkspaceAccessService.can_manage_workspace(actor_id, tenant_id):
+            raise PermissionError("No authorization.")
+        users = UserService.query(email=str(email or "").strip())
+        if not users:
+            raise LookupError("User not found.")
+        user = users[0]
+        with DB.lock(f"team-membership:{tenant_id}:{user.id}", 10):
+            with DB.atomic():
+                existing = UserTenantService.query(user_id=user.id, tenant_id=tenant_id)
+                if existing:
+                    relation = existing[0]
+                    if relation.status == StatusEnum.VALID.value:
+                        raise ValueError("User already has a membership or invitation.")
+                    UserTenantService.update_by_id(
+                        relation.id,
+                        {"role": UserTenantRole.INVITE, "invited_by": actor_id, "status": StatusEnum.VALID.value},
+                    )
+                else:
+                    UserTenantService.insert(
+                        id=get_uuid(),
+                        user_id=user.id,
+                        tenant_id=tenant_id,
+                        invited_by=actor_id,
+                        role=UserTenantRole.INVITE,
+                        status=StatusEnum.VALID.value,
+                    )
+        return user
+
+    @classmethod
+    def accept_invitation(cls, user_id: str, tenant_id: str) -> dict[str, Any]:
+        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+            membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
+            if not membership or membership.role != UserTenantRole.INVITE:
+                raise LookupError("Invitation not found.")
+            with DB.atomic():
+                UserTenantService.update_by_id(membership.id, {"role": UserTenantRole.NORMAL})
+        return cls.get(user_id, tenant_id)
+
+    @classmethod
+    def remove_member(cls, actor_id: str, tenant_id: str, user_id: str) -> None:
+        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+            membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
+            if not membership:
+                raise LookupError("Membership not found.")
+            if membership.role == UserTenantRole.OWNER:
+                raise ValueError("Transfer team ownership before removing the owner.")
+            actor_membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
+            actor_role = WorkspaceAccessService._value(actor_membership, "role") if actor_membership else None
+            if actor_id != user_id and actor_role not in WorkspaceAccessService.MANAGER_ROLES:
+                raise PermissionError("No authorization.")
+            if actor_role == UserTenantRole.ADMIN and membership.role == UserTenantRole.ADMIN:
+                raise PermissionError("Only the owner can remove an administrator.")
+            with DB.atomic():
+                UserTenantService.update_by_id(membership.id, {"status": StatusEnum.INVALID.value})
+
+    @classmethod
+    def update_member_role(cls, actor_id: str, tenant_id: str, user_id: str, role: str) -> None:
+        if role not in {UserTenantRole.ADMIN, UserTenantRole.NORMAL}:
+            raise ValueError("Role must be admin or normal.")
+        with DB.lock(f"team-membership:{tenant_id}:{user_id}", 10):
+            if not WorkspaceAccessService.can_manage_workspace(actor_id, tenant_id):
+                raise PermissionError("No authorization.")
+            membership = WorkspaceAccessService.get_membership(user_id, tenant_id)
+            if not membership:
+                raise LookupError("Membership not found.")
+            if membership.role == UserTenantRole.OWNER:
+                raise ValueError("Use ownership transfer to change the owner.")
+            with DB.atomic():
+                UserTenantService.update_by_id(membership.id, {"role": role})
+
+    @classmethod
+    def transfer_ownership(cls, actor_id: str, tenant_id: str, user_id: str) -> None:
+        with DB.lock(f"team-ownership:{tenant_id}", 10):
+            actor = WorkspaceAccessService.get_membership(actor_id, tenant_id)
+            target = WorkspaceAccessService.get_membership(user_id, tenant_id)
+            if not actor or actor.role != UserTenantRole.OWNER:
+                raise PermissionError("Only the owner can transfer team ownership.")
+            if not target or target.role not in WorkspaceAccessService.ACTIVE_MEMBER_ROLES:
+                raise LookupError("Target member not found.")
+            if actor_id == user_id:
+                return
+            with DB.atomic():
+                UserTenantService.update_by_id(actor.id, {"role": UserTenantRole.ADMIN})
+                UserTenantService.update_by_id(target.id, {"role": UserTenantRole.OWNER})
+
+    @classmethod
+    def delete(cls, actor_id: str, tenant_id: str) -> None:
+        membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
+        if not membership or membership.role != UserTenantRole.OWNER:
+            raise PermissionError("Only the owner can delete a team.")
+        has_knowledgebases = Knowledgebase.select().where(
+            (Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)
+        ).exists()
+        if has_knowledgebases:
+            raise ValueError("Delete all team knowledgebases before deleting the team.")
+        with DB.atomic():
+            UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
+            Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()

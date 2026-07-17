@@ -30,6 +30,8 @@ from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.tenant_model_service import TenantModelService
 from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db import TenantPermission, WorkspaceType
+from api.db.services.workspace_service import WorkspaceAccessService
 from common.constants import FileSource, StatusEnum
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
 from common.misc_utils import thread_pool_exec
@@ -61,7 +63,7 @@ _INDEX_TYPE_TO_DISPLAY_NAME = {
 }
 
 
-async def create_dataset(tenant_id: str, req: dict):
+async def create_dataset(user_id: str, workspace_id: str, req: dict):
     """
     Create a new dataset.
 
@@ -92,19 +94,29 @@ async def create_dataset(tenant_id: str, req: dict):
         req["parser_config"] = parser_cfg
     req.update(ext_fields)
 
-    e, create_dict = KnowledgebaseService.create_with_name(name=req.pop("name", None), tenant_id=tenant_id, parser_id=req.pop("parser_id", None), **req)
+    if not WorkspaceAccessService.can_create_knowledgebase(user_id, workspace_id):
+        return False, "No authorization."
+    workspace_type = WorkspaceAccessService.get_workspace_type(workspace_id)
+    req["permission"] = TenantPermission.ME if workspace_type == WorkspaceType.PERSONAL else TenantPermission.TEAM
+    e, create_dict = KnowledgebaseService.create_with_name(
+        name=req.pop("name", None),
+        tenant_id=workspace_id,
+        created_by=user_id,
+        parser_id=req.pop("parser_id", None),
+        **req,
+    )
 
     if not e:
         return False, create_dict
 
     # Insert embedding model(embd id)
-    ok, t = TenantService.get_by_id(tenant_id)
+    ok, t = TenantService.get_by_id(workspace_id)
     if not ok:
         return False, "Tenant not found"
     if not create_dict.get("embd_id"):
         create_dict["embd_id"] = t.embd_id
     else:
-        ok, err = verify_embedding_availability(create_dict["embd_id"], tenant_id)
+        ok, err = verify_embedding_availability(create_dict["embd_id"], workspace_id)
         if not ok:
             return False, err
 
@@ -117,7 +129,7 @@ async def create_dataset(tenant_id: str, req: dict):
     return True, response_data
 
 
-async def delete_datasets(tenant_id: str, ids: list = None, delete_all: bool = False):
+async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = False):
     """
     Delete datasets.
 
@@ -131,23 +143,23 @@ async def delete_datasets(tenant_id: str, ids: list = None, delete_all: bool = F
         if not delete_all:
             return True, {"success_count": 0}
         else:
-            ids = [kb.id for kb in KnowledgebaseService.query(tenant_id=tenant_id)]
+            ids = [kb.id for kb in KnowledgebaseService.query(created_by=user_id, status=StatusEnum.VALID.value)]
 
     error_kb_ids = []
     for kb_id in ids:
-        kb = KnowledgebaseService.get_or_none(id=kb_id, tenant_id=tenant_id)
-        if kb is None:
+        kb = KnowledgebaseService.get_or_none(id=kb_id)
+        if kb is None or not WorkspaceAccessService.can_delete_knowledgebase(user_id, kb):
             error_kb_ids.append(kb_id)
             continue
         kb_id_instance_pairs.append((kb_id, kb))
     if len(error_kb_ids) > 0:
-        return False, f"""User '{tenant_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
+        return False, f"""User '{user_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
 
     errors = []
     success_count = 0
     for kb_id, kb in kb_id_instance_pairs:
         for doc in DocumentService.query(kb_id=kb_id):
-            if not DocumentService.remove_document(doc, tenant_id):
+            if not DocumentService.remove_document(doc, kb.tenant_id):
                 errors.append(f"Remove document '{doc.id}' error for dataset '{kb_id}'")
                 continue
             f2d = File2DocumentService.get_by_document_id(doc.id)
@@ -245,7 +257,7 @@ def get_ingestion_summary(dataset_id: str, tenant_id: str):
     }
 
 
-async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
+async def update_dataset(user_id: str, dataset_id: str, req: dict):
     """
     Update a dataset.
 
@@ -257,9 +269,10 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
     if not req:
         return False, "No properties were modified"
 
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
-        return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_update_knowledgebase(user_id, kb):
+        return False, f"User '{user_id}' lacks permission for dataset '{dataset_id}'"
+    req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(kb.tenant_id) == WorkspaceType.TEAM else TenantPermission.ME
 
     # Extract ext field for additional parameters
     ext_fields = req.pop("ext", {})
@@ -319,21 +332,21 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
         req["pipeline_id"] = ""
 
     if "name" in req and req["name"].lower() != kb.name.lower():
-        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=tenant_id, status=StatusEnum.VALID.value)
+        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=kb.tenant_id, status=StatusEnum.VALID.value)
         if exists:
             return False, f"Dataset name '{req['name']}' already exists"
 
     if "embd_id" in req:
         if not req["embd_id"]:
             req["embd_id"] = kb.embd_id
-        ok, err = verify_embedding_availability(req["embd_id"], tenant_id)
+        ok, err = verify_embedding_availability(req["embd_id"], kb.tenant_id)
         if not ok:
             return False, err
         ok, _ = TenantModelService.get_by_id(req["embd_id"])
         if ok:
             req["tenant_embd_id"] = req["embd_id"]
         else:
-            req["tenant_embd_id"] = resolve_model_id(tenant_id, LLMType.EMBEDDING, req["embd_id"])
+            req["tenant_embd_id"] = resolve_model_id(kb.tenant_id, LLMType.EMBEDDING, req["embd_id"])
 
     if "pagerank" in req and req["pagerank"] != kb.pagerank:
         if os.environ.get("DOC_ENGINE", "elasticsearch") == "infinity":
@@ -359,7 +372,7 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
         return False, "Dataset updated failed"
 
     # Link connectors to the dataset
-    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], tenant_id)
+    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], kb.tenant_id)
     if errors:
         logging.error("Link KB errors: %s", errors)
 
@@ -381,6 +394,8 @@ def list_datasets(tenant_id: str, args: dict):
     page = int(args.get("page", 1))
     page_size = int(args.get("page_size", 30))
     ext_fields = args.get("ext", {})
+    scope = args.get("scope", "all")
+    workspace_id = args.get("workspace_id")
     parser_id = ext_fields.get("parser_id")
     keywords = ext_fields.get("keywords", "")
     orderby = args.get("orderby", "create_time")
@@ -401,18 +416,42 @@ def list_datasets(tenant_id: str, args: dict):
         kbs = KnowledgebaseService.get_kb_by_name(name, tenant_id)
         if not kbs:
             return False, f"User '{tenant_id}' lacks permission for dataset '{name}'"
-    if ext_fields.get("owner_ids", []):
+    personal_user_id = tenant_id
+    if scope == "personal":
+        tenant_ids = []
+    elif scope == "team":
+        if not workspace_id or WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.TEAM:
+            return False, "A valid team workspace_id is required."
+        if not WorkspaceAccessService.is_member(tenant_id, workspace_id):
+            return False, "No authorization."
+        tenant_ids = [workspace_id]
+        personal_user_id = ""
+    elif ext_fields.get("owner_ids", []):
         tenant_ids = ext_fields["owner_ids"]
     else:
         tenants = TenantService.list_accessible_by_user_id(tenant_id)
-        tenant_ids = [m["tenant_id"] for m in tenants]
-    kbs, total = KnowledgebaseService.get_list(tenant_ids, tenant_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
-    users = UserService.get_by_ids([m["tenant_id"] for m in kbs])
-    user_map = {m.id: m.to_dict() for m in users}
+        tenant_ids = [m["tenant_id"] for m in tenants if m["tenant_id"] != tenant_id]
+    kbs, total = KnowledgebaseService.get_list(tenant_ids, personal_user_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
+    workspaces = TenantService.get_by_ids([m["tenant_id"] for m in kbs])
+    workspace_map = {m.id: m.to_dict() for m in workspaces}
+    creators = UserService.get_by_ids([m["created_by"] for m in kbs])
+    creator_map = {m.id: m.to_dict() for m in creators}
     response_data_list = []
     for kb in kbs:
-        user_dict = user_map.get(kb["tenant_id"], {})
-        kb.update({"nickname": user_dict.get("nickname", ""), "tenant_avatar": user_dict.get("avatar", "")})
+        workspace = workspace_map.get(kb["tenant_id"], {})
+        creator = creator_map.get(kb["created_by"], {})
+        workspace_type = WorkspaceAccessService.get_workspace_type(kb["tenant_id"])
+        kb.update(
+            {
+                "nickname": workspace.get("name", ""),
+                "tenant_avatar": "",
+                "workspace_name": workspace.get("name", ""),
+                "workspace_type": workspace_type,
+                "creator_name": creator.get("nickname", ""),
+                "creator_avatar": creator.get("avatar", ""),
+                "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
+            }
+        )
         response_data_list.append(remap_dictionary_keys(kb))
     return True, {"data": response_data_list, "total": total}
 
@@ -656,8 +695,8 @@ def get_auto_metadata(dataset_id: str, tenant_id: str):
     :param tenant_id: tenant ID
     :return: (success, result) or (success, error_message)
     """
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_read_knowledgebase(tenant_id, kb):
         return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
     parser_cfg = kb.parser_config or {}
     return True, {"metadata": parser_cfg.get("metadata") or [], "built_in_metadata": parser_cfg.get("built_in_metadata") or []}
@@ -672,8 +711,8 @@ async def update_auto_metadata(dataset_id: str, tenant_id: str, cfg: dict):
     :param cfg: auto-metadata configuration
     :return: (success, result) or (success, error_message)
     """
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_update_knowledgebase(tenant_id, kb):
         return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
 
     parser_cfg = kb.parser_config or {}
