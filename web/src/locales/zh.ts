@@ -2920,13 +2920,12 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
 
       userMonitoring: {
         teams: '加入团队',
-        datasets: '可见知识库',
-        documents: '可见文件',
-        storage: '可见存储',
-        datasetBreakdown: '个人 {{personal}} / 团队 {{team}}',
+        datasets: '创建知识库',
+        documents: '上传文件',
+        storage: '文件存储',
         totalUsers: '用户 {{count}}',
         activeUsers: '活跃 {{count}}',
-        totalStorage: '用户可见存储合计 {{size}}',
+        totalStorage: '用户上传文件合计 {{size}}',
       },
 
       knowledgeMonitoring: {

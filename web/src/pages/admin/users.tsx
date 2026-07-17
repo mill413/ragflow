@@ -472,26 +472,15 @@ function AdminUserManagement() {
         header: t('admin.userMonitoring.teams'),
       }),
 
-      columnHelper.accessor('datasets_total', {
+      columnHelper.accessor('created_datasets', {
         header: t('admin.userMonitoring.datasets'),
-        cell: ({ row, cell }) => (
-          <div>
-            <div>{cell.getValue()}</div>
-            <div className="text-xs text-text-secondary">
-              {t('admin.userMonitoring.datasetBreakdown', {
-                personal: row.original.private_datasets,
-                team: row.original.team_datasets,
-              })}
-            </div>
-          </div>
-        ),
       }),
 
-      columnHelper.accessor('documents_total', {
+      columnHelper.accessor('uploaded_documents', {
         header: t('admin.userMonitoring.documents'),
       }),
 
-      columnHelper.accessor('storage_bytes', {
+      columnHelper.accessor('uploaded_storage_bytes', {
         header: t('admin.userMonitoring.storage'),
         cell: ({ cell }) => formatBytes(cell.getValue(), { decimals: 1 }),
       }),
@@ -619,7 +608,7 @@ function AdminUserManagement() {
                   {t('admin.userMonitoring.totalStorage', {
                     size: formatBytes(
                       usersList?.reduce(
-                        (total, user) => total + user.storage_bytes,
+                        (total, user) => total + user.uploaded_storage_bytes,
                         0,
                       ) ?? 0,
                       { decimals: 1 },

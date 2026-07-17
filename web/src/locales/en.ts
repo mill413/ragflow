@@ -3346,13 +3346,12 @@ Important structured information may include: names, dates, locations, events, k
 
       userMonitoring: {
         teams: 'Teams joined',
-        datasets: 'Visible datasets',
-        documents: 'Visible documents',
-        storage: 'Visible storage',
-        datasetBreakdown: 'Personal {{personal}} / Team {{team}}',
+        datasets: 'Datasets created',
+        documents: 'Files uploaded',
+        storage: 'File storage',
         totalUsers: '{{count}} users',
         activeUsers: '{{count}} active',
-        totalStorage: '{{size}} total visible storage',
+        totalStorage: '{{size}} uploaded by users',
       },
 
       knowledgeMonitoring: {

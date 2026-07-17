@@ -41,12 +41,13 @@ declare namespace AdminService {
     is_superuser: boolean;
     role: string;
     nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
     teams_total: number;
-    datasets_total: number;
-    private_datasets: number;
-    team_datasets: number;
-    documents_total: number;
-    storage_bytes: number;
+    created_datasets: number;
+    uploaded_documents: number;
+    uploaded_storage_bytes: number;
   };
 
   export type UserDetail = {

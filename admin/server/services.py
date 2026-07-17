@@ -236,52 +236,48 @@ class UserMgr:
             return {}
 
         valid = StatusEnum.VALID.value
-        workspace_ids_by_user = {user_id: {user_id} for user_id in user_ids}
+        team_counts = {user_id: 0 for user_id in user_ids}
         for membership in UserTenant.select(UserTenant.user_id, UserTenant.tenant_id).where(
             (UserTenant.user_id.in_(user_ids)) & (UserTenant.status == valid)
         ):
-            workspace_ids_by_user[membership.user_id].add(membership.tenant_id)
+            if membership.tenant_id != membership.user_id:
+                team_counts[membership.user_id] += 1
 
         dataset_usage = {
-            row["workspace_id"]: row
+            row["user_id"]: int(row["created_datasets"] or 0)
             for row in (
                 Knowledgebase.select(
-                    Knowledgebase.tenant_id.alias("workspace_id"),
-                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
-                    fn.COALESCE(fn.SUM(Knowledgebase.doc_num), 0).alias("documents_total"),
+                    Knowledgebase.created_by.alias("user_id"),
+                    fn.COUNT(Knowledgebase.id).alias("created_datasets"),
                 )
-                .where(Knowledgebase.status == valid)
-                .group_by(Knowledgebase.tenant_id)
+                .where((Knowledgebase.created_by.in_(user_ids)) & (Knowledgebase.status == valid))
+                .group_by(Knowledgebase.created_by)
                 .dicts()
             )
         }
-        storage_usage = {
-            row["workspace_id"]: int(row["storage_bytes"] or 0)
+        document_usage = {
+            row["user_id"]: row
             for row in (
                 Document.select(
-                    Knowledgebase.tenant_id.alias("workspace_id"),
-                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                    Document.created_by.alias("user_id"),
+                    fn.COUNT(Document.id).alias("uploaded_documents"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("uploaded_storage_bytes"),
                 )
-                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
-                .where((Document.status == valid) & (Knowledgebase.status == valid))
-                .group_by(Knowledgebase.tenant_id)
+                .where((Document.created_by.in_(user_ids)) & (Document.status == valid))
+                .group_by(Document.created_by)
                 .dicts()
             )
         }
 
-        result = {}
-        for user_id, workspace_ids in workspace_ids_by_user.items():
-            personal = dataset_usage.get(user_id, {})
-            team_ids = workspace_ids - {user_id}
-            result[user_id] = {
-                "teams_total": len(team_ids),
-                "private_datasets": int(personal.get("datasets_total", 0) or 0),
-                "team_datasets": sum(int(dataset_usage.get(workspace_id, {}).get("datasets_total", 0) or 0) for workspace_id in team_ids),
-                "datasets_total": sum(int(dataset_usage.get(workspace_id, {}).get("datasets_total", 0) or 0) for workspace_id in workspace_ids),
-                "documents_total": sum(int(dataset_usage.get(workspace_id, {}).get("documents_total", 0) or 0) for workspace_id in workspace_ids),
-                "storage_bytes": sum(storage_usage.get(workspace_id, 0) for workspace_id in workspace_ids),
+        return {
+            user_id: {
+                "teams_total": team_counts[user_id],
+                "created_datasets": dataset_usage.get(user_id, 0),
+                "uploaded_documents": int(document_usage.get(user_id, {}).get("uploaded_documents", 0) or 0),
+                "uploaded_storage_bytes": int(document_usage.get(user_id, {}).get("uploaded_storage_bytes", 0) or 0),
             }
-        return result
+            for user_id in user_ids
+        }
 
     @staticmethod
     def get_user_details(username):
