@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 
 import { rsaPsw } from '@/utils';
-import { formatBytes } from '@/lib/utils';
+import { cn, formatBytes } from '@/lib/utils';
 
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
