@@ -67,6 +67,7 @@ export const useWorkspace = () => {
     canCreateSharedResource: Boolean(
       selected?.capabilities?.create_shared_resource,
     ),
+    selectedWorkspace: selected,
     options,
     setWorkspaceId,
   };

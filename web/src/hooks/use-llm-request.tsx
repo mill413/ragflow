@@ -30,6 +30,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { parseModelValue } from '@/utils/llm-util';
+import { useWorkspace } from './use-workspace';
 import { useWarnEmptyModel } from './use-warn-empty-model';
 
 export const enum LLMApiAction {
@@ -75,8 +76,9 @@ export const LlmKeys = {
 };
 
 export const useFetchAvailableProviders = () => {
+  const { workspaceId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<IAvailableProvider[]>({
-    queryKey: LlmKeys.availableProviders(),
+    queryKey: [...LlmKeys.availableProviders(), workspaceId],
     initialData: [],
     gcTime: 0,
     queryFn: async () => {
@@ -91,8 +93,9 @@ export const useFetchAvailableProviders = () => {
 };
 
 export const useFetchAddedProviders = () => {
+  const { workspaceId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<IAvailableProvider[]>({
-    queryKey: LlmKeys.addedProviders(),
+    queryKey: [...LlmKeys.addedProviders(), workspaceId],
     initialData: [],
     gcTime: 0,
     queryFn: async () => {
@@ -109,8 +112,10 @@ export const useFetchAllAddedModels = (
   modelType?: string,
   ownerTenantId?: string,
 ) => {
+  const { workspaceId } = useWorkspace();
+  const targetWorkspaceId = ownerTenantId || workspaceId;
   const { data, isFetching: loading } = useQuery<IAddedModel[]>({
-    queryKey: [...LlmKeys.allModels(modelType), ownerTenantId],
+    queryKey: [...LlmKeys.allModels(modelType), targetWorkspaceId],
     initialData: [],
     gcTime: 0,
     queryFn: async () => {
@@ -119,7 +124,7 @@ export const useFetchAllAddedModels = (
         params.type = modelType;
       }
       if (ownerTenantId) {
-        params.owner_tenant_id = ownerTenantId;
+        params.workspace_id = ownerTenantId;
       }
       const { data } = await llmService.listAllAddedModels({ params }, true);
 
@@ -148,8 +153,9 @@ export function useFindLlmByUuid() {
 }
 
 export const useFetchProviderInstances = (providerName: string) => {
+  const { workspaceId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<IProviderInstance[]>({
-    queryKey: LlmKeys.providerInstances(providerName),
+    queryKey: [...LlmKeys.providerInstances(providerName), workspaceId],
     initialData: [],
     gcTime: 0,
     enabled: !!providerName,
@@ -169,8 +175,12 @@ export const useFetchProviderInstance = (
   providerName: string,
   instanceName: string,
 ) => {
+  const { workspaceId } = useWorkspace();
   return useQuery<IProviderInstance>({
-    queryKey: LlmKeys.providerInstance(providerName, instanceName),
+    queryKey: [
+      ...LlmKeys.providerInstance(providerName, instanceName),
+      workspaceId,
+    ],
     initialData: undefined as unknown as IProviderInstance,
     gcTime: 0,
     enabled: false,
@@ -188,8 +198,12 @@ export const useFetchInstanceModels = (
   providerName: string,
   instanceName: string,
 ) => {
+  const { workspaceId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<IInstanceModel[]>({
-    queryKey: LlmKeys.instanceModels(providerName, instanceName),
+    queryKey: [
+      ...LlmKeys.instanceModels(providerName, instanceName),
+      workspaceId,
+    ],
     initialData: [],
     gcTime: 0,
     enabled: !!providerName && !!instanceName && instanceName !== '__draft__',
@@ -286,13 +300,10 @@ export const useAddProviderInstance = () => {
         // this, the parent page keeps `providerQueryName === ''` (the
         // `has_instance` gate in index.tsx) and the `providerInstances`
         // query stays disabled, so the newly-saved instance never
-        // appears. `exact: true` avoids cascading into every
-        // providerInstances / instanceModels query (they share the
-        // `['AddedProviders', ...]` prefix) - the dedicated invalidation
-        // below handles those.
+        // appears. Workspace-aware queries append their workspace id, so
+        // invalidate the prefix to refresh the active workspace entry.
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.providerInstances(params.llm_factory),
@@ -371,13 +382,8 @@ export const useAddInstanceModel = () => {
     ) => {
       const { data } = await llmService.addInstanceModel(params);
       if (data.code === 0) {
-        // `exact: true` keeps the invalidation to the provider summary
-        // list. Without it the [AddedProviders] prefix would also match
-        // every providerInstances / instanceModels query and refetch
-        // every provider's instances — we only want the current one.
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.allModels(),
@@ -448,7 +454,6 @@ export const useDeleteProviderInstance = () => {
       if (data.code === 0) {
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.providerInstances(params.provider_name),
@@ -513,7 +518,6 @@ export const usePatchInstanceModel = () => {
         message.success(t('message.modified'));
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.instanceModels(
@@ -546,7 +550,6 @@ export const useDeleteInstanceModels = () => {
         message.success(t('message.deleted'));
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.allModels(),
@@ -577,7 +580,6 @@ export const useUpdateProviderInstance = () => {
       if (data.code === 0) {
         queryClient.invalidateQueries({
           queryKey: LlmKeys.addedProviders(),
-          exact: true,
         });
         queryClient.invalidateQueries({
           queryKey: LlmKeys.providerInstances(params.provider_name),
@@ -609,8 +611,9 @@ export const useUpdateProviderInstance = () => {
 };
 
 export const useFetchDefaultModels = () => {
+  const { workspaceId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<IDefaultModel[]>({
-    queryKey: LlmKeys.defaultModels(),
+    queryKey: [...LlmKeys.defaultModels(), workspaceId],
     initialData: [],
     gcTime: 0,
     queryFn: async () => {

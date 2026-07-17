@@ -1462,6 +1462,9 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       addInstance: '添加实例',
       addInstanceText: '添加实例',
       noInstancesConfigured: '尚未配置任何实例。',
+      selectWorkspaceForModels: '请选择个人或团队工作空间以查看其模型设置。',
+      teamModelsReadOnly:
+        '当前为只读模式，仅团队所有者和管理员可以修改模型设置。',
       editInstanceName: '编辑实例名称',
       models: '模型',
       chatModel: 'LLM',

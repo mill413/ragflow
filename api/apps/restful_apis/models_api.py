@@ -18,8 +18,8 @@ import logging
 from quart import request
 
 from api.apps import login_required
+from api.apps.model_workspace import model_workspace_required
 from api.apps.services import models_api_service
-from api.db.services.user_service import TenantService
 from api.utils.api_utils import (
     add_tenant_id_to_kwargs,
     get_error_argument_result,
@@ -31,6 +31,7 @@ from api.utils.api_utils import (
 @manager.route("/models", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@model_workspace_required()
 def get_added_models(tenant_id: str):
     """
     List tenant all added models.
@@ -83,18 +84,8 @@ def get_added_models(tenant_id: str):
                         type: boolean
     """
     model_type_filter = request.args.get("type")
-    owner_tenant_id = request.args.get("owner_tenant_id")
     try:
-        target_tenant_id = tenant_id
-        if owner_tenant_id:
-            if owner_tenant_id != tenant_id:
-                joined_tenants = TenantService.list_accessible_by_user_id(tenant_id)
-                allowed_tenant_ids = {tenant_id, *(tenant["tenant_id"] for tenant in joined_tenants)}
-                if owner_tenant_id not in allowed_tenant_ids:
-                    return get_error_data_result(message="Permission denied")
-            target_tenant_id = owner_tenant_id
-
-        success, result = models_api_service.list_tenant_added_models(target_tenant_id, model_type_filter)
+        success, result = models_api_service.list_tenant_added_models(tenant_id, model_type_filter)
         if success:
             return get_result(data=result)
         else:
@@ -107,6 +98,7 @@ def get_added_models(tenant_id: str):
 @manager.route("/models/default", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@model_workspace_required()
 def get_default_models(tenant_id: str):
     """
     List tenant default models.
@@ -162,6 +154,7 @@ def get_default_models(tenant_id: str):
 @manager.route("/models/default", methods=["PATCH"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@model_workspace_required(write=True)
 async def set_default_models(tenant_id: str):
     """
     Set or clear a tenant default model.

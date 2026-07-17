@@ -16,6 +16,8 @@
 
 import Spotlight from '@/components/spotlight';
 import { useTranslate } from '@/hooks/common-hooks';
+import { useFetchUserInfo } from '@/hooks/use-user-setting-request';
+import { useWorkspace } from '@/hooks/use-workspace';
 import {
   LlmKeys,
   useAddProviderInstance,
@@ -50,6 +52,13 @@ import SystemSetting from './layout/system-setting';
  */
 const SettingModelV2: FC = () => {
   const { t: tSetting } = useTranslate('setting');
+  const { data: userInfo } = useFetchUserInfo();
+  const { isAllWorkspaces, selectedWorkspace } = useWorkspace();
+  const canManageModels =
+    !isAllWorkspaces &&
+    (selectedWorkspace?.type === 'personal'
+      ? selectedWorkspace.value === userInfo.id
+      : Boolean(selectedWorkspace?.capabilities?.update));
   const [selection, setSelection] = useState<SidebarSelection>('default');
   // Stack of draft-instance identifiers, rendered as `ProviderInstanceCard`
   // entries below the persisted instances. Each draft can be saved or
@@ -187,68 +196,88 @@ const SettingModelV2: FC = () => {
     [],
   );
 
+  if (isAllWorkspaces) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-lg border border-border-button text-text-secondary">
+        {tSetting('selectWorkspaceForModels')}
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-full h-full border-[0.5px] border-border-button rounded-lg relative overflow-hidden">
       <Spotlight />
-      <section className="flex flex-col gap-4 w-[320px] shrink-0 px-5 border-r-[0.5px] border-border-button overflow-auto scrollbar-auto">
-        <Sidebar selection={selection} onSelect={setSelection} />
-      </section>
-      <section className="flex-1 flex flex-col overflow-hidden">
-        {selection === 'default' ? (
-          <div className="flex-1 overflow-auto scrollbar-auto">
-            <SystemSetting />
-          </div>
-        ) : (
-          <>
-            {/* Sticky top: provider name + doc-link arrow */}
-            <ProviderHeaderBar providerName={selection as string} />
-
-            {/* Scrollable middle: instance cards + optional draft cards */}
-            <div className="flex-1 overflow-auto scrollbar-auto p-4 flex flex-col gap-4">
-              {instances.length === 0 && draftIds.length === 0 && (
-                <div className="text-text-secondary text-sm py-6 text-center">
-                  {tSetting('noInstancesConfigured')}
-                </div>
-              )}
-              {instances.map((instance, index) => (
-                <ProviderInstanceCard
-                  key={instance.instance_name}
-                  providerName={selection as string}
-                  instance={instance}
-                  defaultOpen={
-                    index === 0 ||
-                    instance.instance_name === newlySavedInstanceName
-                  }
-                />
-              ))}
-              {draftIds.map((id) => (
-                <ProviderInstanceCard
-                  key={id}
-                  providerName={selection as string}
-                  instance={draftInstance}
-                  isDraft
-                  onDelete={() => handleDraftCancel(id)}
-                  onNameSaved={(instanceName) =>
-                    handleNameSaved(id, instanceName)
-                  }
-                  onSaved={(values) => handleDraftSave(id, values)}
-                />
-              ))}
-              <div className=" bottom-0 z-10 border-border-button py-4">
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-2 px-3 py-1 rounded-md border border-dashed border-border-button text-text-secondary hover:bg-bg-input hover:text-text-primary transition-colors"
-                  onClick={addDraft}
-                  data-testid="add-instance-bottom"
-                >
-                  <Plus className="size-4" />
-                  <span className="text-sm">{tSetting('addInstanceText')}</span>
-                </button>
-              </div>
+      {!canManageModels && (
+        <div className="absolute right-4 top-3 z-20 rounded-md bg-bg-card px-3 py-1 text-xs text-text-secondary shadow-sm">
+          {tSetting('teamModelsReadOnly')}
+        </div>
+      )}
+      <fieldset
+        disabled={!canManageModels}
+        className="contents disabled:cursor-not-allowed"
+      >
+        <section className="flex flex-col gap-4 w-[320px] shrink-0 px-5 border-r-[0.5px] border-border-button overflow-auto scrollbar-auto">
+          <Sidebar selection={selection} onSelect={setSelection} />
+        </section>
+        <section className="flex-1 flex flex-col overflow-hidden">
+          {selection === 'default' ? (
+            <div className="flex-1 overflow-auto scrollbar-auto">
+              <SystemSetting />
             </div>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              {/* Sticky top: provider name + doc-link arrow */}
+              <ProviderHeaderBar providerName={selection as string} />
+
+              {/* Scrollable middle: instance cards + optional draft cards */}
+              <div className="flex-1 overflow-auto scrollbar-auto p-4 flex flex-col gap-4">
+                {instances.length === 0 && draftIds.length === 0 && (
+                  <div className="text-text-secondary text-sm py-6 text-center">
+                    {tSetting('noInstancesConfigured')}
+                  </div>
+                )}
+                {instances.map((instance, index) => (
+                  <ProviderInstanceCard
+                    key={instance.instance_name}
+                    providerName={selection as string}
+                    instance={instance}
+                    defaultOpen={
+                      index === 0 ||
+                      instance.instance_name === newlySavedInstanceName
+                    }
+                  />
+                ))}
+                {draftIds.map((id) => (
+                  <ProviderInstanceCard
+                    key={id}
+                    providerName={selection as string}
+                    instance={draftInstance}
+                    isDraft
+                    onDelete={() => handleDraftCancel(id)}
+                    onNameSaved={(instanceName) =>
+                      handleNameSaved(id, instanceName)
+                    }
+                    onSaved={(values) => handleDraftSave(id, values)}
+                  />
+                ))}
+                <div className=" bottom-0 z-10 border-border-button py-4">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1 rounded-md border border-dashed border-border-button text-text-secondary hover:bg-bg-input hover:text-text-primary transition-colors"
+                    onClick={addDraft}
+                    data-testid="add-instance-bottom"
+                  >
+                    <Plus className="size-4" />
+                    <span className="text-sm">
+                      {tSetting('addInstanceText')}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      </fieldset>
     </div>
   );
 };

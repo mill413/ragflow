@@ -70,6 +70,7 @@ export interface IEditInstanceModelRequestBody {
 }
 
 export interface IListAllModelsRequestParams {
+  workspace_id?: string;
   type?: string;
   owner_tenant_id?: string;
 }

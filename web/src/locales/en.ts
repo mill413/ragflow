@@ -1770,6 +1770,10 @@ Example: Virtual Hosted Style`,
       addInstance: 'Add instance',
       addInstanceText: 'Add instance',
       noInstancesConfigured: 'No instances configured yet.',
+      selectWorkspaceForModels:
+        'Select a personal or team workspace to view its model settings.',
+      teamModelsReadOnly:
+        'You can view these model settings, but only team owners and administrators can change them.',
       editInstanceName: 'Edit instance name',
       models: 'Models',
       chatModel: 'LLM',
