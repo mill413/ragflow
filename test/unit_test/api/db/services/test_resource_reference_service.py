@@ -38,6 +38,81 @@ def test_extract_ids_finds_nested_references_and_ignores_variable_expressions():
     assert ResourceReferenceService._extract_ids(dsl, {"mcp_id", "mcp_ids"}) == {"mcp-1", "mcp-2"}
 
 
+def test_file_references_use_static_attachment_extractor(monkeypatch):
+    captured = {}
+
+    def canvas_references(cls, workspace_id, target_id, keys=None, extractor=None):
+        captured.update(
+            workspace_id=workspace_id,
+            target_id=target_id,
+            keys=keys,
+            extracted=extractor(
+                {
+                    "components": [
+                        {"upload_sources": "file-1,file-2"},
+                        {"input_files": [{"id": "file-3"}]},
+                    ]
+                }
+            ),
+        )
+        return [cls._reference("agent", "agent-1", "File agent")]
+
+    monkeypatch.setattr(ResourceReferenceService, "_canvas_references", classmethod(canvas_references))
+
+    references = ResourceReferenceService._file_references(
+        {"resource_id": "file-2", "workspace_id": "team-1"}
+    )
+
+    assert captured == {
+        "workspace_id": "team-1",
+        "target_id": "file-2",
+        "keys": None,
+        "extracted": {"file-1", "file-2", "file-3"},
+    }
+    assert references == [
+        {
+            "resource_type": "agent",
+            "resource_id": "agent-1",
+            "resource_name": "File agent",
+        }
+    ]
+
+
+def test_dataflow_references_include_dataset_and_document(monkeypatch):
+    dataset = SimpleNamespace(id="dataset-1", name="Team dataset", pipeline_id="flow-1")
+    document = SimpleNamespace(
+        id="document-1",
+        name="manual.pdf",
+        kb_id="dataset-1",
+        pipeline_id="flow-1",
+    )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Knowledgebase.select",
+        lambda *_args: _FakeQuery([dataset]),
+    )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Document.select",
+        lambda *_args: _FakeQuery([document]),
+    )
+
+    references = ResourceReferenceService._dataflow_references(
+        {"resource_id": "flow-1", "workspace_id": "team-1"}
+    )
+
+    assert references == [
+        {
+            "resource_type": "dataset",
+            "resource_id": "dataset-1",
+            "resource_name": "Team dataset",
+        },
+        {
+            "resource_type": "document",
+            "resource_id": "document-1",
+            "resource_name": "Team dataset / manual.pdf",
+        },
+    ]
+
+
 def test_find_references_deduplicates_and_sorts_by_type_and_name(monkeypatch):
     references = [
         ResourceReferenceService._reference("agent", "agent-2", "Zulu"),

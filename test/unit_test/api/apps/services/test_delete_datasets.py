@@ -75,7 +75,10 @@ def _load_delete_datasets_module(monkeypatch, *, f2d_rows, file_filter_delete):
     _stub(
         monkeypatch,
         "api.db.services.file_service",
-        FileService=SimpleNamespace(filter_delete=file_filter_delete),
+        FileService=SimpleNamespace(
+            filter_delete=file_filter_delete,
+            ensure_document_files_not_referenced=lambda _doc_ids: None,
+        ),
     )
     _stub(
         monkeypatch,

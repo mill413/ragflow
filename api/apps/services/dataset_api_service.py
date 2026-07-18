@@ -175,6 +175,12 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
         return False, f"""User '{user_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
 
     ResourceReferenceService.ensure_not_referenced("dataset", [kb for _, kb in kb_id_instance_pairs])
+    document_ids = [
+        document.id
+        for kb_id, _ in kb_id_instance_pairs
+        for document in DocumentService.query(kb_id=kb_id)
+    ]
+    FileService.ensure_document_files_not_referenced(document_ids)
 
     errors = []
     success_count = 0

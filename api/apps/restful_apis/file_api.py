@@ -26,8 +26,10 @@ from api.utils.api_utils import (
     get_error_argument_result,
     get_error_data_result,
     get_json_result,
+    get_resource_in_use_result,
     get_result,
 )
+from common.exceptions import ResourceInUseException
 from common.constants import RetCode
 from api.utils.validation_utils import (
     CreateFolderReq,
@@ -210,6 +212,8 @@ async def delete(tenant_id: str = None):
                     data=result,
                 )
             return get_error_data_result(message=result)
+    except ResourceInUseException as e:
+        return get_resource_in_use_result(e)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")

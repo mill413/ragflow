@@ -51,6 +51,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.pipeline_operation_log_service import PipelineOperationLogService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow, register_task_authorization
 from api.db.services.user_service import TenantService
 from api.db.services.user_canvas_version import UserCanvasVersionService
@@ -61,6 +62,7 @@ from api.utils.api_utils import (
     get_data_error_result,
     get_error_data_result,
     get_json_result,
+    get_resource_in_use_result,
     get_result,
     get_request_json,
     server_error_response,
@@ -70,6 +72,7 @@ from api.utils.pagination_utils import validate_rest_api_page_size
 from common import settings
 from common.ssrf_guard import assert_host_is_safe
 from common.constants import RetCode
+from common.exceptions import ResourceInUseException
 from common.misc_utils import get_uuid, thread_pool_exec
 from peewee import MySQLDatabase, PostgresqlDatabase
 
@@ -1167,6 +1170,14 @@ async def get_agent_logs(agent_id, message_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_manage_sync
 def delete_agent(agent_id, tenant_id):
+    found, canvas = UserCanvasService.get_by_id(agent_id)
+    if not found:
+        return get_error_data_result(message="Agent not found.")
+    if canvas.canvas_category == CanvasCategory.DataFlow:
+        try:
+            ResourceReferenceService.ensure_not_referenced("dataflow", [canvas])
+        except ResourceInUseException as exc:
+            return get_resource_in_use_result(exc)
     with UserCanvasService.model._meta.database.atomic():
         API4ConversationService.delete_by_dialog_ids([agent_id])
         UserCanvasVersionService.model.delete().where(UserCanvasVersionService.model.user_canvas_id == agent_id).execute()

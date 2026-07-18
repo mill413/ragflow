@@ -11,6 +11,7 @@ jest.mock('@/locales/config', () => ({
         'message.resourceTypes.compilationTemplate': '知识编译模板',
         'message.resourceTypes.dataset': '知识库',
         'message.resourceTypes.agent': '智能体',
+        'message.resourceTypes.file': '文件',
         'message.resourceTypes.model': '模型',
         'message.resourceTypes.modelGroup': '模型组',
         'message.resourceTypes.workspace': '工作空间默认模型',
@@ -71,6 +72,34 @@ describe('formatResourceReferenceConflict', () => {
         data: { reason: 'server_error', references: [] },
       }),
     ).toBeUndefined();
+  });
+
+  it('describes the agent that prevents deleting a referenced file', () => {
+    const conflict = formatResourceReferenceConflict({
+      code: 409,
+      data: {
+        reason: 'resource_in_use',
+        targets: [
+          {
+            resource_type: 'file',
+            resource_id: 'file-1',
+            resource_name: 'manual.xlsx',
+          },
+        ],
+        references: [
+          {
+            resource_type: 'agent',
+            resource_id: 'agent-1',
+            resource_name: '报表助手',
+            target_resource_id: 'file-1',
+          },
+        ],
+      },
+    });
+
+    expect(conflict?.description).toBe(
+      '文件「manual.xlsx」 被以下资源引用：\n' + '• 智能体「报表助手」',
+    );
   });
 
   it('describes model references with the concrete referring resource', () => {

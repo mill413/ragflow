@@ -349,6 +349,13 @@ def _load_agents_app(monkeypatch, *, target="rest"):
     monkeypatch.setitem(sys.modules, "api.db.services.pipeline_operation_log_service", pipeline_log_service_mod)
     services_pkg.pipeline_operation_log_service = pipeline_log_service_mod
 
+    resource_reference_mod = ModuleType("api.db.services.resource_reference_service")
+    resource_reference_mod.ResourceReferenceService = SimpleNamespace(
+        ensure_not_referenced=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.resource_reference_service", resource_reference_mod)
+    services_pkg.resource_reference_service = resource_reference_mod
+
     task_service_mod = ModuleType("api.db.services.task_service")
     task_service_mod.CANVAS_DEBUG_DOC_ID = "debug-doc-id"
     task_service_mod.TaskService = type(

@@ -14,7 +14,7 @@
 #  limitations under the License.
 #
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from api.db import CanvasCategory
@@ -49,6 +49,8 @@ class ResourceReferenceService:
         "compilation_template": ("id", "name", "tenant_id"),
         "data_source": ("id", "name", "tenant_id"),
         "model": ("id", "name", "tenant_id"),
+        "file": ("id", "name", "tenant_id"),
+        "dataflow": ("id", "title", "user_id"),
     }
 
     @staticmethod
@@ -111,13 +113,23 @@ class ResourceReferenceService:
         return False
 
     @classmethod
-    def _canvas_references(cls, workspace_id: str, target_id: str, keys: set[str]) -> list[dict]:
+    def _canvas_references(
+        cls,
+        workspace_id: str,
+        target_id: str,
+        keys: set[str] | None = None,
+        extractor: Callable[[Any], set[str]] | None = None,
+    ) -> list[dict]:
         references: list[dict] = []
         canvases = list(UserCanvas.select(UserCanvas.id, UserCanvas.title, UserCanvas.canvas_category, UserCanvas.dsl).where(UserCanvas.user_id == workspace_id))
         canvas_by_id = {canvas.id: canvas for canvas in canvases}
 
+        def contains_reference(value: Any) -> bool:
+            identifiers = extractor(value) if extractor else cls._extract_ids(value, keys or set())
+            return target_id in identifiers
+
         for canvas in canvases:
-            if target_id in cls._extract_ids(canvas.dsl, keys):
+            if contains_reference(canvas.dsl):
                 resource_type = "agent" if canvas.canvas_category == CanvasCategory.Agent else "dataflow"
                 references.append(cls._reference(resource_type, canvas.id, canvas.title))
 
@@ -126,20 +138,18 @@ class ResourceReferenceService:
 
         canvas_ids = list(canvas_by_id)
 
-        released_versions = UserCanvasVersion.select(
+        versions = UserCanvasVersion.select(
             UserCanvasVersion.id,
             UserCanvasVersion.user_canvas_id,
             UserCanvasVersion.title,
             UserCanvasVersion.dsl,
-        ).where(
-            UserCanvasVersion.user_canvas_id.in_(canvas_ids),
-            UserCanvasVersion.release == True,  # noqa: E712
-        )
-        for version in released_versions:
-            if target_id in cls._extract_ids(version.dsl, keys):
+        ).where(UserCanvasVersion.user_canvas_id.in_(canvas_ids))
+        for version in versions:
+            if contains_reference(version.dsl):
                 canvas = canvas_by_id.get(version.user_canvas_id)
                 name = version.title or (canvas.title if canvas else "")
-                references.append(cls._reference("agent_version", version.id, name))
+                resource_type = "agent_version" if canvas and canvas.canvas_category == CanvasCategory.Agent else "dataflow_version"
+                references.append(cls._reference(resource_type, version.id, name))
 
         sessions = API4Conversation.select(
             API4Conversation.id,
@@ -148,10 +158,11 @@ class ResourceReferenceService:
             API4Conversation.dsl,
         ).where(API4Conversation.dialog_id.in_(canvas_ids))
         for session in sessions:
-            if target_id in cls._extract_ids(session.dsl, keys):
+            if contains_reference(session.dsl):
                 canvas = canvas_by_id.get(session.dialog_id)
                 name = session.name or (canvas.title if canvas else "")
-                references.append(cls._reference("agent_session", session.id, name))
+                resource_type = "agent_session" if canvas and canvas.canvas_category == CanvasCategory.Agent else "dataflow_session"
+                references.append(cls._reference(resource_type, session.id, name))
 
         return references
 
@@ -236,6 +247,47 @@ class ResourceReferenceService:
             Knowledgebase.status == StatusEnum.VALID.value,
         )
         return [cls._reference("dataset", dataset.id, dataset.name) for dataset in datasets]
+
+    @classmethod
+    def _file_references(cls, target: dict) -> list[dict]:
+        from api.db.services.workspace_service import WorkspaceAccessService
+
+        return cls._canvas_references(
+            target["workspace_id"],
+            target["resource_id"],
+            extractor=WorkspaceAccessService.extract_static_file_ids,
+        )
+
+    @classmethod
+    def _dataflow_references(cls, target: dict) -> list[dict]:
+        target_id = target["resource_id"]
+        workspace_id = target["workspace_id"]
+        references: list[dict] = []
+        datasets = list(
+            Knowledgebase.select(Knowledgebase.id, Knowledgebase.name, Knowledgebase.pipeline_id).where(
+                Knowledgebase.tenant_id == workspace_id,
+                Knowledgebase.status == StatusEnum.VALID.value,
+            )
+        )
+        references.extend(
+            cls._reference("dataset", dataset.id, dataset.name)
+            for dataset in datasets
+            if dataset.pipeline_id == target_id
+        )
+
+        dataset_by_id = {dataset.id: dataset for dataset in datasets}
+        if dataset_by_id:
+            documents = Document.select(Document.id, Document.name, Document.kb_id, Document.pipeline_id).where(
+                Document.kb_id.in_(list(dataset_by_id)),
+                Document.status == StatusEnum.VALID.value,
+            )
+            for document in documents:
+                if document.pipeline_id != target_id:
+                    continue
+                dataset = dataset_by_id.get(document.kb_id)
+                name = f"{dataset.name} / {document.name}" if dataset else document.name
+                references.append(cls._reference("document", document.id, name))
+        return references
 
     @classmethod
     def _model_references(cls, target: dict) -> list[dict]:
@@ -405,14 +457,12 @@ class ResourceReferenceService:
                 UserCanvasVersion.user_canvas_id,
                 UserCanvasVersion.title,
                 UserCanvasVersion.dsl,
-            ).where(
-                UserCanvasVersion.user_canvas_id.in_(canvas_ids),
-                UserCanvasVersion.release == True,  # noqa: E712
-            )
+            ).where(UserCanvasVersion.user_canvas_id.in_(canvas_ids))
             for version in versions:
                 canvas = canvas_by_id.get(version.user_canvas_id)
+                resource_type = "agent_version" if canvas and canvas.canvas_category == CanvasCategory.Agent else "dataflow_version"
                 add_if_referenced(
-                    "agent_version",
+                    resource_type,
                     version.id,
                     version.title or (canvas.title if canvas else ""),
                     version.dsl,
@@ -426,8 +476,9 @@ class ResourceReferenceService:
             ).where(API4Conversation.dialog_id.in_(canvas_ids))
             for session in sessions:
                 canvas = canvas_by_id.get(session.dialog_id)
+                resource_type = "agent_session" if canvas and canvas.canvas_category == CanvasCategory.Agent else "dataflow_session"
                 add_if_referenced(
-                    "agent_session",
+                    resource_type,
                     session.id,
                     session.name or (canvas.title if canvas else ""),
                     session.dsl,
@@ -487,6 +538,8 @@ class ResourceReferenceService:
             "compilation_template": cls._compilation_template_references,
             "data_source": cls._data_source_references,
             "model": cls._model_references,
+            "file": cls._file_references,
+            "dataflow": cls._dataflow_references,
         }
         references = finders[resource_type](target)
         unique_references = {(reference["resource_type"], reference["resource_id"]): reference for reference in references}

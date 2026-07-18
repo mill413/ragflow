@@ -23,6 +23,7 @@ from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.utils.file_utils import filename_type
 from common import settings
 from common.constants import FileSource
@@ -431,6 +432,7 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = "", workspac
 
     def _rm_sync():
         nonlocal success_count
+        deletion_roots = []
         for file_id in file_ids:
             e, file = FileService.get_by_id(file_id)
             if not e or not file:
@@ -452,6 +454,24 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = "", workspac
             if file.source_type == "skill_space":
                 continue
 
+            deletion_roots.append(file)
+
+        deletion_targets = {}
+
+        def collect_deletion_targets(file):
+            if file.id in deletion_targets:
+                return
+            deletion_targets[file.id] = file
+            if file.type != FileType.FOLDER.value:
+                return
+            for child in FileService.list_all_files_by_parent_id(file.id):
+                collect_deletion_targets(child)
+
+        for file in deletion_roots:
+            collect_deletion_targets(file)
+        ResourceReferenceService.ensure_not_referenced("file", list(deletion_targets.values()))
+
+        for file in deletion_roots:
             if file.type == FileType.FOLDER.value:
                 success_count += _delete_folder_recursive(file, uid)
                 continue

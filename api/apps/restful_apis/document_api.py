@@ -54,12 +54,14 @@ from api.utils.api_utils import (
     get_error_data_result,
     get_result,
     get_json_result,
+    get_resource_in_use_result,
     server_error_response,
     add_tenant_id_to_kwargs,
     get_request_json,
     get_error_argument_result,
     check_duplicate_ids,
 )
+from common.exceptions import ResourceInUseException
 from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.validation_utils import (
     UpdateDocumentReq,
@@ -1192,6 +1194,8 @@ async def delete_documents(tenant_id, dataset_id):
             return get_error_data_result(message=str(errors))
 
         return get_result(data={"deleted": len(doc_ids)})
+    except ResourceInUseException as e:
+        return get_resource_in_use_result(e)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")

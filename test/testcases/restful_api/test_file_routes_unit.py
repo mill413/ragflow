@@ -173,6 +173,11 @@ def _load_file_api_module(monkeypatch):
     api_utils_mod.get_error_data_result = lambda message: {"code": 500, "data": None, "message": message}
     api_utils_mod.get_result = lambda data=None: {"code": 0, "data": data, "message": ""}
     api_utils_mod.get_json_result = lambda code=0, message="success", data=None: {"code": code, "data": data, "message": message}
+    api_utils_mod.get_resource_in_use_result = lambda error: {
+        "code": 409,
+        "data": {"targets": error.targets, "references": error.references},
+        "message": str(error),
+    }
     monkeypatch.setitem(sys.modules, "api.utils.api_utils", api_utils_mod)
 
     validation_mod = ModuleType("api.utils.validation_utils")
@@ -803,6 +808,13 @@ def _load_file_api_service(monkeypatch):
     services_pkg.file_service = file_service_mod
     LOGGER.debug("_load_file_api_service: mocked api.db.services.file_service")
 
+    resource_reference_mod = ModuleType("api.db.services.resource_reference_service")
+    resource_reference_mod.ResourceReferenceService = SimpleNamespace(
+        ensure_not_referenced=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.resource_reference_service", resource_reference_mod)
+    services_pkg.resource_reference_service = resource_reference_mod
+
     file_utils_mod = ModuleType("api.utils.file_utils")
     file_utils_mod.filename_type = lambda _filename: _ServiceFileType.DOC.value
     monkeypatch.setitem(sys.modules, "api.utils.file_utils", file_utils_mod)
@@ -966,6 +978,33 @@ def test_delete_files_checks_write_permission(monkeypatch):
     ok, message = _run(module.delete_files("tenant1", ["file1"]))
     assert ok is False
     assert message == {"success_count": 0, "errors": ["No authorization for file file1"]}
+
+
+@pytest.mark.p2
+def test_delete_folder_checks_agent_references_for_all_descendants(monkeypatch):
+    module = _load_file_api_service(monkeypatch)
+    folder = _DummyFile("folder-1", module.FileType.FOLDER.value, name="folder")
+    child = _DummyFile("file-1", module.FileType.DOC.value, parent_id="folder-1")
+    monkeypatch.setattr(module.FileService, "get_by_id", lambda _file_id: (True, folder))
+    monkeypatch.setattr(
+        module.FileService,
+        "list_all_files_by_parent_id",
+        lambda parent_id: [child] if parent_id == "folder-1" else [],
+    )
+    checked = []
+    monkeypatch.setattr(
+        module.ResourceReferenceService,
+        "ensure_not_referenced",
+        lambda resource_type, resources: checked.append(
+            (resource_type, [resource.id for resource in resources])
+        ),
+    )
+
+    ok, result = _run(module.delete_files("tenant1", ["folder-1"]))
+
+    assert ok is True
+    assert result == {"success_count": 2}
+    assert checked == [("file", ["folder-1", "file-1"])]
 
 
 @pytest.mark.p2
