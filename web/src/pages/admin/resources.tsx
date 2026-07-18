@@ -68,7 +68,7 @@ import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
 
-type ResourceView = AdminService.ManagedResourceType | 'failures';
+type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
 type ResourceColumn = {
   key: string;
@@ -87,7 +87,6 @@ const RESOURCE_VIEWS: Array<{
   { type: 'agent', label: 'agent', icon: Bot },
   { type: 'memory', label: 'memory', icon: Brain },
   { type: 'file', label: 'file', icon: File },
-  { type: 'failures', label: 'failures', icon: AlertTriangle },
 ];
 
 const RESOURCE_VIEW_ROUTES: Record<string, ResourceView> = {
@@ -97,7 +96,6 @@ const RESOURCE_VIEW_ROUTES: Record<string, ResourceView> = {
   agents: 'agent',
   memories: 'memory',
   files: 'file',
-  failures: 'failures',
 };
 
 function sortRows<T>(rows: T[], sort: SortState): T[] {
@@ -122,6 +120,8 @@ export default function AdminResources() {
   const deferredKeywords = useDeferredValue(keywords);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [failurePage, setFailurePage] = useState(1);
+  const [failurePageSize, setFailurePageSize] = useState(20);
   const [resourceSort, setResourceSort] = useState<SortState>({
     key: 'update_date',
     direction: 'desc',
@@ -131,10 +131,11 @@ export default function AdminResources() {
     direction: 'desc',
   });
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
-  const resourceType = view === 'failures' ? undefined : view;
+  const resourceType = view;
 
   useEffect(() => {
     setPage(1);
+    setFailurePage(1);
   }, [view]);
 
   const { data: summary } = useQuery({
@@ -163,16 +164,21 @@ export default function AdminResources() {
     enabled: Boolean(resourceType),
   });
   const { data: failureData, isFetching: failuresFetching } = useQuery({
-    queryKey: ['admin/resources/failures', page, pageSize, deferredKeywords],
+    queryKey: [
+      'admin/resources/failures',
+      failurePage,
+      failurePageSize,
+      deferredKeywords,
+    ],
     queryFn: async () =>
       (
         await listFailedDocuments({
-          page,
-          pageSize,
+          page: failurePage,
+          pageSize: failurePageSize,
           keywords: deferredKeywords,
         })
       ).data.data,
-    enabled: view === 'failures',
+    enabled: view === 'dataset',
   });
 
   const deleteMutation = useMutation({
@@ -396,16 +402,13 @@ export default function AdminResources() {
       : [
           {
             label: t('admin.resourceManagementPage.total'),
-            value:
-              view === 'failures'
-                ? (failureData?.total ?? 0)
-                : (resourceData?.total ?? 0),
+            value: resourceData?.total ?? 0,
             icon:
               RESOURCE_VIEWS.find(({ type }) => type === view)?.icon ?? Library,
           },
         ];
-  const total = view === 'failures' ? failureData?.total : resourceData?.total;
-  const isFetching = view === 'failures' ? failuresFetching : resourcesFetching;
+  const total = resourceData?.total;
+  const isFetching = resourcesFetching;
   const currentView = RESOURCE_VIEWS.find(({ type }) => type === view);
 
   if (!view || !currentView) {
@@ -435,12 +438,9 @@ export default function AdminResources() {
                   onChange={(event) => {
                     setKeywords(event.target.value);
                     setPage(1);
+                    setFailurePage(1);
                   }}
-                  placeholder={t(
-                    view === 'failures'
-                      ? 'admin.knowledgeMonitoring.search'
-                      : 'admin.resourceManagementPage.search',
-                  )}
+                  placeholder={t('admin.resourceManagementPage.search')}
                 />
               </div>
             </div>
@@ -469,236 +469,131 @@ export default function AdminResources() {
 
           <CardContent className="space-y-4">
             <div className="overflow-x-auto">
-              {view !== 'failures' ? (
-                <Table className="min-w-[1080px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
+              <Table className="min-w-[1080px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      {sortButton(
+                        t('admin.name'),
+                        resourceSort,
+                        setResourceSort,
+                        'name',
+                      )}
+                    </TableHead>
+                    <TableHead>
+                      {sortButton(
+                        t('admin.workspaceOwner'),
+                        resourceSort,
+                        setResourceSort,
+                        'workspace_name',
+                      )}
+                    </TableHead>
+                    {resourceColumns.map((column) => (
+                      <TableHead key={column.key}>
                         {sortButton(
-                          t('admin.name'),
+                          column.label,
                           resourceSort,
                           setResourceSort,
-                          'name',
+                          column.key,
                         )}
                       </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.workspaceOwner'),
-                          resourceSort,
-                          setResourceSort,
-                          'workspace_name',
-                        )}
-                      </TableHead>
-                      {resourceColumns.map((column) => (
-                        <TableHead key={column.key}>
-                          {sortButton(
-                            column.label,
-                            resourceSort,
-                            setResourceSort,
-                            column.key,
-                          )}
-                        </TableHead>
-                      ))}
-                      <TableHead>
-                        {sortButton(
-                          t('admin.createTime'),
-                          resourceSort,
-                          setResourceSort,
-                          'create_date',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.lastUpdateTime'),
-                          resourceSort,
-                          setResourceSort,
-                          'update_date',
-                        )}
-                      </TableHead>
-                      <TableHead className="text-center">
-                        {t('admin.operation')}
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                    {sortedResources.length ? (
-                      sortedResources.map((resource) => (
-                        <TableRow key={resource.id}>
-                          <TableCell>
-                            <div className="font-medium">
-                              {resource.name || t('admin.unnamedResource')}
-                            </div>
-                            <div className="max-w-48 truncate text-xs text-text-secondary">
-                              {resource.id}
-                            </div>
+                    ))}
+                    <TableHead>
+                      {sortButton(
+                        t('admin.createTime'),
+                        resourceSort,
+                        setResourceSort,
+                        'create_date',
+                      )}
+                    </TableHead>
+                    <TableHead>
+                      {sortButton(
+                        t('admin.lastUpdateTime'),
+                        resourceSort,
+                        setResourceSort,
+                        'update_date',
+                      )}
+                    </TableHead>
+                    <TableHead className="text-center">
+                      {t('admin.operation')}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className={isFetching ? 'opacity-60' : undefined}>
+                  {sortedResources.length ? (
+                    sortedResources.map((resource) => (
+                      <TableRow key={resource.id}>
+                        <TableCell>
+                          <div className="font-medium">
+                            {resource.name || t('admin.unnamedResource')}
+                          </div>
+                          <div className="max-w-48 truncate text-xs text-text-secondary">
+                            {resource.id}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {t(
+                              resource.workspace_type === 'team'
+                                ? 'admin.teamWorkspace'
+                                : 'admin.personalWorkspace',
+                            )}
+                            -{resource.workspace_name}
+                          </Badge>
+                        </TableCell>
+                        {resourceColumns.map((column) => (
+                          <TableCell key={column.key}>
+                            {column.render(resource)}
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
+                        ))}
+                        <TableCell>
+                          {formatDate(resource.create_date) || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {formatDate(resource.update_date) || '-'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  disabled={!resource.deletable}
+                                  aria-label={t(
+                                    'admin.resourceManagementPage.deleteAction',
+                                    { name: resource.name },
+                                  )}
+                                  onClick={() => setDeleting(resource)}
+                                >
+                                  <Trash2 className="size-4" />
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
                               {t(
-                                resource.workspace_type === 'team'
-                                  ? 'admin.teamWorkspace'
-                                  : 'admin.personalWorkspace',
+                                resource.deletable
+                                  ? 'admin.resourceManagementPage.deleteAction'
+                                  : 'admin.resourceManagementPage.managedBySource',
+                                { name: resource.name },
                               )}
-                              -{resource.workspace_name}
-                            </Badge>
-                          </TableCell>
-                          {resourceColumns.map((column) => (
-                            <TableCell key={column.key}>
-                              {column.render(resource)}
-                            </TableCell>
-                          ))}
-                          <TableCell>
-                            {formatDate(resource.create_date) || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {formatDate(resource.update_date) || '-'}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="inline-flex">
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    disabled={!resource.deletable}
-                                    aria-label={t(
-                                      'admin.resourceManagementPage.deleteAction',
-                                      { name: resource.name },
-                                    )}
-                                    onClick={() => setDeleting(resource)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {t(
-                                  resource.deletable
-                                    ? 'admin.resourceManagementPage.deleteAction'
-                                    : 'admin.resourceManagementPage.managedBySource',
-                                  { name: resource.name },
-                                )}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={resourceColumns.length + 5}
-                          className="h-40 text-center text-text-secondary"
-                        >
-                          {t('common.noData')}
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              ) : (
-                <Table className="min-w-[980px]">
-                  <TableHeader>
+                    ))
+                  ) : (
                     <TableRow>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.knowledgeMonitoring.fileName'),
-                          failureSort,
-                          setFailureSort,
-                          'name',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.knowledgeMonitoring.dataset'),
-                          failureSort,
-                          setFailureSort,
-                          'dataset_name',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.workspaceOwner'),
-                          failureSort,
-                          setFailureSort,
-                          'workspace_name',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.knowledgeMonitoring.fileSize'),
-                          failureSort,
-                          setFailureSort,
-                          'size',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.knowledgeMonitoring.failureReason'),
-                          failureSort,
-                          setFailureSort,
-                          'failure_reason',
-                        )}
-                      </TableHead>
-                      <TableHead>
-                        {sortButton(
-                          t('admin.createTime'),
-                          failureSort,
-                          setFailureSort,
-                          'create_date',
-                        )}
-                      </TableHead>
+                      <TableCell
+                        colSpan={resourceColumns.length + 5}
+                        className="h-40 text-center text-text-secondary"
+                      >
+                        {t('common.noData')}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                    {sortedFailures.length ? (
-                      sortedFailures.map((document) => (
-                        <TableRow key={document.id}>
-                          <TableCell>
-                            <div className="font-medium">{document.name}</div>
-                            <div className="max-w-48 truncate text-xs text-text-secondary">
-                              {document.id}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>{document.dataset_name}</div>
-                            <div className="max-w-48 truncate text-xs text-text-secondary">
-                              {document.dataset_id}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {t(
-                                document.workspace_type === 'team'
-                                  ? 'admin.teamWorkspace'
-                                  : 'admin.personalWorkspace',
-                              )}
-                              -{document.workspace_name}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {formatBytes(document.size ?? 0, { decimals: 1 })}
-                          </TableCell>
-                          <TableCell className="max-w-md whitespace-normal text-state-error">
-                            {document.failure_reason || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {formatDate(document.create_date) || '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell
-                          colSpan={6}
-                          className="h-40 text-center text-text-secondary"
-                        >
-                          {t('common.noData')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
+                  )}
+                </TableBody>
+              </Table>
             </div>
 
             <RAGFlowPagination
@@ -710,6 +605,134 @@ export default function AdminResources() {
                 setPageSize(nextPageSize);
               }}
             />
+
+            {view === 'dataset' && (
+              <section className="space-y-4 border-t border-border-button pt-6">
+                <div>
+                  <h3 className="text-base font-semibold">
+                    {t('admin.resourceManagementPage.failures')}
+                  </h3>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    {t('admin.resourceManagementPage.failureDescription')}
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[980px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.knowledgeMonitoring.fileName'),
+                            failureSort,
+                            setFailureSort,
+                            'name',
+                          )}
+                        </TableHead>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.knowledgeMonitoring.dataset'),
+                            failureSort,
+                            setFailureSort,
+                            'dataset_name',
+                          )}
+                        </TableHead>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.workspaceOwner'),
+                            failureSort,
+                            setFailureSort,
+                            'workspace_name',
+                          )}
+                        </TableHead>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.knowledgeMonitoring.fileSize'),
+                            failureSort,
+                            setFailureSort,
+                            'size',
+                          )}
+                        </TableHead>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.knowledgeMonitoring.failureReason'),
+                            failureSort,
+                            setFailureSort,
+                            'failure_reason',
+                          )}
+                        </TableHead>
+                        <TableHead>
+                          {sortButton(
+                            t('admin.createTime'),
+                            failureSort,
+                            setFailureSort,
+                            'create_date',
+                          )}
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody
+                      className={failuresFetching ? 'opacity-60' : undefined}
+                    >
+                      {sortedFailures.length ? (
+                        sortedFailures.map((document) => (
+                          <TableRow key={document.id}>
+                            <TableCell>
+                              <div className="font-medium">{document.name}</div>
+                              <div className="max-w-48 truncate text-xs text-text-secondary">
+                                {document.id}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>{document.dataset_name}</div>
+                              <div className="max-w-48 truncate text-xs text-text-secondary">
+                                {document.dataset_id}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {t(
+                                  document.workspace_type === 'team'
+                                    ? 'admin.teamWorkspace'
+                                    : 'admin.personalWorkspace',
+                                )}
+                                -{document.workspace_name}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {formatBytes(document.size ?? 0, { decimals: 1 })}
+                            </TableCell>
+                            <TableCell className="max-w-md whitespace-normal text-state-error">
+                              {document.failure_reason || '-'}
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(document.create_date) || '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="h-32 text-center text-text-secondary"
+                          >
+                            {t('common.noData')}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <RAGFlowPagination
+                  total={failureData?.total ?? 0}
+                  current={failurePage}
+                  pageSize={failurePageSize}
+                  onChange={(nextPage, nextPageSize) => {
+                    setFailurePage(nextPage);
+                    setFailurePageSize(nextPageSize);
+                  }}
+                />
+              </section>
+            )}
           </CardContent>
         </ScrollArea>
 

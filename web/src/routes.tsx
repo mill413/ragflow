@@ -82,7 +82,6 @@ export enum Routes {
   AdminAgentManagement = `${AdminResourceManagement}/agents`,
   AdminMemoryManagement = `${AdminResourceManagement}/memories`,
   AdminFileManagement = `${AdminResourceManagement}/files`,
-  AdminParseFailureManagement = `${AdminResourceManagement}/failures`,
   AdminModelManagement = `${Admin}/models`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,

@@ -3504,6 +3504,8 @@ Important structured information may include: names, dates, locations, events, k
         memory: 'Memory management',
         file: 'File management',
         failures: 'Parse failures',
+        failureDescription:
+          'View files that failed to parse in datasets and their failure reasons.',
         sessions: 'Sessions',
         referencedDatasets: 'Datasets',
         referencedDocuments: 'Selected files',

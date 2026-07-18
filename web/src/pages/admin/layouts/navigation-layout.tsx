@@ -23,7 +23,6 @@ import {
   LucideUserStar,
   LucideUsersRound,
   LucideZap,
-  LucideTriangleAlert,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -116,11 +115,6 @@ const AdminNavigationLayout = () => {
             path: Routes.AdminFileManagement,
             name: t('admin.resourceManagementPage.file'),
             icon: <LucideFile className="size-[1em]" />,
-          },
-          {
-            path: Routes.AdminParseFailureManagement,
-            name: t('admin.resourceManagementPage.failures'),
-            icon: <LucideTriangleAlert className="size-[1em]" />,
           },
         ],
       },
