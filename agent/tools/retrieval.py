@@ -25,7 +25,7 @@ from api.db.services.doc_metadata_service import DocMetadataService
 from common.metadata_utils import apply_meta_data_filter
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.llm_service import LLMBundle
-from api.db.services.memory_service import MemoryService
+from api.db.services.agent_reference_service import AgentReferenceService
 from api.db.joint_services import memory_message_service
 from api.db.joint_services.tenant_model_service import get_tenant_default_model_by_type, resolve_model_config
 from common import settings
@@ -268,11 +268,9 @@ class Retrieval(ToolBase, ABC):
         return form_cnt
 
     async def _retrieve_memory(self, query_text: str):
-        memory_ids: list[str] = [memory_id for memory_id in self._param.memory_ids]
+        memory_ids = AgentReferenceService.normalize_ids(self._param.memory_ids)
         user_id: str = self._param.user_id if hasattr(self._param, "user_id") else None
-        memory_list = MemoryService.get_by_ids(memory_ids)
-        if not memory_list:
-            raise Exception("No memory is selected.")
+        memory_list = AgentReferenceService.require_memories(self._canvas.get_tenant_id(), memory_ids)
 
         embd_names = list({memory.embd_id for memory in memory_list})
         assert len(embd_names) == 1, "Memory use different embedding models."

@@ -36,6 +36,7 @@ from api.db import FileType
 from api.db.joint_services.tenant_model_service import resolve_model_config, resolve_model_type
 from api.db.services import duplicate_name
 from api.db.services.file_service import FileService
+from api.db.services.agent_reference_service import AgentReferenceService
 from api.utils.file_utils import filename_type
 from common import settings
 from common.connection_utils import timeout
@@ -542,8 +543,9 @@ class Browser(ComponentBase, ABC):
                 continue
 
             file_id = file_ref
-            exists, file = FileService.get_by_id(file_id)
-            if not exists:
+            try:
+                file = AgentReferenceService.require_managed_file(self._canvas.get_tenant_id(), file_id)
+            except FileNotFoundError:
                 logging.warning("Browser upload file_id not found: %s", file_id)
                 continue
             try:
@@ -579,9 +581,9 @@ class Browser(ComponentBase, ABC):
     def _save_downloads(self, download_dir: str, parent_id: str) -> list[dict[str, Any]]:
         downloaded_files: list[dict[str, Any]] = []
         exists, folder = FileService.get_by_id(parent_id)
-        if not exists or folder.type != FileType.FOLDER.value:
-            raise ValueError(f"RAGFlow target folder does not exist or is not a folder: {parent_id}")
         tenant_id = self._canvas.get_tenant_id()
+        if not exists or folder.type != FileType.FOLDER.value or folder.tenant_id != tenant_id:
+            raise ValueError(f"RAGFlow target folder does not exist or is not a folder: {parent_id}")
         storage_put = settings.STORAGE_IMPL.put
         storage_rm = getattr(settings.STORAGE_IMPL, "rm", None)
         insert_file = FileService.insert

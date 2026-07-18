@@ -41,6 +41,7 @@ from common.misc_utils import get_uuid
 from common import settings
 
 from api.db.joint_services.memory_message_service import queue_save_to_memory_task
+from api.db.services.agent_reference_service import AgentReferenceService
 
 
 class MessageParam(ComponentParamBase):
@@ -562,6 +563,9 @@ class Message(ComponentBase):
         if not hasattr(self._param, "memory_ids") or not self._param.memory_ids:
             return True, "No memory selected."
 
+        memory_ids = AgentReferenceService.normalize_ids(self._param.memory_ids)
+        AgentReferenceService.require_memories(self._canvas.get_tenant_id(), memory_ids)
+
         user_id = self._param.user_id if hasattr(self._param, "user_id") else ""
         if user_id:
             import re
@@ -571,4 +575,4 @@ class Message(ComponentBase):
                 user_id = self._canvas.get_variable_value(user_id)
 
         message_dict = {"user_id": user_id, "agent_id": self._canvas._id, "session_id": self._canvas.task_id, "user_input": self._canvas.get_sys_query(), "agent_response": content}
-        return await queue_save_to_memory_task(self._param.memory_ids, message_dict)
+        return await queue_save_to_memory_task(memory_ids, message_dict)

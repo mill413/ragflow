@@ -1428,6 +1428,11 @@ class _FakeRequestFiles:
 def test_agent_file_download_and_upload_unit(monkeypatch):
     module = _load_agent_api_module(monkeypatch)
     monkeypatch.setattr(module, "Response", _StubResponse)
+    monkeypatch.setattr(
+        module.UserCanvasService,
+        "get_by_id",
+        lambda _agent_id: (True, SimpleNamespace(id="agent-1", user_id="team-1")),
+    )
 
     get_blob_calls = []
 
@@ -1461,12 +1466,12 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] == 0
     assert res["data"]["file"] == "one.png"
-    assert upload_calls == [("tenant-1", "one.png", "https://example.com/a.png")]
+    assert upload_calls == [("team-1", "one.png", "https://example.com/a.png")]
 
     monkeypatch.setattr(
         module,
@@ -1480,14 +1485,14 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] == 0
     assert len(res["data"]) == 2
     assert set(upload_calls) == {
-        ("tenant-1", "a.png", None),
-        ("tenant-1", "b.png", None),
+        ("team-1", "a.png", None),
+        ("team-1", "b.png", None),
     }
 
     def _boom(*_a, **_k):
@@ -1505,7 +1510,7 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] != 0

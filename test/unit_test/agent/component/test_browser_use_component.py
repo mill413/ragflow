@@ -19,6 +19,8 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from api.db import FileType
 
 
@@ -186,6 +188,29 @@ def test_prepare_upload_files_supports_http_url(monkeypatch, tmp_path):
     assert Path(prepared[0]["local_path"]).read_bytes() == b"hello from url"
 
 
+def test_prepare_upload_files_rejects_file_from_another_workspace(monkeypatch, tmp_path):
+    component = _build_component()
+    component._param.upload_sources = "file-1"
+    monkeypatch.setattr(
+        browser_use_module.FileService,
+        "get_by_id",
+        lambda _file_id: (
+            True,
+            SimpleNamespace(
+                id="file-1",
+                tenant_id="tenant-2",
+                parent_id="folder-2",
+                location="secret.xlsx",
+                name="secret.xlsx",
+                size=10,
+            ),
+        ),
+    )
+
+    with pytest.raises(PermissionError, match="same workspace"):
+        component._prepare_upload_files(str(tmp_path))
+
+
 def test_save_downloads_persists_file_records(monkeypatch, tmp_path):
     component = _build_component()
     component._canvas = _FakeCanvas()
@@ -196,7 +221,10 @@ def test_save_downloads_persists_file_records(monkeypatch, tmp_path):
     monkeypatch.setattr(
         browser_use_module.FileService,
         "get_by_id",
-        lambda _folder_id: (True, SimpleNamespace(type=FileType.FOLDER.value)),
+        lambda _folder_id: (
+            True,
+            SimpleNamespace(type=FileType.FOLDER.value, tenant_id="tenant-1"),
+        ),
     )
     monkeypatch.setattr(browser_use_module, "duplicate_name", lambda *_args, **_kwargs: "report.txt")
 

@@ -834,9 +834,11 @@ class FileService(CommonService):
         return structured(file.filename, filename_type(file.filename), file.read(), file.content_type)
 
     @staticmethod
-    def get_files(files: Union[None, list[dict]], raw: bool = False, layout_recognize: str = None) -> Union[list[str], tuple[list[str], list[dict]]]:
+    def get_files(files: Union[None, list[dict]], raw: bool = False, layout_recognize: str = None, tenant_id: str = None) -> Union[list[str], tuple[list[str], list[dict]]]:
         if not files:
             return []
+        if tenant_id and any(not isinstance(file, dict) or not file.get("id") or file.get("created_by") != tenant_id for file in files):
+            raise PermissionError("Files can only be read from the same workspace.")
 
         def image_to_base64(file):
             return "data:{};base64,{}".format(file["mime_type"], base64.b64encode(FileService.get_blob(file["created_by"], file["id"])).decode("utf-8"))

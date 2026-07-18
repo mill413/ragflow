@@ -338,6 +338,45 @@ def test_connector_mcp_and_compilation_references_must_stay_in_workspace(workspa
     assert not WorkspaceAccessService.can_reference_compilation_template_groups("member-1", "team-1", ["personal-group"])
 
 
+def test_memory_and_static_file_references_must_stay_in_workspace(workspace_dependencies, monkeypatch):
+    memories = {
+        "team-memory": SimpleNamespace(id="team-memory", tenant_id="team-1"),
+        "personal-memory": SimpleNamespace(id="personal-memory", tenant_id="user-1"),
+    }
+    files = {
+        "team-file": SimpleNamespace(id="team-file", tenant_id="team-1"),
+        "personal-file": SimpleNamespace(id="personal-file", tenant_id="user-1"),
+    }
+    monkeypatch.setattr(WorkspaceAccessService, "list_visible_workspace_ids", classmethod(lambda cls, user_id: ["team-1"]))
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.Memory.get_or_none",
+        lambda *_args, **kwargs: memories.get(kwargs.get("id")),
+    )
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.File.get_or_none",
+        lambda *_args, **kwargs: files.get(kwargs.get("id")),
+    )
+
+    dsl = {
+        "components": [
+            {"params": {"memory_ids": ["team-memory"]}},
+            {
+                "params": {
+                    "upload_sources": "team-file,https://example.com/a,b.pdf,{Begin@files}",
+                    "input_files": ["{Begin@excel}", {"file_id": "team-file"}],
+                }
+            },
+        ]
+    }
+
+    assert WorkspaceAccessService.extract_reference_ids(dsl, {"memory_id", "memory_ids"}) == {"team-memory"}
+    assert WorkspaceAccessService.extract_static_file_ids(dsl) == {"team-file"}
+    assert WorkspaceAccessService.can_reference_memories("member-1", "team-1", ["team-memory"])
+    assert not WorkspaceAccessService.can_reference_memories("member-1", "team-1", ["personal-memory"])
+    assert WorkspaceAccessService.can_reference_files("member-1", "team-1", ["team-file"])
+    assert not WorkspaceAccessService.can_reference_files("member-1", "team-1", ["personal-file"])
+
+
 def test_team_conversations_are_shared_and_managed_by_team_administrators(workspace_dependencies):
     team_chat = {"id": "chat-1", "tenant_id": "team-1", "status": StatusEnum.VALID.value}
     member_conversation = {"id": "conv-1", "dialog_id": "chat-1", "user_id": "member-1"}

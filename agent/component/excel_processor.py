@@ -29,6 +29,7 @@ from io import BytesIO
 import pandas as pd
 
 from agent.component.base import ComponentBase, ComponentParamBase
+from api.db.services.agent_reference_service import AgentReferenceService
 from api.db.services.file_service import FileService
 from api.utils.api_utils import timeout
 from common import settings
@@ -110,12 +111,12 @@ class ExcelProcessor(ComponentBase, ABC):
         else:
             self.set_output("summary", f"Unknown operation: {operation}")
 
-    def _get_file_content(self, file_ref: str) -> tuple[bytes, str]:
+    def _get_file_content(self, file_ref) -> tuple[bytes, str]:
         """
         Get file content from a variable reference.
         Returns (content_bytes, filename).
         """
-        value = self._canvas.get_variable_value(file_ref)
+        value = file_ref if isinstance(file_ref, (dict, list)) else self._canvas.get_variable_value(file_ref)
         if value is None:
             return None, None
 
@@ -123,14 +124,20 @@ class ExcelProcessor(ComponentBase, ABC):
         if isinstance(value, dict):
             # File reference from Begin/UserFillUp component
             file_id = value.get("id") or value.get("file_id")
-            created_by = value.get("created_by") or self._canvas.get_tenant_id()
             filename = value.get("name") or value.get("filename", "unknown.xlsx")
             if file_id:
-                content = FileService.get_blob(created_by, file_id)
+                workspace_id = self._canvas.get_tenant_id()
+                try:
+                    stored_file = AgentReferenceService.require_managed_file(workspace_id, file_id)
+                    content = settings.STORAGE_IMPL.get(stored_file.parent_id, stored_file.location)
+                    return content, stored_file.name or filename
+                except FileNotFoundError:
+                    upload_id = AgentReferenceService.require_upload_descriptor(workspace_id, value)
+                content = FileService.get_blob(workspace_id, upload_id)
                 return content, filename
         elif isinstance(value, list) and len(value) > 0:
             # List of file references - return first
-            return self._get_file_content_from_list(value[0])
+            return self._get_file_content(value[0])
         elif isinstance(value, str):
             # Could be base64 encoded or a path
             if value.startswith("data:"):
@@ -140,12 +147,6 @@ class ExcelProcessor(ComponentBase, ABC):
                 _, encoded = value.split(",", 1)
                 return base64.b64decode(encoded), "uploaded.xlsx"
 
-        return None, None
-
-    def _get_file_content_from_list(self, item) -> tuple[bytes, str]:
-        """Extract file content from a list item."""
-        if isinstance(item, dict):
-            return self._get_file_content(item)
         return None, None
 
     def _parse_excel_to_dataframes(self, content: bytes, filename: str) -> dict[str, pd.DataFrame]:

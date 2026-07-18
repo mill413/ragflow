@@ -90,6 +90,32 @@ def _canvas_json_default(obj):
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _validate_agent_workspace_references(user_id: str, workspace_id: str, dsl: dict) -> str | None:
+    knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(dsl)
+    if not WorkspaceAccessService.can_reference_knowledgebases(user_id, workspace_id, knowledgebase_ids):
+        return "Agents can only reference datasets from the same workspace."
+
+    memory_ids = WorkspaceAccessService.extract_reference_ids(dsl, {"memory_id", "memory_ids"})
+    if not WorkspaceAccessService.can_reference_memories(user_id, workspace_id, memory_ids):
+        return "Agents can only reference memories from the same workspace."
+
+    mcp_ids = WorkspaceAccessService.extract_reference_ids(dsl, {"mcp_id", "mcp_ids"})
+    if not WorkspaceAccessService.can_reference_mcp_servers(user_id, workspace_id, mcp_ids):
+        return "Agents can only reference MCP servers from the same workspace."
+
+    compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
+        dsl,
+        {"compilation_template_group_id", "compilation_template_group_ids"},
+    )
+    if not WorkspaceAccessService.can_reference_compilation_template_groups(user_id, workspace_id, compilation_group_ids):
+        return "Agents can only reference compilation templates from the same workspace."
+
+    file_ids = WorkspaceAccessService.extract_static_file_ids(dsl)
+    if not WorkspaceAccessService.can_reference_files(user_id, workspace_id, file_ids):
+        return "Agents can only reference files from the same workspace."
+    return None
+
+
 def _require_canvas_access_sync(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -870,28 +896,11 @@ async def create_agent(tenant_id):
             message=str(exc),
             code=RetCode.ARGUMENT_ERROR,
         )
-    knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(req["dsl"])
-    if not WorkspaceAccessService.can_reference_knowledgebases(tenant_id, workspace_id, knowledgebase_ids):
+    reference_error = _validate_agent_workspace_references(tenant_id, workspace_id, req["dsl"])
+    if reference_error:
         return get_json_result(
             data=False,
-            message="Agents can only reference datasets from the same workspace.",
-            code=RetCode.OPERATING_ERROR,
-        )
-    mcp_ids = WorkspaceAccessService.extract_reference_ids(req["dsl"], {"mcp_id"})
-    if not WorkspaceAccessService.can_reference_mcp_servers(tenant_id, workspace_id, mcp_ids):
-        return get_json_result(
-            data=False,
-            message="Agents can only reference MCP servers from the same workspace.",
-            code=RetCode.OPERATING_ERROR,
-        )
-    compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
-        req["dsl"],
-        {"compilation_template_group_id", "compilation_template_group_ids"},
-    )
-    if not WorkspaceAccessService.can_reference_compilation_template_groups(tenant_id, workspace_id, compilation_group_ids):
-        return get_json_result(
-            data=False,
-            message="Agents can only reference compilation templates from the same workspace.",
+            message=reference_error,
             code=RetCode.OPERATING_ERROR,
         )
 
@@ -943,21 +952,27 @@ async def create_agent(tenant_id):
 async def upload_agent_file(agent_id, tenant_id):
     files = await request.files
     file_objs = files.getlist("file") if files and files.get("file") else []
+    exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    if not exists:
+        return get_data_error_result(message="Agent not found.")
+    workspace_id = agent.user_id
     logging.info(
-        "Agent file upload requested: tenant_id=%s agent_id=%s file_count=%s",
+        "Agent file upload requested: workspace_id=%s actor_id=%s agent_id=%s file_count=%s",
+        workspace_id,
         tenant_id,
         agent_id,
         len(file_objs),
     )
     try:
         if len(file_objs) == 1:
-            uploaded = await thread_pool_exec(FileService.upload_info, tenant_id, file_objs[0], request.args.get("url"))
+            uploaded = await thread_pool_exec(FileService.upload_info, workspace_id, file_objs[0], request.args.get("url"))
             return get_json_result(data=uploaded)
-        results = await asyncio.gather(*(thread_pool_exec(FileService.upload_info, tenant_id, file_obj) for file_obj in file_objs))
+        results = await asyncio.gather(*(thread_pool_exec(FileService.upload_info, workspace_id, file_obj) for file_obj in file_objs))
         return get_json_result(data=results)
     except Exception as exc:
         logging.exception(
-            "Agent file upload failed: tenant_id=%s agent_id=%s",
+            "Agent file upload failed: workspace_id=%s actor_id=%s agent_id=%s",
+            workspace_id,
             tenant_id,
             agent_id,
         )
@@ -1149,28 +1164,11 @@ async def update_agent(agent_id, tenant_id):
     _, current_agent = UserCanvasService.get_by_id(agent_id)
     workspace_id = current_agent.user_id if current_agent else tenant_id
     if req.get("dsl") is not None:
-        knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(req["dsl"])
-        if not WorkspaceAccessService.can_reference_knowledgebases(tenant_id, workspace_id, knowledgebase_ids):
+        reference_error = _validate_agent_workspace_references(tenant_id, workspace_id, req["dsl"])
+        if reference_error:
             return get_json_result(
                 data=False,
-                message="Agents can only reference datasets from the same workspace.",
-                code=RetCode.OPERATING_ERROR,
-            )
-        mcp_ids = WorkspaceAccessService.extract_reference_ids(req["dsl"], {"mcp_id"})
-        if not WorkspaceAccessService.can_reference_mcp_servers(tenant_id, workspace_id, mcp_ids):
-            return get_json_result(
-                data=False,
-                message="Agents can only reference MCP servers from the same workspace.",
-                code=RetCode.OPERATING_ERROR,
-            )
-        compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
-            req["dsl"],
-            {"compilation_template_group_id", "compilation_template_group_ids"},
-        )
-        if not WorkspaceAccessService.can_reference_compilation_template_groups(tenant_id, workspace_id, compilation_group_ids):
-            return get_json_result(
-                data=False,
-                message="Agents can only reference compilation templates from the same workspace.",
+                message=reference_error,
                 code=RetCode.OPERATING_ERROR,
             )
     if req.get("title") is not None:

@@ -16,7 +16,9 @@
 
 from collections.abc import Mapping
 import hashlib
+import json
 from typing import Any
+from urllib.parse import urlparse
 
 from quart import g, has_request_context
 
@@ -394,6 +396,22 @@ class WorkspaceAccessService:
         return True
 
     @classmethod
+    def can_reference_memories(cls, user_id: str, workspace_id: str, memory_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for memory_id in set(memory_ids or []):
+            memory = Memory.get_or_none(id=memory_id)
+            if not memory or memory.tenant_id != workspace_id or not cls.can_read_workspace_resource(user_id, memory):
+                return False
+        return True
+
+    @classmethod
+    def can_reference_files(cls, user_id: str, workspace_id: str, file_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for file_id in set(file_ids or []):
+            file = File.get_or_none(id=file_id)
+            if not file or file.tenant_id != workspace_id or not cls.can_read_workspace_resource(user_id, file):
+                return False
+        return True
+
+    @classmethod
     def can_reference_compilation_template_groups(cls, user_id: str, workspace_id: str, group_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
         for group_id in set(group_ids or []):
             group = CompilationTemplateGroup.get_or_none(
@@ -531,6 +549,59 @@ class WorkspaceAccessService:
 
         visit(value)
         return reference_ids
+
+    @classmethod
+    def extract_static_file_ids(cls, value: Any) -> set[str]:
+        file_ids: set[str] = set()
+
+        def is_http_url(token: str) -> bool:
+            parsed = urlparse(token)
+            return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+        def collect(item: Any) -> None:
+            if item is None:
+                return
+            if isinstance(item, str):
+                token = item.strip()
+                if not token or "@" in token or is_http_url(token):
+                    return
+                if token.startswith("[") and token.endswith("]"):
+                    try:
+                        collect(json.loads(token))
+                        return
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        pass
+                if "," in token:
+                    for part in token.split(","):
+                        collect(part)
+                    return
+                file_ids.add(token)
+                return
+            if isinstance(item, Mapping):
+                for key in ("file_id", "id"):
+                    if key in item:
+                        collect(item[key])
+                        return
+                for nested in item.values():
+                    collect(nested)
+                return
+            if isinstance(item, (list, tuple, set)):
+                for nested in item:
+                    collect(nested)
+
+        def visit(item: Any) -> None:
+            if isinstance(item, Mapping):
+                for key, nested in item.items():
+                    if key in {"upload_sources", "input_files"}:
+                        collect(nested)
+                    else:
+                        visit(nested)
+            elif isinstance(item, (list, tuple, set)):
+                for nested in item:
+                    visit(nested)
+
+        visit(value)
+        return file_ids
 
     @classmethod
     def can_delete_knowledgebase(cls, user_id: str, knowledgebase: Mapping[str, Any] | Any) -> bool:
