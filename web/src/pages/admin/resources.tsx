@@ -1,5 +1,6 @@
 import {
   type Dispatch,
+  type MouseEvent,
   type ReactNode,
   type SetStateAction,
   useDeferredValue,
@@ -15,9 +16,13 @@ import {
   AlertTriangle,
   Bot,
   Brain,
+  ChevronDown,
+  ChevronRight,
   File,
   FileSearch,
   FileText,
+  Folder,
+  FolderOpen,
   HardDrive,
   Library,
   MessageSquare,
@@ -84,6 +89,13 @@ type ResourceColumn = {
   label: string;
   render: (resource: AdminService.ManagedResourceItem) => ReactNode;
 };
+type ResourceTableRow = {
+  resource: AdminService.ManagedResourceItem;
+  depth: number;
+  hasChildren: boolean;
+  expanded: boolean;
+  workspaceRoot: boolean;
+};
 type SelectedResourceDetail =
   | {
       kind: 'resource';
@@ -129,6 +141,107 @@ function sortRows<T>(rows: T[], sort: SortState): T[] {
   });
 }
 
+function compareResources(
+  left: AdminService.ManagedResourceItem,
+  right: AdminService.ManagedResourceItem,
+  sort: SortState,
+) {
+  const leftValue = left[sort.key as keyof AdminService.ManagedResourceItem];
+  const rightValue = right[sort.key as keyof AdminService.ManagedResourceItem];
+  const result = String(leftValue ?? '').localeCompare(
+    String(rightValue ?? ''),
+    undefined,
+    { numeric: true },
+  );
+  return sort.direction === 'asc' ? result : -result;
+}
+
+function buildFileTreeRows(
+  resources: AdminService.ManagedResourceItem[],
+  sort: SortState,
+  expandedIds: Set<string>,
+  keywords: string,
+): ResourceTableRow[] {
+  const byId = new Map(resources.map((resource) => [resource.id, resource]));
+  const childrenByParent = new Map<
+    string,
+    AdminService.ManagedResourceItem[]
+  >();
+  const roots: AdminService.ManagedResourceItem[] = [];
+
+  resources.forEach((resource) => {
+    const parent = resource.parent_id
+      ? byId.get(resource.parent_id)
+      : undefined;
+    if (
+      !parent ||
+      parent.id === resource.id ||
+      parent.workspace_id !== resource.workspace_id
+    ) {
+      roots.push(resource);
+      return;
+    }
+    const siblings = childrenByParent.get(parent.id) ?? [];
+    siblings.push(resource);
+    childrenByParent.set(parent.id, siblings);
+  });
+
+  const normalizedKeywords = keywords.trim().toLocaleLowerCase();
+  const matches = (resource: AdminService.ManagedResourceItem) =>
+    !normalizedKeywords ||
+    resource.name.toLocaleLowerCase().includes(normalizedKeywords) ||
+    resource.id.toLocaleLowerCase().includes(normalizedKeywords);
+  const visibleIds = new Set<string>();
+
+  const markVisible = (
+    resource: AdminService.ManagedResourceItem,
+    visiting: Set<string>,
+  ): boolean => {
+    if (visiting.has(resource.id)) return false;
+    const nextVisiting = new Set(visiting).add(resource.id);
+    let hasVisibleChild = false;
+    (childrenByParent.get(resource.id) ?? []).forEach((child) => {
+      if (markVisible(child, nextVisiting)) hasVisibleChild = true;
+    });
+    const visible = matches(resource) || hasVisibleChild;
+    if (visible) visibleIds.add(resource.id);
+    return visible;
+  };
+
+  roots.forEach((root) => markVisible(root, new Set()));
+
+  const rows: ResourceTableRow[] = [];
+  const append = (
+    resource: AdminService.ManagedResourceItem,
+    depth: number,
+    visited: Set<string>,
+  ) => {
+    if (visited.has(resource.id) || !visibleIds.has(resource.id)) return;
+    const nextVisited = new Set(visited).add(resource.id);
+    const children = (childrenByParent.get(resource.id) ?? [])
+      .filter((child) => visibleIds.has(child.id))
+      .sort((left, right) => compareResources(left, right, sort));
+    const expanded =
+      Boolean(normalizedKeywords) || expandedIds.has(resource.id);
+    rows.push({
+      resource,
+      depth,
+      hasChildren: children.length > 0,
+      expanded,
+      workspaceRoot: resource.parent_id === resource.id,
+    });
+    if (expanded) {
+      children.forEach((child) => append(child, depth + 1, nextVisited));
+    }
+  };
+
+  roots
+    .filter((root) => visibleIds.has(root.id))
+    .sort((left, right) => compareResources(left, right, sort))
+    .forEach((root) => append(root, 0, new Set()));
+  return rows;
+}
+
 export default function AdminResources() {
   const { t } = useTranslation();
   const { resourceView } = useParams<{ resourceView: string }>();
@@ -145,6 +258,9 @@ export default function AdminResources() {
     key: 'update_date',
     direction: 'desc',
   });
+  const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [failureSort, setFailureSort] = useState<SortState>({
     key: 'create_date',
     direction: 'desc',
@@ -171,7 +287,7 @@ export default function AdminResources() {
       resourceType,
       page,
       pageSize,
-      deferredKeywords,
+      resourceType === 'file' ? '' : deferredKeywords,
       workspaceIds,
     ],
     queryFn: async () =>
@@ -180,8 +296,9 @@ export default function AdminResources() {
           type: resourceType!,
           page,
           pageSize,
-          keywords: deferredKeywords,
+          keywords: resourceType === 'file' ? undefined : deferredKeywords,
           workspaceIds,
+          hierarchy: resourceType === 'file',
         })
       ).data.data,
     enabled: Boolean(resourceType),
@@ -210,6 +327,17 @@ export default function AdminResources() {
     enabled: view === 'dataset',
   });
 
+  useEffect(() => {
+    if (resourceType !== 'file' || !resourceData?.resources.length) return;
+    const rootIds = resourceData.resources
+      .filter((resource) => resource.parent_id === resource.id)
+      .map((resource) => resource.id);
+    setExpandedFileIds((current) => {
+      if (rootIds.every((id) => current.has(id))) return current;
+      return new Set([...current, ...rootIds]);
+    });
+  }, [resourceData?.resources, resourceType]);
+
   const deleteMutation = useMutation({
     mutationFn: (resource: AdminService.ManagedResourceItem) =>
       deleteManagedResource(resource.resource_type, resource.id),
@@ -225,6 +353,31 @@ export default function AdminResources() {
     () => sortRows(resourceData?.resources ?? [], resourceSort),
     [resourceData?.resources, resourceSort],
   );
+  const resourceRows = useMemo<ResourceTableRow[]>(
+    () =>
+      resourceType === 'file'
+        ? buildFileTreeRows(
+            resourceData?.resources ?? [],
+            resourceSort,
+            expandedFileIds,
+            deferredKeywords,
+          )
+        : sortedResources.map((resource) => ({
+            resource,
+            depth: 0,
+            hasChildren: false,
+            expanded: false,
+            workspaceRoot: false,
+          })),
+    [
+      deferredKeywords,
+      expandedFileIds,
+      resourceData?.resources,
+      resourceSort,
+      resourceType,
+      sortedResources,
+    ],
+  );
   const sortedFailures = useMemo(
     () => sortRows(failureData?.documents ?? [], failureSort),
     [failureData?.documents, failureSort],
@@ -239,6 +392,14 @@ export default function AdminResources() {
       direction:
         current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
     }));
+  };
+  const toggleFileExpanded = (resourceId: string) => {
+    setExpandedFileIds((current) => {
+      const next = new Set(current);
+      if (next.has(resourceId)) next.delete(resourceId);
+      else next.add(resourceId);
+      return next;
+    });
   };
   const sortButton = (
     label: string,
@@ -692,77 +853,152 @@ export default function AdminResources() {
                   </TableRow>
                 </TableHeader>
                 <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                  {sortedResources.length ? (
-                    sortedResources.map((resource) => (
-                      <TableRow
-                        key={resource.id}
-                        className="group/row cursor-pointer"
-                        onClick={() =>
-                          setSelectedDetail({ kind: 'resource', resource })
-                        }
-                      >
-                        <TableCell>
-                          <div className="font-medium">
-                            {resource.name || t('admin.unnamedResource')}
-                          </div>
-                          <div className="max-w-48 truncate text-xs text-text-secondary">
-                            {resource.id}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {t(
-                              resource.workspace_type === 'team'
-                                ? 'admin.teamWorkspace'
-                                : 'admin.personalWorkspace',
-                            )}
-                            -{resource.workspace_name}
-                          </Badge>
-                        </TableCell>
-                        {resourceColumns.map((column) => (
-                          <TableCell key={column.key}>
-                            {column.render(resource)}
-                          </TableCell>
-                        ))}
-                        <TableCell>
-                          {formatDate(resource.create_date) || '-'}
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(resource.update_date) || '-'}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          onClick={(event) => event.stopPropagation()}
+                  {resourceRows.length ? (
+                    resourceRows.map(
+                      ({
+                        resource,
+                        depth,
+                        hasChildren,
+                        expanded,
+                        workspaceRoot,
+                      }) => (
+                        <TableRow
+                          key={resource.id}
+                          className="group/row cursor-pointer"
+                          onClick={() =>
+                            setSelectedDetail({ kind: 'resource', resource })
+                          }
                         >
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  disabled={!resource.deletable}
-                                  aria-label={t(
-                                    'admin.resourceManagementPage.deleteAction',
-                                    { name: resource.name },
+                          <TableCell>
+                            <div
+                              className="flex min-w-56 items-center gap-2"
+                              style={{
+                                paddingLeft:
+                                  resourceType === 'file' ? depth * 20 : 0,
+                              }}
+                            >
+                              {resourceType === 'file' && (
+                                <>
+                                  {hasChildren ? (
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="size-6 shrink-0"
+                                      aria-label={t(
+                                        expanded
+                                          ? 'admin.resourceManagementPage.collapseFolder'
+                                          : 'admin.resourceManagementPage.expandFolder',
+                                        {
+                                          name: workspaceRoot
+                                            ? `${t(
+                                                resource.workspace_type ===
+                                                  'team'
+                                                  ? 'admin.teamWorkspace'
+                                                  : 'admin.personalWorkspace',
+                                              )}-${resource.workspace_name}`
+                                            : resource.name,
+                                        },
+                                      )}
+                                      onClick={(
+                                        event: MouseEvent<HTMLButtonElement>,
+                                      ) => {
+                                        event.stopPropagation();
+                                        toggleFileExpanded(resource.id);
+                                      }}
+                                    >
+                                      {expanded ? (
+                                        <ChevronDown className="size-4" />
+                                      ) : (
+                                        <ChevronRight className="size-4" />
+                                      )}
+                                    </Button>
+                                  ) : (
+                                    <span className="size-6 shrink-0" />
                                   )}
-                                  onClick={() => setDeleting(resource)}
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {t(
-                                resource.deletable
-                                  ? 'admin.resourceManagementPage.deleteAction'
-                                  : 'admin.resourceManagementPage.managedBySource',
-                                { name: resource.name },
+                                  {resource.file_type === 'folder' ? (
+                                    expanded ? (
+                                      <FolderOpen className="size-4 shrink-0 text-text-secondary" />
+                                    ) : (
+                                      <Folder className="size-4 shrink-0 text-text-secondary" />
+                                    )
+                                  ) : (
+                                    <FileText className="size-4 shrink-0 text-text-secondary" />
+                                  )}
+                                </>
                               )}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">
+                                  {workspaceRoot
+                                    ? `${t(
+                                        resource.workspace_type === 'team'
+                                          ? 'admin.teamWorkspace'
+                                          : 'admin.personalWorkspace',
+                                      )}-${resource.workspace_name}`
+                                    : resource.name ||
+                                      t('admin.unnamedResource')}
+                                </div>
+                                <div className="max-w-48 truncate text-xs text-text-secondary">
+                                  {resource.id}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {t(
+                                resource.workspace_type === 'team'
+                                  ? 'admin.teamWorkspace'
+                                  : 'admin.personalWorkspace',
+                              )}
+                              -{resource.workspace_name}
+                            </Badge>
+                          </TableCell>
+                          {resourceColumns.map((column) => (
+                            <TableCell key={column.key}>
+                              {column.render(resource)}
+                            </TableCell>
+                          ))}
+                          <TableCell>
+                            {formatDate(resource.create_date) || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(resource.update_date) || '-'}
+                          </TableCell>
+                          <TableCell
+                            className="text-center"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    disabled={!resource.deletable}
+                                    aria-label={t(
+                                      'admin.resourceManagementPage.deleteAction',
+                                      { name: resource.name },
+                                    )}
+                                    onClick={() => setDeleting(resource)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {t(
+                                  resource.deletable
+                                    ? 'admin.resourceManagementPage.deleteAction'
+                                    : 'admin.resourceManagementPage.managedBySource',
+                                  { name: resource.name },
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )
                   ) : (
                     <TableRow>
                       <TableCell
@@ -777,15 +1013,17 @@ export default function AdminResources() {
               </Table>
             </div>
 
-            <RAGFlowPagination
-              total={total ?? 0}
-              current={page}
-              pageSize={pageSize}
-              onChange={(nextPage, nextPageSize) => {
-                setPage(nextPage);
-                setPageSize(nextPageSize);
-              }}
-            />
+            {resourceType !== 'file' && (
+              <RAGFlowPagination
+                total={total ?? 0}
+                current={page}
+                pageSize={pageSize}
+                onChange={(nextPage, nextPageSize) => {
+                  setPage(nextPage);
+                  setPageSize(nextPageSize);
+                }}
+              />
+            )}
 
             {view === 'dataset' && (
               <section className="space-y-4 border-t border-border-button pt-6">

@@ -3512,7 +3512,7 @@ Important structured information may include: names, dates, locations, events, k
             'Track agent types, release status, and session activity while maintaining agent resources centrally.',
           memory:
             'Review memory types, storage methods, and capacity settings to understand long-term memory usage.',
-          file: 'Inventory file types, sources, sizes, and creators by workspace, and remove independently managed files.',
+          file: 'Browse file types, sources, sizes, and creators by workspace and directory hierarchy, and remove independently managed files.',
         },
         searchPlaceholders: {
           dataset: 'Search dataset name or ID',
@@ -3546,6 +3546,8 @@ Important structured information may include: names, dates, locations, events, k
         fileType: 'File type',
         sourceType: 'Source',
         creator: 'Creator',
+        expandFolder: 'Expand folder {{name}}',
+        collapseFolder: 'Collapse folder {{name}}',
         resourceInformation: 'Resource information',
         resourceId: 'Resource ID',
         resourceType: 'Resource type',

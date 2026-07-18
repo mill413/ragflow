@@ -446,8 +446,16 @@ def list_resources():
         workspace_ids = [
             value for value in request.args.get("workspace_ids", "").split(",") if value
         ]
+        hierarchy = request.args.get("hierarchy", "").lower() in {"1", "true", "yes"}
         return success_response(
-            ResourceMgr.list_resources(resource_type, page, page_size, keywords, workspace_ids)
+            ResourceMgr.list_resources(
+                resource_type,
+                page,
+                page_size,
+                keywords,
+                workspace_ids,
+                hierarchy,
+            )
         )
     except AdminException as e:
         return error_response(e.message, e.code)

@@ -288,6 +288,7 @@ export const listManagedResources = ({
   pageSize: number;
   keywords?: string;
   workspaceIds?: string[];
+  hierarchy?: boolean;
 }) =>
   request.get<ResponseData<AdminService.ManagedResourceList>>(
     adminListManagedResources,

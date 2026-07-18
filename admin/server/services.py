@@ -831,6 +831,7 @@ class ResourceMgr:
         page_size: int,
         keywords: str = "",
         workspace_ids: list[str] | None = None,
+        hierarchy: bool = False,
     ) -> dict[str, Any]:
         spec = cls.RESOURCE_SPECS.get(resource_type)
         if not spec:
@@ -878,7 +879,11 @@ class ResourceMgr:
             query = query.where(fn.LOWER(name_field).contains(keywords))
 
         total = query.count()
-        rows = list(query.order_by(model.create_time.desc()).paginate(page, page_size).dicts())
+        ordered_query = query.order_by(model.create_time.desc())
+        if resource_type == "file" and hierarchy:
+            rows = list(ordered_query.dicts())
+        else:
+            rows = list(ordered_query.paginate(page, page_size).dicts())
         cls._attach_ownership(rows)
         if resource_type == "dataset":
             cls._attach_dataset_metrics(rows)
