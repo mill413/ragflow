@@ -6,10 +6,13 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Network,
   Pencil,
   Plus,
   Search,
   Trash2,
+  UserCheck,
+  UserMinus,
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
@@ -55,6 +58,7 @@ import {
   createDepartment,
   deleteDepartment,
   listDepartments,
+  listUsers,
   updateDepartment,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
@@ -84,11 +88,28 @@ export default function AdminDepartments() {
     direction: 'asc' | 'desc';
   }>({ key: 'path', direction: 'asc' });
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ['admin/departments', query],
-    queryFn: async () => (await listDepartments(query)).data.data,
+  const { data: allDepartments = [] } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
     retry: false,
   });
+  const { data: searchedDepartments = [] } = useQuery({
+    queryKey: ['admin/departments', 'search', query],
+    queryFn: async () => (await listDepartments(query)).data.data,
+    enabled: Boolean(query),
+    retry: false,
+  });
+  const { data: users = [] } = useQuery({
+    queryKey: ['admin/listUsers'],
+    queryFn: async () => (await listUsers()).data.data,
+    retry: false,
+  });
+  const departments = query ? searchedDepartments : allDepartments;
+  const rootDepartments = allDepartments.filter(
+    (department) => !department.parent_id,
+  ).length;
+  const assignedUsers = users.filter((user) => user.department_id).length;
+  const unassignedUsers = users.length - assignedUsers;
 
   const departmentRows = useMemo(() => {
     const nodes = new Map<string, DepartmentTreeNode>();
@@ -193,11 +214,44 @@ export default function AdminDepartments() {
       <Spotlight />
       <ScrollArea className="size-full">
         <CardHeader className="space-y-6">
-          <div>
-            <CardTitle>{t('admin.departmentManagement')}</CardTitle>
-            <div className="mt-2 text-sm text-text-secondary">
-              {t('admin.departmentDescription')}
+          <div className="flex items-center justify-between gap-6">
+            <div>
+              <CardTitle>{t('admin.departmentManagement')}</CardTitle>
+              <div className="mt-2 text-sm text-text-secondary">
+                {t('admin.departmentDescription')}
+              </div>
             </div>
+            <Button onClick={openCreate}>
+              <Plus /> {t('admin.newDepartment')}
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              [t('admin.departmentTotal'), allDepartments.length, Building2],
+              [t('admin.rootDepartments'), rootDepartments, Network],
+              [t('admin.assignedDepartmentUsers'), assignedUsers, UserCheck],
+              [
+                t('admin.unassignedDepartmentUsers'),
+                unassignedUsers,
+                UserMinus,
+              ],
+            ].map(([label, value, Icon]) => {
+              const MetricIcon = Icon as typeof Building2;
+              return (
+                <div
+                  key={String(label)}
+                  className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
+                >
+                  <div className="flex items-center justify-between text-xs text-text-secondary">
+                    <span>{String(label)}</span>
+                    <MetricIcon className="size-4" />
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold">
+                    {String(value)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <AdminTableMultiFilters
@@ -233,9 +287,6 @@ export default function AdminDepartments() {
             />
             <Button variant="outline" onClick={applySearch}>
               <Search /> {t('admin.query')}
-            </Button>
-            <Button onClick={openCreate}>
-              <Plus /> {t('admin.newDepartment')}
             </Button>
           </div>
         </CardHeader>
