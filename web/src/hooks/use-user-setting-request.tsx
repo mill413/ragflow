@@ -462,15 +462,15 @@ export const useListTenant = () => {
 export const useListWorkspace = () => {
   const { data, isFetching: loading } = useQuery<IWorkspace[]>({
     queryKey: [UserSettingApiAction.ListWorkspace],
-    initialData: [],
-    gcTime: 0,
+    staleTime: 30_000,
+    refetchOnMount: false,
     queryFn: async () => {
       const { data } = await listWorkspace();
       return data?.data ?? [];
     },
   });
 
-  return { data, loading };
+  return { data: data ?? [], loading };
 };
 
 export const useAgreeTenant = () => {
