@@ -122,7 +122,7 @@ const AdminNavigationLayout = () => {
       <aside
         className={cn(
           'shrink-0 flex flex-col gap-6 transition-[width] duration-200 ease-out',
-          sidebarCollapsed ? 'w-14' : 'w-64',
+          sidebarCollapsed ? 'w-14' : 'w-[200px]',
         )}
       >
         <div
@@ -133,8 +133,12 @@ const AdminNavigationLayout = () => {
         >
           {!sidebarCollapsed && (
             <>
-              <img className="size-8 mr-5" src="/logo.svg" alt="logo" />
-              <span className="text-xl font-bold whitespace-nowrap">
+              <img
+                className="mr-3 size-8 shrink-0"
+                src="/logo.svg"
+                alt="logo"
+              />
+              <span className="min-w-0 truncate text-lg font-bold">
                 {t('admin.title')}
               </span>
             </>

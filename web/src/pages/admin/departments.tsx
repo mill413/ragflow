@@ -63,7 +63,7 @@ import { getSortIcon } from './utils';
 type DepartmentTreeNode = AdminService.Department & {
   children: DepartmentTreeNode[];
 };
-type DepartmentSortKey = 'name' | 'path' | 'created_at';
+type DepartmentSortKey = 'name' | 'path' | 'user_count' | 'created_at';
 
 export default function AdminDepartments() {
   const { t } = useTranslation();
@@ -216,19 +216,30 @@ export default function AdminDepartments() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[28%]">
+                <TableHead className="w-[25%]">
                   <Button variant="ghost" onClick={() => toggleSort('name')}>
                     {t('admin.department')}
                     {getSortIcon(sort.key === 'name' ? sort.direction : false)}
                   </Button>
                 </TableHead>
-                <TableHead className="w-[36%]">
+                <TableHead className="w-[32%]">
                   <Button variant="ghost" onClick={() => toggleSort('path')}>
                     {t('admin.departmentPath')}
                     {getSortIcon(sort.key === 'path' ? sort.direction : false)}
                   </Button>
                 </TableHead>
-                <TableHead className="w-[22%]">
+                <TableHead className="w-[13%]">
+                  <Button
+                    variant="ghost"
+                    onClick={() => toggleSort('user_count')}
+                  >
+                    {t('admin.departmentUsers')}
+                    {getSortIcon(
+                      sort.key === 'user_count' ? sort.direction : false,
+                    )}
+                  </Button>
+                </TableHead>
+                <TableHead className="w-[18%]">
                   <Button
                     variant="ghost"
                     onClick={() => toggleSort('created_at')}
@@ -271,6 +282,7 @@ export default function AdminDepartments() {
                         </div>
                       </TableCell>
                       <TableCell>{department.path}</TableCell>
+                      <TableCell>{department.user_count ?? 0}</TableCell>
                       <TableCell>
                         {department.created_at
                           ? formatDate(department.created_at)
@@ -302,7 +314,7 @@ export default function AdminDepartments() {
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={4}
+                    colSpan={5}
                     className="h-40 text-center text-text-secondary"
                   >
                     {t('common.noData')}

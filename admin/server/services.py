@@ -93,7 +93,14 @@ class OrganizationMgr:
 
     @classmethod
     def list_departments(cls, query=""):
-        departments = cls._load()["departments"]
+        data = cls._load()
+        user_counts = {}
+        for department_id in data["user_departments"].values():
+            user_counts[department_id] = user_counts.get(department_id, 0) + 1
+        departments = [
+            {**department, "user_count": user_counts.get(department["id"], 0)}
+            for department in data["departments"]
+        ]
         query = str(query or "").strip().casefold()
         if query:
             departments = [
