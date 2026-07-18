@@ -84,6 +84,7 @@ type TeamSortKey =
   | 'document_count'
   | 'storage_bytes'
   | 'update_date';
+type TeamMemberSortKey = 'email' | 'nickname' | 'role' | 'is_active';
 
 type PendingRole = {
   member: AdminService.TeamMember;
@@ -104,6 +105,10 @@ export default function AdminTeams() {
     key: TeamSortKey;
     direction: 'asc' | 'desc';
   }>({ key: 'update_date', direction: 'desc' });
+  const [memberSort, setMemberSort] = useState<{
+    key: TeamMemberSortKey;
+    direction: 'asc' | 'desc';
+  }>({ key: 'email', direction: 'asc' });
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<AdminService.Team>();
   const [teamName, setTeamName] = useState('');
@@ -223,6 +228,16 @@ export default function AdminTeams() {
       user.is_active === '1' &&
       !members.some((member) => member.user_id === user.id),
   );
+  const sortedMembers = useMemo(() => {
+    return [...members].sort((left, right) => {
+      const result = String(left[memberSort.key] ?? '').localeCompare(
+        String(right[memberSort.key] ?? ''),
+        undefined,
+        { numeric: true },
+      );
+      return memberSort.direction === 'asc' ? result : -result;
+    });
+  }, [memberSort, members]);
   const ownerOptions = editingTeam
     ? editingMembers.filter(
         (member) => member.is_active === '1' && member.role !== 'invite',
@@ -271,6 +286,21 @@ export default function AdminTeams() {
     <Button variant="ghost" onClick={() => toggleSort(key)}>
       {label}
       {getSortIcon(sort.key === key ? sort.direction : false)}
+    </Button>
+  );
+  const memberSortButton = (label: string, key: TeamMemberSortKey) => (
+    <Button
+      variant="ghost"
+      onClick={() =>
+        setMemberSort((current) => ({
+          key,
+          direction:
+            current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+        }))
+      }
+    >
+      {label}
+      {getSortIcon(memberSort.key === key ? memberSort.direction : false)}
     </Button>
   );
   const roleLabel = (role: AdminService.TeamMemberRole) =>
@@ -591,15 +621,23 @@ export default function AdminTeams() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('admin.email')}</TableHead>
-                  <TableHead>{t('admin.nickname')}</TableHead>
-                  <TableHead>{t('admin.teamManagement.role')}</TableHead>
-                  <TableHead>{t('admin.status')}</TableHead>
+                  <TableHead>
+                    {memberSortButton(t('admin.email'), 'email')}
+                  </TableHead>
+                  <TableHead>
+                    {memberSortButton(t('admin.nickname'), 'nickname')}
+                  </TableHead>
+                  <TableHead>
+                    {memberSortButton(t('admin.teamManagement.role'), 'role')}
+                  </TableHead>
+                  <TableHead>
+                    {memberSortButton(t('admin.status'), 'is_active')}
+                  </TableHead>
                   <TableHead className="w-20">{t('admin.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {members.map((member) => (
+                {sortedMembers.map((member) => (
                   <TableRow key={member.user_id} className="group/member">
                     <TableCell>{member.email}</TableCell>
                     <TableCell>{member.nickname}</TableCell>

@@ -92,56 +92,6 @@ function UserDatasetTable(props: {
           </div>
         ),
       }),
-      // #region
-      /*
-      datasetColumnHelper.accessor('name', {
-        header: t('admin.name'),
-        enableSorting: false,
-      }),
-      datasetColumnHelper.accessor('status', {
-        header: t('admin.status'),
-        cell: ({ cell }) => {
-          return (
-            <Badge
-              variant={parseBooleanish(cell.getValue()) ? 'success' : 'destructive'}
-              className="pl-[.35em]"
-            >
-              <LucideDot className="size-[1em] stroke-[8] mr-1" />
-              {t(
-                parseBooleanish(cell.getValue())
-                  ? 'admin.active'
-                  : 'admin.inactive',
-              )}"
-            </Badge>
-          );
-        },
-        enableSorting: false,
-      }),
-      datasetColumnHelper.accessor('chunk_num', {
-        header: t('admin.chunkNum'),
-      }),
-      datasetColumnHelper.accessor('doc_num', {
-        header: t('admin.docNum'),
-      }),
-      datasetColumnHelper.accessor('token_num', {
-        header: t('admin.tokenNum'),
-      }),
-      datasetColumnHelper.accessor('language', {
-        header: t('admin.language'),
-        enableSorting: false,
-      }),
-      datasetColumnHelper.accessor('create_date', {
-        header: t('admin.createDate'),
-      }),
-      datasetColumnHelper.accessor('update_date', {
-        header: t('admin.updateDate'),
-      }),
-      datasetColumnHelper.accessor('permission', {
-        header: t('admin.permission'),
-        enableSorting: false,
-      }),
-      */
-      // #endregion
     ],
     [t],
   );
@@ -234,19 +184,6 @@ function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
           </div>
         ),
       }),
-      // #region
-      /*
-      agentColumnHelper.accessor('title', {
-        header: t('admin.agentTitle'),
-      }),
-      agentColumnHelper.accessor('permission', {
-        header: t('admin.permission'),
-      }),
-      agentColumnHelper.accessor('canvas_category', {
-        header: t('admin.canvasCategory'),
-      }),
-      */
-      // #endregion
     ],
     [t],
   );
