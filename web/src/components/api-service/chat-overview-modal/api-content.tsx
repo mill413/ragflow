@@ -2,11 +2,13 @@ import { useIsDarkTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { useSetModalState, useTranslate } from '@/hooks/common-hooks';
 import { LangfuseCard } from '@/pages/user-setting/setting-model/langfuse';
-import apiDoc from '@parent/docs/references/http_api_reference_zh.md?raw';
+import apiDoc from '@parent/docs/references/http_api_reference.md?raw';
 import MarkdownPreview from '@uiw/react-markdown-preview';
 import ChatApiKeyModal from '../chat-api-key-modal';
 import BackendServiceApi from './backend-service-api';
 import MarkdownToc from './markdown-toc';
+
+const apiDocContent = apiDoc.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
 
 const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
   const { t } = useTranslate('setting');
@@ -40,14 +42,17 @@ const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
           className="min-w-0 flex-1 overflow-auto rounded-md"
         >
           <MarkdownPreview
-            source={apiDoc}
+            source={apiDocContent}
             wrapperElement={{
               'data-color-mode': isDarkTheme ? 'dark' : 'light',
             }}
           />
         </div>
         {tocVisible && (
-          <MarkdownToc content={apiDoc} containerId="api-reference-content" />
+          <MarkdownToc
+            content={apiDocContent}
+            containerId="api-reference-content"
+          />
         )}
       </section>
       <LangfuseCard></LangfuseCard>
