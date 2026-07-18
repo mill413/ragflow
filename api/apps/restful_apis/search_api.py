@@ -19,7 +19,6 @@ import logging
 from numbers import Real
 
 from quart import Response, request
-from api.db.joint_services.tenant_model_service import resolve_model_config
 from api.db.services.dialog_service import async_ask
 from api.apps import current_user, login_required
 
@@ -30,7 +29,7 @@ from api.db.services.search_service import SearchService
 from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
 from common.misc_utils import get_uuid
-from common.constants import LLMType, RetCode, StatusEnum
+from common.constants import RetCode, StatusEnum
 from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, server_error_response, validate_request
 from api.utils.pagination_utils import validate_rest_api_page_size
 
@@ -174,16 +173,11 @@ async def update(search_id):
         if not search_app:
             return get_json_result(data=False, message=f"Cannot find search {search_id}", code=RetCode.DATA_ERROR)
 
-        target_workspace_id = req.pop("workspace_id", search_app.tenant_id) or search_app.tenant_id
-        if target_workspace_id != search_app.tenant_id and not WorkspaceAccessService.can_move_shared_resource(
-            current_user.id, search_app, target_workspace_id
-        ):
-            return get_json_result(data=False, message="No authorization for the target workspace.", code=RetCode.AUTHENTICATION_ERROR)
+        req.pop("workspace_id", None)
 
-        if (target_workspace_id != search_app.tenant_id or req["name"].lower() != search_app.name.lower()) and any(
-            item.id != search_id
-            for item in SearchService.query(name=req["name"], tenant_id=target_workspace_id, status=StatusEnum.VALID.value)
-        ):
+        if req["name"].lower() != search_app.name.lower() and len(
+            SearchService.query(name=req["name"], tenant_id=search_app.tenant_id, status=StatusEnum.VALID.value)
+        ) >= 1:
             return get_data_error_result(message="Duplicated search name.")
 
         current_config = search_app.search_config or {}
@@ -191,17 +185,8 @@ async def update(search_id):
         if not isinstance(new_config, dict):
             return get_data_error_result(message="search_config must be a JSON object")
         req["search_config"] = {**current_config, **new_config}
-        if error := _validate_search_knowledgebases(req["search_config"], target_workspace_id):
+        if error := _validate_search_knowledgebases(req["search_config"], search_app.tenant_id):
             return get_data_error_result(message=error)
-        if target_workspace_id != search_app.tenant_id:
-            try:
-                if rerank_id := req["search_config"].get("rerank_id"):
-                    resolve_model_config(target_workspace_id, LLMType.RERANK, rerank_id)
-                if chat_id := req["search_config"].get("chat_id"):
-                    resolve_model_config(target_workspace_id, LLMType.CHAT, chat_id)
-            except Exception as exc:
-                logging.info("Search move model validation failed: %s", exc)
-                return get_data_error_result(message="The target workspace does not provide the models used by this search.")
         logging.debug(
             "Search update weight: search_id=%s user_id=%s incoming_vector_similarity_weight=%s stored_vector_similarity_weight=%s stored_full_text_weight=%s",
             search_id,
@@ -213,8 +198,6 @@ async def update(search_id):
 
         for field in ("search_id", "tenant_id", "created_by", "update_time", "id"):
             req.pop(field, None)
-        if target_workspace_id != search_app.tenant_id:
-            req["tenant_id"] = target_workspace_id
 
         updated = SearchService.update_by_id(search_id, req)
         if not updated:

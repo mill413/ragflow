@@ -92,25 +92,12 @@ async def update_memory(memory_id):
     req = await get_request_json()
     # Resolve tenant_model IDs from model names when name is provided but id is not
     memory = MemoryService.get_by_memory_id(memory_id)
-    target_workspace_id = req.pop("workspace_id", memory.tenant_id if memory else current_user.id)
-    if memory and target_workspace_id != memory.tenant_id:
-        model_params = {
-            "llm_id": req.get("llm_id", memory.llm_id),
-            "embd_id": req.get("embd_id", memory.embd_id),
-        }
-        ensure_tenant_model_ids_for_params(target_workspace_id, model_params)
-        if memory.tenant_llm_id and not model_params.get("tenant_llm_id"):
-            return get_error_argument_result("The target workspace does not provide the memory chat model.")
-        if memory.tenant_embd_id and not model_params.get("tenant_embd_id"):
-            return get_error_argument_result("The target workspace does not provide the memory embedding model.")
-        req.update(model_params)
-    else:
-        ensure_tenant_model_ids_for_params(target_workspace_id, req)
+    req.pop("workspace_id", None)
+    ensure_tenant_model_ids_for_params(memory.tenant_id if memory else current_user.id, req)
     new_settings = {k: req[k] for k in [
         "name", "permissions", "llm_id", "embd_id", "memory_type", "memory_size", "forgetting_policy", "temperature",
         "avatar", "description", "system_prompt", "user_prompt", "tenant_llm_id", "tenant_embd_id"
     ] if k in req}
-    new_settings["workspace_id"] = target_workspace_id
     try:
         success, res = await memory_api_service.update_memory(memory_id, new_settings)
         if success:

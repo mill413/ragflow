@@ -14,7 +14,6 @@ import {
 } from '@/components/metadata-filter';
 import { ModelTreeSelect } from '@/components/model-tree-select';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
-import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
 import { SingleFormSlider } from '@/components/ui/dual-range-slider';
@@ -55,7 +54,6 @@ interface SearchSettingProps {
 const SearchSettingFormSchema = z
   .object({
     search_id: z.string().optional(),
-    workspace_id: z.string(),
     name: z.string().min(1, 'Name is required'),
     avatar: z.string().optional(),
     description: z.string().optional(),
@@ -124,7 +122,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
   const resetForm = useCallback(() => {
     formMethods.reset({
       search_id: data?.id,
-      workspace_id: data?.tenant_id,
       name: data?.name || '',
       avatar: data?.avatar || '',
       description: data?.description || descriptionDefaultValue,
@@ -197,10 +194,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
   const selectedKbIds = useWatch({
     control: formMethods.control,
     name: 'search_config.kb_ids',
-  });
-  const selectedWorkspaceId = useWatch({
-    control: formMethods.control,
-    name: 'workspace_id',
   });
   const referenceMetadataEnabled = useWatch({
     control: formMethods.control,
@@ -318,7 +311,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
           rerank_id: use_rerank ? rerank_id : '',
           llm_setting: { ...llmSetting },
         },
-        workspace_id: other_formdata.workspace_id,
       });
       setOpen(false);
     } catch (error) {
@@ -357,12 +349,10 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
             className="space-y-6"
           >
             <AvatarNameDescription avatarField="avatar" />
-            <ResourceWorkspaceFormField />
-
             <KnowledgeBaseFormField
               name="search_config.kb_ids"
               required
-              workspaceId={selectedWorkspaceId || data.tenant_id}
+              workspaceId={data.tenant_id}
             ></KnowledgeBaseFormField>
             <MetadataFilter prefix="search_config."></MetadataFilter>
             <FormField
@@ -457,7 +447,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
                       <FormControl>
                         <ModelTreeSelect
                           modelTypes={['rerank']}
-                          ownerTenantId={selectedWorkspaceId}
+                          ownerTenantId={data.tenant_id}
                           {...field}
                           placeholder={t('chat.model')}
                         />
@@ -526,7 +516,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               // ></LlmSettingFieldItems>
               <LlmSettingFieldItems
                 prefix="search_config.llm_setting"
-                ownerTenantId={selectedWorkspaceId}
+                ownerTenantId={data.tenant_id}
                 showFields={[
                   'temperature',
                   'top_p',

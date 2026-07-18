@@ -157,17 +157,7 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
     }
     """
     current_memory = _require_memory_access(memory_id, manage=True)
-    target_workspace_id = new_memory_setting.pop("workspace_id", current_memory.tenant_id) or current_memory.tenant_id
-    if target_workspace_id != current_memory.tenant_id:
-        if not WorkspaceAccessService.can_move_shared_resource(
-            current_user.id,
-            current_memory,
-            target_workspace_id,
-            permission_field="permissions",
-        ):
-            raise ArgumentException("No authorization for the target workspace.")
-        if get_memory_size_cache(memory_id, current_memory.tenant_id) > 0:
-            raise ArgumentException("Memories containing messages cannot be moved between workspaces.")
+    new_memory_setting.pop("workspace_id", None)
 
     def _normalize_memory_type(value):
         if value is None:
@@ -184,9 +174,6 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
         return str(value).strip()
 
     update_dict = {}
-    if target_workspace_id != current_memory.tenant_id:
-        update_dict["tenant_id"] = target_workspace_id
-        update_dict["permissions"] = WorkspaceAccessService.permission_for_workspace(target_workspace_id)
     # check name length
     if "name" in new_memory_setting:
         name = new_memory_setting["name"]
@@ -202,7 +189,7 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
             raise ArgumentException(f"Unknown permission '{new_memory_setting['permissions']}'.")
         expected_permission = (
             TenantPermission.TEAM
-            if WorkspaceAccessService.get_workspace_type(target_workspace_id) == WorkspaceType.TEAM
+            if WorkspaceAccessService.get_workspace_type(current_memory.tenant_id) == WorkspaceType.TEAM
             else TenantPermission.ME
         )
         if new_memory_setting["permissions"] != expected_permission:

@@ -461,7 +461,6 @@ export const useSetAgent = (showMessage: boolean = true) => {
       release?: string;
       description?: string | null;
       permission?: string;
-      workspace_id?: string;
     }) => {
       const agentId = params.id ?? id;
       const { data = {} } = agentId
@@ -470,7 +469,6 @@ export const useSetAgent = (showMessage: boolean = true) => {
             dsl: params.dsl,
             avatar: params.avatar,
             description: params.description,
-            workspace_id: params.workspace_id,
             release: params.release,
           })
         : await agentService.createAgent({

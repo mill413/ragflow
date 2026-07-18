@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 import { AvatarUpload } from '@/components/avatar-upload';
 import { RAGFlowFormItem } from '@/components/ragflow-form';
-import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { Form } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,7 +15,6 @@ const formSchema = z.object({
   title: z.string().min(1, {}),
   avatar: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  workspace_id: z.string(),
 });
 
 export type SettingFormSchemaType = z.infer<typeof formSchema>;
@@ -35,7 +33,6 @@ export function SettingForm({ submit }: SettingFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
-      workspace_id: '',
     },
   });
 
@@ -44,7 +41,6 @@ export function SettingForm({ submit }: SettingFormProps) {
       title: data?.title,
       description: data?.description,
       avatar: data.avatar,
-      workspace_id: data?.user_id,
     });
   }, [data, form]);
 
@@ -64,8 +60,6 @@ export function SettingForm({ submit }: SettingFormProps) {
         <RAGFlowFormItem name="description" label={t('description')}>
           <Textarea rows={4} />
         </RAGFlowFormItem>
-
-        <ResourceWorkspaceFormField />
       </form>
     </Form>
   );

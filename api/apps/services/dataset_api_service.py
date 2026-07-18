@@ -21,7 +21,7 @@ import re
 from api.db.joint_services.tenant_model_service import resolve_model_config, resolve_model_id
 from common.constants import PAGERANK_FLD, LLMType
 from common import settings
-from api.db.db_models import Dialog, File, Search, UserCanvas
+from api.db.db_models import File
 from api.db.services.document_service import DocumentService, queue_raptor_o_graphrag_tasks
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
@@ -38,22 +38,6 @@ from common.misc_utils import thread_pool_exec
 
 _VALID_INDEX_TYPES = {"graph", "raptor", "mindmap", "artifact", "skill"}
 
-
-def _knowledgebase_has_workspace_references(knowledgebase_id: str, workspace_id: str) -> bool:
-    if any(
-        knowledgebase_id in (dialog.kb_ids or [])
-        for dialog in Dialog.select().where((Dialog.tenant_id == workspace_id) & (Dialog.status == StatusEnum.VALID.value))
-    ):
-        return True
-    if any(
-        knowledgebase_id in ((search_app.search_config or {}).get("kb_ids") or [])
-        for search_app in Search.select().where((Search.tenant_id == workspace_id) & (Search.status == StatusEnum.VALID.value))
-    ):
-        return True
-    return any(
-        knowledgebase_id in WorkspaceAccessService.extract_knowledgebase_ids(agent.dsl or {})
-        for agent in UserCanvas.select().where(UserCanvas.user_id == workspace_id)
-    )
 
 _INDEX_TYPE_TO_TASK_TYPE = {
     "graph": "graphrag",
@@ -319,20 +303,8 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
     kb = KnowledgebaseService.get_or_none(id=dataset_id)
     if kb is None or not WorkspaceAccessService.can_update_knowledgebase(user_id, kb):
         return False, f"User '{user_id}' lacks permission for dataset '{dataset_id}'"
-    target_workspace_id = req.pop("workspace_id", kb.tenant_id) or kb.tenant_id
-    if target_workspace_id != kb.tenant_id:
-        if not WorkspaceAccessService.can_move_shared_resource(user_id, kb, target_workspace_id, permission_field="permission"):
-            return False, "No authorization for the target workspace"
-        if DocumentService.query(kb_id=kb.id):
-            return False, "Datasets containing documents cannot be moved between workspaces"
-        if list(Connector2KbService.list_connectors(kb.id)):
-            return False, "Datasets linked to data sources cannot be moved between workspaces"
-        if _knowledgebase_has_workspace_references(kb.id, kb.tenant_id):
-            return False, "Datasets referenced by workspace applications cannot be moved"
-        req["tenant_id"] = target_workspace_id
-        req.setdefault("name", kb.name)
-        req.setdefault("embd_id", kb.embd_id)
-    req["permission"] = WorkspaceAccessService.permission_for_workspace(target_workspace_id)
+    req.pop("workspace_id", None)
+    req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(kb.tenant_id) == WorkspaceType.TEAM else TenantPermission.ME
 
     # Extract ext field for additional parameters
     ext_fields = req.pop("ext", {})
@@ -391,22 +363,22 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
         # shift to use parser_id, delete old pipeline_id
         req["pipeline_id"] = ""
 
-    if "name" in req and (target_workspace_id != kb.tenant_id or req["name"].lower() != kb.name.lower()):
-        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=target_workspace_id, status=StatusEnum.VALID.value)
-        if exists and exists.id != kb.id:
+    if "name" in req and req["name"].lower() != kb.name.lower():
+        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=kb.tenant_id, status=StatusEnum.VALID.value)
+        if exists:
             return False, f"Dataset name '{req['name']}' already exists"
 
     if "embd_id" in req:
         if not req["embd_id"]:
             req["embd_id"] = kb.embd_id
-        ok, err = verify_embedding_availability(req["embd_id"], target_workspace_id)
+        ok, err = verify_embedding_availability(req["embd_id"], kb.tenant_id)
         if not ok:
             return False, err
         ok, _ = TenantModelService.get_by_id(req["embd_id"])
         if ok:
             req["tenant_embd_id"] = req["embd_id"]
         else:
-            req["tenant_embd_id"] = resolve_model_id(target_workspace_id, LLMType.EMBEDDING, req["embd_id"])
+            req["tenant_embd_id"] = resolve_model_id(kb.tenant_id, LLMType.EMBEDDING, req["embd_id"])
 
     if "pagerank" in req and req["pagerank"] != kb.pagerank:
         if os.environ.get("DOC_ENGINE", "elasticsearch") == "infinity":
@@ -432,7 +404,7 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
         return False, "Dataset updated failed"
 
     # Link connectors to the dataset
-    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], target_workspace_id)
+    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], kb.tenant_id)
     if errors:
         logging.error("Link KB errors: %s", errors)
 

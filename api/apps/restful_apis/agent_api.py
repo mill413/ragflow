@@ -1110,8 +1110,7 @@ def delete_agent(agent_id, tenant_id):
 @_require_canvas_manage_async
 async def update_agent(agent_id, tenant_id):
     req = {k: v for k, v in (await get_request_json()).items() if v is not None}
-    target_workspace_id = req.pop("workspace_id", None)
-    for field in ("user_id", "permission"):
+    for field in ("user_id", "workspace_id", "permission"):
         req.pop(field, None)
     req["canvas_type"] = req.get("canvas_type", "")
     req["release"] = bool(req.get("release", ""))
@@ -1128,22 +1127,6 @@ async def update_agent(agent_id, tenant_id):
 
     _, current_agent = UserCanvasService.get_by_id(agent_id)
     workspace_id = current_agent.user_id if current_agent else tenant_id
-    target_workspace_id = target_workspace_id or workspace_id
-    if target_workspace_id != workspace_id:
-        if not WorkspaceAccessService.can_move_shared_resource(
-            tenant_id,
-            current_agent,
-            target_workspace_id,
-            workspace_field="user_id",
-            permission_field="permission",
-        ):
-            return get_json_result(data=False, message="No authorization for the target workspace.", code=RetCode.AUTHENTICATION_ERROR)
-        workspace_id = target_workspace_id
-        req["user_id"] = target_workspace_id
-        req["permission"] = WorkspaceAccessService.permission_for_workspace(target_workspace_id)
-        req.setdefault("title", current_agent.title)
-        if req.get("dsl") is None:
-            req["dsl"] = current_agent.dsl or {}
     if req.get("dsl") is not None:
         knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(req["dsl"])
         if not WorkspaceAccessService.can_reference_knowledgebases(tenant_id, workspace_id, knowledgebase_ids):

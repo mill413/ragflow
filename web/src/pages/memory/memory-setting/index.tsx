@@ -1,5 +1,4 @@
 import { DynamicForm } from '@/components/dynamic-form';
-import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
 import Divider from '@/components/ui/divider';
@@ -32,7 +31,6 @@ export default function MemoryMessage() {
   const { t } = useTranslation();
   const MemoryMessageSchema = z.object({
     id: z.string(),
-    workspace_id: z.string(),
     ...basicInfoSchema,
     ...memoryModelFormSchema(t),
     ...advancedSettingsFormSchema,
@@ -41,7 +39,6 @@ export default function MemoryMessage() {
     resolver: zodResolver(MemoryMessageSchema),
     defaultValues: {
       id: '',
-      workspace_id: '',
       ...defaultBasicInfo,
       ...defaultMemoryModelForm,
       ...defaultAdvancedSettingsForm,
@@ -54,7 +51,6 @@ export default function MemoryMessage() {
   useEffect(() => {
     form.reset({
       id: data?.id,
-      workspace_id: data?.tenant_id,
       embd_id: data?.embd_id,
       llm_id: data?.llm_id,
       name: data?.name || '',
@@ -89,7 +85,6 @@ export default function MemoryMessage() {
                     {t('knowledgeConfiguration.baseInfo')}
                   </div>
                   <BasicInfo></BasicInfo>
-                  <ResourceWorkspaceFormField horizontal />
                   <Divider />
                   <MemoryModelForm />
                   <AdvancedSettingsForm />

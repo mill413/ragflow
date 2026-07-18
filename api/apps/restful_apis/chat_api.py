@@ -588,20 +588,10 @@ async def update_chat(chat_id):
             return get_data_error_result(message="Chat not found!")
         current_chat = current_chat.to_dict()
         workspace_id = current_chat["tenant_id"]
-        target_workspace_id = req.pop("workspace_id", workspace_id) or workspace_id
+        req.pop("workspace_id", None)
 
         if req.get("tenant_id"):
             return get_data_error_result(message="`tenant_id` must not be provided.")
-        if target_workspace_id != workspace_id:
-            if not WorkspaceAccessService.can_move_shared_resource(current_user.id, current_chat, target_workspace_id):
-                return get_json_result(data=False, message="No authorization for the target workspace.", code=RetCode.AUTHENTICATION_ERROR)
-            workspace_id = target_workspace_id
-            if "dataset_ids" not in req:
-                req["dataset_ids"] = current_chat.get("kb_ids", [])
-            req.setdefault("name", current_chat.get("name"))
-            req.setdefault("llm_id", current_chat.get("llm_id"))
-            req.setdefault("llm_setting", current_chat.get("llm_setting"))
-            req.setdefault("rerank_id", current_chat.get("rerank_id"))
 
         if "name" in req:
             name, err = _validate_name(req.get("name"), required=True)
@@ -642,12 +632,10 @@ async def update_chat(chat_id):
         req = {field: value for field, value in req.items() if field in _PERSISTED_FIELDS}
         for field in _READONLY_FIELDS:
             req.pop(field, None)
-        if target_workspace_id != current_chat["tenant_id"]:
-            req["tenant_id"] = target_workspace_id
 
         if (
             "name" in req
-            and (target_workspace_id != current_chat["tenant_id"] or req["name"].lower() != current_chat["name"].lower())
+            and req["name"].lower() != current_chat["name"].lower()
             and DialogService.query(
                 name=req["name"],
                 tenant_id=workspace_id,

@@ -61,7 +61,6 @@ export default function DatasetSettings() {
     defaultValues: {
       name: '',
       chunk_method: DocumentParserType.Naive,
-      workspace_id: '',
       language: 'English',
       parser_config: {
         layout_recognize: DocumentType.DeepDOC,

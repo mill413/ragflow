@@ -14,9 +14,11 @@
 #  limitations under the License.
 #
 
+import asyncio
 from types import SimpleNamespace
 
 from api.apps.services import dataset_api_service
+from api.db import TenantPermission, WorkspaceType
 
 
 def test_get_dataset_includes_actor_capabilities(monkeypatch):
@@ -53,3 +55,47 @@ def test_get_dataset_includes_actor_capabilities(monkeypatch):
     assert result["capabilities"] == expected_capabilities
     assert result["workspace_name"] == "Team"
     assert result["creator_name"] == "Creator"
+
+
+def test_update_dataset_ignores_workspace_changes(monkeypatch):
+    knowledgebase = SimpleNamespace(
+        id="dataset",
+        tenant_id="source-workspace",
+        pagerank=0,
+        pipeline_id="",
+        parser_id="naive",
+        parser_config={},
+        to_dict=lambda: {
+            "id": "dataset",
+            "tenant_id": "source-workspace",
+        },
+    )
+    captured_update = {}
+
+    monkeypatch.setattr(dataset_api_service.KnowledgebaseService, "get_or_none", lambda **_kwargs: knowledgebase)
+    monkeypatch.setattr(dataset_api_service.WorkspaceAccessService, "can_update_knowledgebase", lambda *_args: True)
+    monkeypatch.setattr(
+        dataset_api_service.WorkspaceAccessService,
+        "get_workspace_type",
+        lambda _workspace_id: WorkspaceType.TEAM,
+    )
+    monkeypatch.setattr(
+        dataset_api_service.KnowledgebaseService,
+        "update_by_id",
+        lambda _dataset_id, values: captured_update.update(values) or True,
+    )
+    monkeypatch.setattr(dataset_api_service.KnowledgebaseService, "get_by_id", lambda _dataset_id: (True, knowledgebase))
+    monkeypatch.setattr(dataset_api_service.Connector2KbService, "link_connectors", lambda *_args: [])
+
+    success, _result = asyncio.run(
+        dataset_api_service.update_dataset(
+            "workspace-manager",
+            "dataset",
+            {"workspace_id": "target-workspace"},
+        )
+    )
+
+    assert success
+    assert "workspace_id" not in captured_update
+    assert "tenant_id" not in captured_update
+    assert captured_update["permission"] == TenantPermission.TEAM

@@ -62,7 +62,6 @@ export const useFetchKnowledgeConfigurationOnMount = (
       ]),
       embedding_model: knowledgeDetails.embedding_model,
       chunk_method: knowledgeDetails.chunk_method,
-      workspace_id: knowledgeDetails.tenant_id,
     } as unknown as z.infer<typeof formSchema>;
     form.reset(formValues);
   }, [form, knowledgeDetails]);

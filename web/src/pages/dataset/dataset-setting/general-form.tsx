@@ -2,7 +2,6 @@ import { AvatarUpload } from '@/components/avatar-upload';
 import { SelectWithSearch } from '@/components/originui/select-with-search';
 import PageRankFormField from '@/components/page-rank-form-field';
 import { RAGFlowFormItem } from '@/components/ragflow-form';
-import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import {
   FormControl,
   FormField,
@@ -13,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { LanguageTranslationMap } from '@/constants/common';
 import { useMemo } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFormContext } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useKnowledgeBaseContext } from '../contexts/knowledge-base-context';
 import { TagItems } from './components/tag-item';
@@ -21,7 +20,6 @@ import { EmbeddingModelItem } from './configuration/common-item';
 
 export function GeneralForm() {
   const form = useFormContext();
-  const workspaceId = useWatch({ control: form.control, name: 'workspace_id' });
   const { knowledgeBase } = useKnowledgeBaseContext();
   const { t } = useTranslation();
 
@@ -126,10 +124,9 @@ export function GeneralForm() {
           );
         }}
       />
-      <ResourceWorkspaceFormField horizontal />
       <EmbeddingModelItem
         isEdit={true}
-        ownerTenantId={workspaceId || knowledgeBase?.tenant_id}
+        ownerTenantId={knowledgeBase?.tenant_id}
       ></EmbeddingModelItem>
       <PageRankFormField></PageRankFormField>
 

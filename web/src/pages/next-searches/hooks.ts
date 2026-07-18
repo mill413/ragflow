@@ -16,7 +16,6 @@ import { useParams, useSearchParams } from 'react-router';
 interface CreateSearchProps {
   name: string;
   description?: string;
-  workspace_id?: string;
 }
 
 interface CreateSearchResponse {
