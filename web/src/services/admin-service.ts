@@ -241,9 +241,14 @@ export const createAdminTeam = (name: string, ownerId: string) =>
     name,
     owner_id: ownerId,
   });
-export const updateAdminTeam = (teamId: string, name: string) =>
+export const updateAdminTeam = (
+  teamId: string,
+  name: string,
+  ownerId: string,
+) =>
   request.put<ResponseData<AdminService.Team>>(api.adminTeam(teamId), {
     name,
+    owner_id: ownerId,
   });
 export const deleteAdminTeam = (teamId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeam(teamId));

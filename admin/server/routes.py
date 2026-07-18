@@ -316,7 +316,8 @@ def create_team():
 @check_admin_auth
 def update_team(team_id):
     try:
-        return success_response(TeamMgr.update_team(team_id, (request.get_json() or {}).get("name")))
+        data = request.get_json() or {}
+        return success_response(TeamMgr.update_team(team_id, data.get("name"), data.get("owner_id")))
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:

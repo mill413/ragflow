@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { type MouseEvent, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -134,12 +134,17 @@ export default function AdminTeams() {
     enabled: Boolean(selectedTeam),
     retry: false,
   });
+  const { data: editingMembers = [] } = useQuery({
+    queryKey: ['admin/teams/members', editingTeam?.id],
+    queryFn: async () =>
+      (await listAdminTeamMembers(editingTeam!.id)).data.data,
+    enabled: Boolean(editingTeam),
+    retry: false,
+  });
 
   const invalidateTeams = () => {
     queryClient.invalidateQueries({ queryKey: ['admin/teams'] });
-    queryClient.invalidateQueries({
-      queryKey: ['admin/teams/members', selectedTeam?.id],
-    });
+    queryClient.invalidateQueries({ queryKey: ['admin/teams/members'] });
     queryClient.invalidateQueries({ queryKey: ['admin/monitoring'] });
     queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
   };
@@ -147,7 +152,7 @@ export default function AdminTeams() {
   const saveTeamMutation = useMutation({
     mutationFn: () =>
       editingTeam
-        ? updateAdminTeam(editingTeam.id, teamName)
+        ? updateAdminTeam(editingTeam.id, teamName, ownerId)
         : createAdminTeam(teamName, ownerId),
     onSuccess: () => {
       invalidateTeams();
@@ -217,6 +222,13 @@ export default function AdminTeams() {
       user.is_active === '1' &&
       !members.some((member) => member.user_id === user.id),
   );
+  const ownerOptions = editingTeam
+    ? editingMembers.filter(
+        (member) => member.is_active === '1' && member.role !== 'invite',
+      )
+    : users.filter((user) => user.is_active === '1');
+  const selectedTeamDetails =
+    teams.find((team) => team.id === selectedTeam?.id) ?? selectedTeam;
   const activeMemberCount = teams.reduce(
     (total, team) => total + team.member_count,
     0,
@@ -405,7 +417,7 @@ export default function AdminTeams() {
                         size="icon-sm"
                         variant="ghost"
                         title={t('admin.teamManagement.editTeam')}
-                        onClick={(event) => {
+                        onClick={(event: MouseEvent<HTMLButtonElement>) => {
                           event.stopPropagation();
                           openEditTeam(team);
                         }}
@@ -416,7 +428,7 @@ export default function AdminTeams() {
                         size="icon-sm"
                         variant="ghost"
                         title={t('admin.teamManagement.deleteTeam')}
-                        onClick={(event) => {
+                        onClick={(event: MouseEvent<HTMLButtonElement>) => {
                           event.stopPropagation();
                           setDeletingTeam(team);
                         }}
@@ -461,26 +473,28 @@ export default function AdminTeams() {
             </div>
             <div className="space-y-2">
               <Label>{t('admin.teamManagement.owner')}</Label>
-              <Select
-                value={ownerId}
-                onValueChange={setOwnerId}
-                disabled={Boolean(editingTeam)}
-              >
+              <Select value={ownerId} onValueChange={setOwnerId}>
                 <SelectTrigger>
                   <SelectValue
                     placeholder={t('admin.teamManagement.selectOwner')}
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {users
-                    .filter((user) => user.is_active === '1')
-                    .map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
+                  {ownerOptions.map((user) => {
+                    const id = 'user_id' in user ? user.user_id : user.id;
+                    return (
+                      <SelectItem key={id} value={id}>
                         {user.nickname} / {user.email}
                       </SelectItem>
-                    ))}
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              {editingTeam && (
+                <p className="text-xs text-text-secondary">
+                  {t('admin.teamManagement.ownerTransferHint')}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -503,20 +517,76 @@ export default function AdminTeams() {
       >
         <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
-            <SheetTitle>{selectedTeam?.name}</SheetTitle>
+            <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
             <SheetDescription>
-              {selectedTeam?.owner_name} / {selectedTeam?.owner_email}
+              {selectedTeamDetails?.owner_name} /{' '}
+              {selectedTeamDetails?.owner_email}
             </SheetDescription>
           </SheetHeader>
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="text-sm font-medium">
-              {t('admin.teamManagement.memberManagement')}
+          <ScrollArea className="h-[calc(100vh-97px)] px-6">
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.teamManagement.teamInformation')}
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+                {[
+                  [t('admin.teamManagement.teamId'), selectedTeamDetails?.id],
+                  [
+                    t('admin.teamManagement.owner'),
+                    selectedTeamDetails?.owner_name || '-',
+                  ],
+                  [
+                    t('admin.teamManagement.members'),
+                    selectedTeamDetails?.member_count ?? 0,
+                  ],
+                  [
+                    t('admin.teamManagement.pendingInvites'),
+                    selectedTeamDetails?.invite_count ?? 0,
+                  ],
+                  [
+                    t('admin.teamManagement.datasets'),
+                    selectedTeamDetails?.dataset_count ?? 0,
+                  ],
+                  [
+                    t('admin.teamManagement.documents'),
+                    selectedTeamDetails?.document_count ?? 0,
+                  ],
+                  [
+                    t('admin.teamManagement.storage'),
+                    formatBytes(selectedTeamDetails?.storage_bytes ?? 0),
+                  ],
+                  [
+                    t('admin.createTime'),
+                    formatDate(selectedTeamDetails?.create_date) || '-',
+                  ],
+                  [
+                    t('admin.lastUpdateTime'),
+                    formatDate(selectedTeamDetails?.update_date) || '-',
+                  ],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="min-w-0">
+                    <div className="text-xs text-text-secondary">{label}</div>
+                    <div
+                      className="mt-1 truncate text-sm text-text-primary"
+                      title={String(value || '')}
+                    >
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-xs text-text-secondary">
+                {selectedTeamDetails?.owner_email}
+              </div>
+            </section>
+            <div className="flex items-center justify-between py-4">
+              <div className="text-sm font-medium">
+                {t('admin.teamManagement.memberManagement')}
+              </div>
+              <Button onClick={openAddMember} disabled={!availableUsers.length}>
+                <UserRoundPlus /> {t('admin.teamManagement.addMember')}
+              </Button>
             </div>
-            <Button onClick={openAddMember} disabled={!availableUsers.length}>
-              <UserRoundPlus /> {t('admin.teamManagement.addMember')}
-            </Button>
-          </div>
-          <ScrollArea className="h-[calc(100vh-145px)] px-6">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -535,6 +605,7 @@ export default function AdminTeams() {
                     <TableCell>
                       <Select
                         value={member.role}
+                        disabled={member.role === 'owner'}
                         onValueChange={(role) =>
                           setPendingRole({
                             member,

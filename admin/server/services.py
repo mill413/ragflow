@@ -36,7 +36,7 @@ from api.db.services.workspace_service import TeamService, WorkspaceAccessServic
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
+from api.db.db_models import APIToken, DB, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
 from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
@@ -614,10 +614,16 @@ class TeamMgr:
             raise AdminException(str(exc), 400) from exc
 
     @classmethod
-    def update_team(cls, team_id, name):
+    def update_team(cls, team_id, name, owner_id=None):
         cls._ensure_team(team_id)
+        current_owner_id = cls._owner_id(team_id)
         try:
-            return TeamService.update(cls._owner_id(team_id), team_id, name)
+            with DB.atomic():
+                team = TeamService.update(current_owner_id, team_id, name)
+                if owner_id and owner_id != current_owner_id:
+                    TeamService.transfer_ownership(current_owner_id, team_id, owner_id)
+                    team = TeamService.get(owner_id, team_id)
+                return team
         except (LookupError, PermissionError, ValueError) as exc:
             raise AdminException(str(exc), 400) from exc
 
