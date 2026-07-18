@@ -16,7 +16,6 @@
 from api.apps import current_user
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.memory_service import MemoryService
-from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService
@@ -69,10 +68,7 @@ def _require_memory_access(memory_id: str, *, manage=False):
 
 def _build_memory_response(memory):
     data = format_ret_data_from_memory(memory) if not isinstance(memory, dict) else dict(memory)
-    workspace_type = WorkspaceAccessService.get_workspace_type(data["tenant_id"])
-    workspace_exists, workspace = TenantService.get_by_id(data["tenant_id"])
-    data["workspace_type"] = workspace_type
-    data["workspace_name"] = workspace.name if workspace_exists else ""
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
     data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(
         current_user.id,
         data,

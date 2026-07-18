@@ -28,10 +28,13 @@ from common.constants import StatusEnum
 @pytest.fixture
 def workspace_dependencies(monkeypatch):
     tenants = {
-        "user-1": SimpleNamespace(id="user-1", status=StatusEnum.VALID.value),
-        "team-1": SimpleNamespace(id="team-1", status=StatusEnum.VALID.value),
+        "user-1": SimpleNamespace(id="user-1", name="User 1's Kingdom", status=StatusEnum.VALID.value),
+        "team-1": SimpleNamespace(id="team-1", name="Team 1", status=StatusEnum.VALID.value),
     }
-    users = {"user-1": SimpleNamespace(id="user-1", status=StatusEnum.VALID.value)}
+    users = {
+        "user-1": SimpleNamespace(id="user-1", nickname="User 1", status=StatusEnum.VALID.value),
+        "creator-1": SimpleNamespace(id="creator-1", nickname="Creator 1", status=StatusEnum.VALID.value),
+    }
     memberships = {
         ("user-1", "user-1"): SimpleNamespace(user_id="user-1", tenant_id="user-1", role=UserTenantRole.OWNER, status=StatusEnum.VALID.value),
         ("owner-1", "team-1"): SimpleNamespace(user_id="owner-1", tenant_id="team-1", role=UserTenantRole.OWNER, status=StatusEnum.VALID.value),
@@ -70,6 +73,24 @@ def test_workspace_type_distinguishes_personal_team_and_missing(workspace_depend
     assert WorkspaceAccessService.get_workspace_type("missing") is None
     assert WorkspaceAccessService.get_workspace_owner_id("user-1") == "user-1"
     assert WorkspaceAccessService.get_workspace_owner_id("team-1") == "owner-1"
+
+
+def test_resource_workspace_metadata_uses_personal_owner_as_missing_creator(workspace_dependencies):
+    metadata = WorkspaceAccessService.get_resource_workspace_metadata({"tenant_id": "user-1"})
+
+    assert metadata == {
+        "workspace_type": WorkspaceType.PERSONAL,
+        "workspace_name": "User 1's Kingdom",
+        "creator_name": "User 1",
+    }
+
+
+def test_resource_workspace_metadata_prefers_recorded_creator(workspace_dependencies):
+    metadata = WorkspaceAccessService.get_resource_workspace_metadata(
+        {"tenant_id": "user-1", "created_by": "creator-1"}
+    )
+
+    assert metadata["creator_name"] == "Creator 1"
 
 
 def test_invitation_is_not_an_active_membership(workspace_dependencies):

@@ -159,8 +159,12 @@ def _build_agent_response(agent: dict, user_id: str) -> dict:
     data = dict(agent)
     workspace_id = data.get("user_id") or data.get("tenant_id")
     data["tenant_id"] = workspace_id
-    data["workspace_type"] = WorkspaceAccessService.get_workspace_type(workspace_id)
-    data["workspace_name"] = _get_workspace_name(workspace_id)
+    data.update(
+        WorkspaceAccessService.get_resource_workspace_metadata(
+            data,
+            workspace_field="user_id" if data.get("user_id") else "tenant_id",
+        )
+    )
     data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(
         user_id,
         data,

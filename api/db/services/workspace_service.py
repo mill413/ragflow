@@ -140,6 +140,29 @@ class WorkspaceAccessService:
         return cls._value(owners[0], "user_id") if owners else None
 
     @classmethod
+    def get_resource_workspace_metadata(
+        cls,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        creator_field: str = "created_by",
+    ) -> dict[str, str | WorkspaceType | None]:
+        tenant_id = cls._value(resource, workspace_field)
+        workspace_type = cls.get_workspace_type(tenant_id)
+        workspace_exists, workspace = TenantService.get_by_id(tenant_id)
+
+        creator_id = cls._value(resource, creator_field)
+        if not creator_id and workspace_type == WorkspaceType.PERSONAL:
+            creator_id = tenant_id
+        creator_exists, creator = UserService.get_by_id(creator_id) if creator_id else (False, None)
+
+        return {
+            "workspace_type": workspace_type,
+            "workspace_name": cls._value(workspace, "name", "") if workspace_exists else "",
+            "creator_name": cls._value(creator, "nickname", "") if creator_exists else "",
+        }
+
+    @classmethod
     def get_membership(cls, user_id: str, tenant_id: str):
         membership = UserTenantService.filter_by_tenant_and_user_id(tenant_id, user_id)
         if not membership or cls._value(membership, "status") != StatusEnum.VALID.value:

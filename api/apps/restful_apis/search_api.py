@@ -42,10 +42,7 @@ def _full_text_weight(vector_similarity_weight):
 
 def _build_search_response(search):
     data = search.to_dict() if hasattr(search, "to_dict") else dict(search)
-    workspace_type = WorkspaceAccessService.get_workspace_type(data["tenant_id"])
-    workspace_exists, workspace = TenantService.get_by_id(data["tenant_id"])
-    data["workspace_type"] = workspace_type
-    data["workspace_name"] = workspace.name if workspace_exists else ""
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
     data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(current_user.id, data)
     return data
 

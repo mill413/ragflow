@@ -123,10 +123,7 @@ def _build_chat_response(chat, user_id=None):
     data.pop("kb_ids", None)
     data["kb_names"] = kb_names
     if user_id:
-        workspace_type = WorkspaceAccessService.get_workspace_type(data["tenant_id"])
-        workspace_exists, workspace = TenantService.get_by_id(data["tenant_id"])
-        data["workspace_type"] = workspace_type
-        data["workspace_name"] = workspace.name if workspace_exists else ""
+        data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
         data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(user_id, data)
     return data
 
