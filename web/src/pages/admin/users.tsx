@@ -27,7 +27,6 @@ import {
 
 import {
   LucideClipboardList,
-  LucideDot,
   LucideExternalLink,
   LucideTrash2,
   LucideUserLock,
@@ -85,6 +84,7 @@ import { LucideFilter, LucideSearch } from 'lucide-react';
 
 import useChangePasswordForm from './forms/change-password-form';
 import useCreateUserForm from './forms/user-form';
+import { UserStatusBadge, UserStatusText } from './components/user-status';
 
 import {
   createUser,
@@ -380,18 +380,7 @@ function AdminUserManagement() {
           const isMe = row.original.email === userInfo?.email;
 
           if (isMe) {
-            return (
-              <Badge
-                variant={
-                  parseBooleanish(cell.getValue()) ? 'success' : 'destructive'
-                }
-              >
-                <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                {parseBooleanish(cell.getValue())
-                  ? t('admin.active')
-                  : t('admin.inactive')}
-              </Badge>
-            );
+            return <UserStatusBadge active={cell.getValue()} />;
           }
 
           return (
@@ -411,17 +400,11 @@ function AdminUserManagement() {
 
               <SelectContent>
                 <SelectItem value="0">
-                  <div className="flex items-center">
-                    <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                    {t('admin.inactive')}
-                  </div>
+                  <UserStatusText active={false} />
                 </SelectItem>
 
                 <SelectItem value="1">
-                  <div className="flex items-center text-state-success">
-                    <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                    {t('admin.active')}
-                  </div>
+                  <UserStatusText active />
                 </SelectItem>
               </SelectContent>
             </Select>

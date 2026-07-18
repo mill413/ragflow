@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 
-import { LucideArrowLeft, LucideDot, LucidePencil } from 'lucide-react';
+import { LucideArrowLeft, LucidePencil } from 'lucide-react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -63,6 +63,7 @@ import { formatDate } from '@/utils/date';
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
 import DepartmentTreeSelect from './components/department-tree-select';
+import { UserStatusBadge, UserStatusText } from './components/user-status';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 
@@ -419,19 +420,7 @@ function AdminUserDetail() {
 
             <span>{detail?.email}</span>
 
-            <Badge
-              variant={
-                parseBooleanish(detail?.is_active) ? 'success' : 'destructive'
-              }
-              className="pl-[.5em]"
-            >
-              <LucideDot className="size-[1em] stroke-[8] mr-1" />
-              {t(
-                parseBooleanish(detail?.is_active)
-                  ? 'admin.active'
-                  : 'admin.inactive',
-              )}
-            </Badge>
+            <UserStatusBadge active={detail?.is_active} />
 
             <EnterpriseFeature>
               {() =>
@@ -566,9 +555,11 @@ function AdminUserDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">{t('admin.active')}</SelectItem>
+                  <SelectItem value="active">
+                    <UserStatusText active />
+                  </SelectItem>
                   <SelectItem value="inactive">
-                    {t('admin.inactive')}
+                    <UserStatusText active={false} />
                   </SelectItem>
                 </SelectContent>
               </Select>

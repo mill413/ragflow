@@ -74,6 +74,7 @@ import {
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
+import { UserStatusBadge } from './components/user-status';
 
 type TeamSortKey =
   | 'name'
@@ -631,15 +632,7 @@ export default function AdminTeams() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          member.is_active === '1' ? 'default' : 'outline'
-                        }
-                      >
-                        {member.is_active === '1'
-                          ? t('admin.active')
-                          : t('admin.inactive')}
-                      </Badge>
+                      <UserStatusBadge active={member.is_active} />
                     </TableCell>
                     <TableCell>
                       {member.role !== 'owner' && (
