@@ -8,6 +8,7 @@ import {
   LucideBoxes,
   LucideBuilding2,
   LucideLogOut,
+  LucideBrainCircuit,
   LucidePanelLeftClose,
   LucidePanelLeftOpen,
   LucideServerCrash,
@@ -71,6 +72,11 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminResourceManagement,
         name: t('admin.resourceManagement'),
         icon: <LucideBoxes className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminModelManagement,
+        name: t('admin.modelManagement'),
+        icon: <LucideBrainCircuit className="size-[1em]" />,
       },
       {
         path: Routes.AdminSandboxSettings,

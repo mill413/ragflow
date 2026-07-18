@@ -187,6 +187,46 @@ declare namespace AdminService {
     total: number;
   };
 
+  export type ModelWorkspace = {
+    id: string;
+    name: string;
+    type: 'personal' | 'team';
+  };
+
+  export type ManagedModel = {
+    id: string;
+    name: string;
+    provider_name: string;
+    provider_id: string;
+    owner_workspace_id: string;
+    instance_name: string;
+    instance_id: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status: 'active' | 'inactive';
+    visibility: 'all' | 'selected';
+    workspace_ids: string[];
+    workspaces: ModelWorkspace[];
+    created_by: string;
+    create_date: string;
+    update_date: string;
+  };
+
+  export type ManagedModelInput = {
+    provider_name: string;
+    instance_name: string;
+    model_name: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status?: 'active' | 'inactive';
+    visibility: 'all' | 'selected';
+    workspace_ids: string[];
+  };
+
   export type TaskExecutorHeartbeatItem = {
     name: string;
     boot_at: string;

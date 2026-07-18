@@ -435,6 +435,10 @@ export default {
   adminManagedResource: (resourceType: string, resourceId: string) =>
     `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
+  adminManagedModels: `${restAPIv1}/admin/models`,
+  adminManagedModel: (modelId: string) =>
+    `${restAPIv1}/admin/models/${modelId}`,
+  adminModelWorkspaces: `${restAPIv1}/admin/models/workspaces`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>

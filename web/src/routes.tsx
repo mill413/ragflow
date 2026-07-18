@@ -76,6 +76,7 @@ export enum Routes {
   AdminTeamManagement = `${Admin}/teams`,
   AdminDepartments = `${Admin}/departments`,
   AdminResourceManagement = `${Admin}/resources`,
+  AdminModelManagement = `${Admin}/models`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
   AdminRoles = `${Admin}/roles`,
@@ -416,6 +417,10 @@ const routeConfigOptions = [
               {
                 path: Routes.AdminResourceManagement,
                 Component: () => import('@/pages/admin/resources'),
+              },
+              {
+                path: Routes.AdminModelManagement,
+                Component: () => import('@/pages/admin/models'),
               },
               {
                 path: Routes.AdminSandboxSettings,

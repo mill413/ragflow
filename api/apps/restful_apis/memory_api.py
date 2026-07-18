@@ -23,7 +23,7 @@ from common.exceptions import ArgumentException, NotFoundException, ResourceInUs
 from api.apps import login_required, current_user
 from api.utils.api_utils import validate_request, get_request_json, get_error_argument_result, get_json_result, get_resource_in_use_result
 from api.apps.services import memory_api_service
-from api.db.joint_services.tenant_model_service import ensure_tenant_model_ids_for_params
+from api.db.joint_services.tenant_model_service import ensure_tenant_model_ids_for_params, validate_tenant_model_ids_for_params
 from api.db.services.memory_service import MemoryService
 from api.utils.pagination_utils import validate_rest_api_page_size
 
@@ -47,6 +47,7 @@ async def create_memory():
             "workspace_id": tenant_id,
         }
         ensure_tenant_model_ids_for_params(tenant_id, memory_info)
+        validate_tenant_model_ids_for_params(tenant_id, memory_info)
         success, res = await memory_api_service.create_memory(memory_info)
         if timing_enabled:
             logging.info(
@@ -61,7 +62,7 @@ async def create_memory():
         else:
             return get_json_result(message=res, code=RetCode.SERVER_ERROR)
 
-    except ArgumentException as arg_error:
+    except (ArgumentException, LookupError) as arg_error:
         logging.error(arg_error)
         if timing_enabled:
             logging.info(
@@ -93,7 +94,12 @@ async def update_memory(memory_id):
     # Resolve tenant_model IDs from model names when name is provided but id is not
     memory = MemoryService.get_by_memory_id(memory_id)
     req.pop("workspace_id", None)
-    ensure_tenant_model_ids_for_params(memory.tenant_id if memory else current_user.id, req)
+    tenant_id = memory.tenant_id if memory else current_user.id
+    ensure_tenant_model_ids_for_params(tenant_id, req)
+    try:
+        validate_tenant_model_ids_for_params(tenant_id, req)
+    except LookupError as error:
+        return get_error_argument_result(str(error))
     new_settings = {k: req[k] for k in [
         "name", "permissions", "llm_id", "embd_id", "memory_type", "memory_size", "forgetting_policy", "temperature",
         "avatar", "description", "system_prompt", "user_prompt", "tenant_llm_id", "tenant_embd_id"

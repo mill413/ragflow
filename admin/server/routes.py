@@ -25,7 +25,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import AdminModelMgr, UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.exceptions import ResourceInUseException
@@ -498,6 +498,81 @@ def delete_resource(resource_type, resource_id):
         return error_response(e.message, e.code)
     except Exception as e:
         logging.exception("Failed to delete admin resource")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_managed_models():
+    try:
+        return success_response(AdminModelMgr.list_models())
+    except Exception as e:
+        logging.exception("Failed to list managed models")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/workspaces", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_model_workspaces():
+    try:
+        return success_response(AdminModelMgr.list_workspaces())
+    except Exception as e:
+        logging.exception("Failed to list model workspaces")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_managed_model():
+    try:
+        return success_response(AdminModelMgr.create_model(current_user.id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to create managed model")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/<model_id>", methods=["PATCH"])
+@login_required
+@check_admin_auth
+def update_managed_model(model_id):
+    try:
+        return success_response(AdminModelMgr.update_model(model_id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to update managed model")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/<model_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_managed_model(model_id):
+    try:
+        return success_response(AdminModelMgr.delete_model(model_id))
+    except ResourceInUseException as e:
+        reference_names = ", ".join(
+            f'{reference["resource_type"]}: {reference["resource_name"] or reference["resource_id"]}'
+            for reference in e.references
+        )
+        return error_response(
+            f"Model is referenced and cannot be deleted. Referenced by: {reference_names}",
+            409,
+            {"reason": "resource_in_use", "targets": e.targets, "references": e.references},
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to delete managed model")
         return error_response(str(e), 500)
 
 

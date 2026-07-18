@@ -26,7 +26,7 @@ from typing import Any
 
 from peewee import Case, fn
 
-from common.constants import ActiveEnum, StatusEnum
+from common.constants import ActiveEnum, ActiveStatusEnum, StatusEnum
 from api.db import (
     KNOWLEDGEBASE_FOLDER_NAME,
     SKILLS_FOLDER_NAME,
@@ -56,12 +56,20 @@ from api.db.db_models import (
     Search,
     Task,
     Tenant,
+    TenantModelInstance,
+    TenantModelProvider,
     User,
     UserCanvas,
     UserTenant,
 )
 from api.utils.crypt import check_password_hash, decrypt
+from api.utils.model_utils import calculate_model_type, get_model_type_human
 from api.utils import health_utils
+from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.shared_model_service import SharedModelService
+from api.db.services.tenant_model_instance_service import TenantModelInstanceService
+from api.db.services.tenant_model_provider_service import TenantModelProviderService
+from api.db.services.tenant_model_service import TenantModelService
 
 from api.common.exceptions import AdminException, UserAlreadyExistsError, UserNotFoundError
 from config import SERVICE_CONFIGS
@@ -1085,6 +1093,250 @@ class ResourceMgr:
 
             creator = users.get(row.get("creator_id"))
             row["creator_name"] = (creator.nickname or creator.email) if creator else ""
+
+
+class AdminModelMgr:
+    PROVIDERS = {"MinerU", "OpenAI-API-Compatible", "Xinference"}
+    MODEL_TYPES = {"chat", "embedding", "asr", "vision", "rerank", "tts", "ocr"}
+
+    @staticmethod
+    def _parse_extra(raw: str) -> dict:
+        try:
+            value = json.loads(raw or "{}")
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    @classmethod
+    def _validate_access(cls, visibility: str, workspace_ids: list[str]) -> tuple[str, list[str]]:
+        visibility = str(visibility or "all")
+        if visibility not in {"all", "selected"}:
+            raise AdminException("visibility must be 'all' or 'selected'", 400)
+        workspace_ids = sorted({str(workspace_id) for workspace_id in workspace_ids or [] if workspace_id})
+        if visibility == "selected":
+            existing_ids = {
+                tenant.id
+                for tenant in Tenant.select(Tenant.id).where(
+                    Tenant.id.in_(workspace_ids),
+                    Tenant.status == StatusEnum.VALID.value,
+                )
+            }
+            missing = sorted(set(workspace_ids) - existing_ids)
+            if missing:
+                raise AdminException(f"Workspaces not found: {', '.join(missing)}", 404)
+        return visibility, workspace_ids
+
+    @classmethod
+    def list_workspaces(cls) -> list[dict[str, Any]]:
+        users = {
+            user.id: user
+            for user in User.select(User.id, User.nickname, User.email).where(User.status == StatusEnum.VALID.value)
+        }
+        rows = []
+        for tenant in Tenant.select(Tenant.id, Tenant.name).where(Tenant.status == StatusEnum.VALID.value):
+            owner = users.get(tenant.id)
+            rows.append(
+                {
+                    "id": tenant.id,
+                    "name": (owner.nickname or owner.email) if owner else (tenant.name or tenant.id),
+                    "type": "personal" if owner else "team",
+                }
+            )
+        return sorted(rows, key=lambda row: (row["type"], row["name"].casefold(), row["id"]))
+
+    @classmethod
+    def list_models(cls) -> list[dict[str, Any]]:
+        entries = SharedModelService.list_entries()
+        if not entries:
+            return []
+        models = {model.id: model for model in TenantModelService.get_models_by_ids(set(entries))}
+        provider_ids = {model.provider_id for model in models.values()}
+        instance_ids = {model.instance_id for model in models.values()}
+        providers = {
+            provider.id: provider
+            for provider in TenantModelProvider.select().where(TenantModelProvider.id.in_(provider_ids))
+        }
+        instances = {
+            instance.id: instance
+            for instance in TenantModelInstance.select().where(TenantModelInstance.id.in_(instance_ids))
+        }
+        workspaces = {workspace["id"]: workspace for workspace in cls.list_workspaces()}
+        rows = []
+        for model_id, entry in entries.items():
+            model = models.get(model_id)
+            provider = providers.get(model.provider_id) if model else None
+            instance = instances.get(model.instance_id) if model else None
+            if not model or not provider or not instance:
+                continue
+            instance_extra = cls._parse_extra(instance.extra)
+            model_extra = cls._parse_extra(model.extra)
+            target_ids = entry.get("workspace_ids") or []
+            rows.append(
+                {
+                    "id": model.id,
+                    "name": model.model_name,
+                    "provider_name": provider.provider_name,
+                    "provider_id": provider.id,
+                    "owner_workspace_id": provider.tenant_id,
+                    "instance_name": instance.instance_name,
+                    "instance_id": instance.id,
+                    "api_key": instance.api_key,
+                    "base_url": instance_extra.get("base_url", ""),
+                    "model_types": get_model_type_human(model.model_type),
+                    "max_tokens": int(model_extra.get("max_tokens") or 8192),
+                    "status": model.status,
+                    "visibility": entry.get("visibility", "all"),
+                    "workspace_ids": target_ids,
+                    "workspaces": [workspaces[workspace_id] for workspace_id in target_ids if workspace_id in workspaces],
+                    "created_by": entry.get("created_by", ""),
+                    "create_date": model.create_date,
+                    "update_date": model.update_date,
+                }
+            )
+        return sorted(rows, key=lambda row: (row["provider_name"], row["instance_name"], row["name"]))
+
+    @classmethod
+    def create_model(cls, actor_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        provider_name = str(data.get("provider_name") or "").strip()
+        instance_name = str(data.get("instance_name") or "").strip()
+        model_name = str(data.get("model_name") or "").strip()
+        model_types = sorted(set(data.get("model_types") or []))
+        if provider_name not in cls.PROVIDERS:
+            raise AdminException("Unsupported model provider", 400)
+        if not instance_name or not model_name:
+            raise AdminException("instance_name and model_name are required", 400)
+        if not model_types or not set(model_types) <= cls.MODEL_TYPES:
+            raise AdminException("At least one valid model type is required", 400)
+        visibility, workspace_ids = cls._validate_access(
+            data.get("visibility", "all"),
+            data.get("workspace_ids") or [],
+        )
+
+        provider = TenantModelProviderService.get_by_tenant_id_and_provider_name(actor_id, provider_name)
+        if not provider:
+            TenantModelProviderService.insert(tenant_id=actor_id, provider_name=provider_name)
+            provider = TenantModelProviderService.get_by_tenant_id_and_provider_name(actor_id, provider_name)
+
+        instance = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider.id, instance_name)
+        api_key = str(data.get("api_key") or "")
+        base_url = str(data.get("base_url") or "").strip()
+        if instance and TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
+            provider.id,
+            instance.id,
+            model_name,
+        ):
+            raise AdminException("Model already exists in this instance", 409)
+        if not instance:
+            TenantModelInstanceService.create_instance(
+                provider_id=provider.id,
+                instance_name=instance_name,
+                api_key=api_key,
+                extra=json.dumps({"base_url": base_url}),
+            )
+            instance = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider.id, instance_name)
+        else:
+            instance_extra = cls._parse_extra(instance.extra)
+            instance_extra["base_url"] = base_url
+            TenantModelInstanceService.update_by_id(
+                instance.id,
+                {"api_key": api_key, "extra": json.dumps(instance_extra)},
+            )
+
+        TenantModelService.insert(
+            model_name=model_name,
+            provider_id=provider.id,
+            instance_id=instance.id,
+            model_type=calculate_model_type(model_types),
+            status=ActiveStatusEnum.ACTIVE.value,
+            extra=json.dumps({"max_tokens": max(int(data.get("max_tokens") or 8192), 1)}),
+        )
+        model = TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
+            provider.id,
+            instance.id,
+            model_name,
+        )
+        SharedModelService.set_access(
+            model.id,
+            visibility=visibility,
+            workspace_ids=workspace_ids,
+            created_by=actor_id,
+        )
+        return next(row for row in cls.list_models() if row["id"] == model.id)
+
+    @classmethod
+    def update_model(cls, model_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        entry = SharedModelService.get_entry(model_id)
+        ok, model = TenantModelService.get_by_id(model_id)
+        if not entry or not ok:
+            raise AdminException("Managed model not found", 404)
+
+        updates = {}
+        if "model_types" in data:
+            model_types = sorted(set(data.get("model_types") or []))
+            if not model_types or not set(model_types) <= cls.MODEL_TYPES:
+                raise AdminException("At least one valid model type is required", 400)
+            updates["model_type"] = calculate_model_type(model_types)
+        if "status" in data:
+            if data["status"] not in {ActiveStatusEnum.ACTIVE.value, ActiveStatusEnum.INACTIVE.value}:
+                raise AdminException("Invalid model status", 400)
+            updates["status"] = data["status"]
+        model_extra = cls._parse_extra(model.extra)
+        if "max_tokens" in data:
+            model_extra["max_tokens"] = max(int(data.get("max_tokens") or 8192), 1)
+            updates["extra"] = json.dumps(model_extra)
+        if updates:
+            TenantModelService.update_model(model_id, updates)
+
+        ok, instance = TenantModelInstanceService.get_by_id(model.instance_id)
+        if not ok:
+            raise AdminException("Model instance not found", 404)
+        instance_updates = {}
+        if "api_key" in data:
+            instance_updates["api_key"] = str(data.get("api_key") or "")
+        if "base_url" in data:
+            instance_extra = cls._parse_extra(instance.extra)
+            instance_extra["base_url"] = str(data.get("base_url") or "").strip()
+            instance_updates["extra"] = json.dumps(instance_extra)
+        if instance_updates:
+            TenantModelInstanceService.update_by_id(instance.id, instance_updates)
+
+        visibility, workspace_ids = cls._validate_access(
+            data.get("visibility", entry.get("visibility", "all")),
+            data.get("workspace_ids", entry.get("workspace_ids") or []),
+        )
+        SharedModelService.set_access(
+            model_id,
+            visibility=visibility,
+            workspace_ids=workspace_ids,
+            created_by=entry.get("created_by", ""),
+        )
+        return next(row for row in cls.list_models() if row["id"] == model_id)
+
+    @classmethod
+    def delete_model(cls, model_id: str) -> bool:
+        if not SharedModelService.is_managed(model_id):
+            raise AdminException("Managed model not found", 404)
+        ok, model = TenantModelService.get_by_id(model_id)
+        if not ok:
+            SharedModelService.remove(model_id)
+            raise AdminException("Managed model not found", 404)
+        ok, provider = TenantModelProviderService.get_by_id(model.provider_id)
+        if not ok:
+            raise AdminException("Model provider not found", 404)
+
+        base_target = ResourceReferenceService.build_model_targets(provider.tenant_id, [model])[0]
+        targets = []
+        for tenant in Tenant.select(Tenant.id).where(Tenant.status == StatusEnum.VALID.value):
+            targets.append({**base_target, "tenant_id": tenant.id})
+        ResourceReferenceService.ensure_not_referenced("model", targets)
+
+        TenantModelService.delete_by_id(model_id)
+        SharedModelService.remove(model_id)
+        if not TenantModelService.get_models_by_instance_id(model.instance_id):
+            TenantModelInstanceService.delete_by_id(model.instance_id)
+        if not TenantModelInstanceService.get_all_by_provider_id(model.provider_id):
+            TenantModelProviderService.delete_by_id(model.provider_id)
+        return True
 
 
 class ServiceMgr:

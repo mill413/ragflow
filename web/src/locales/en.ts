@@ -3446,6 +3446,7 @@ Important structured information may include: names, dates, locations, events, k
       },
       departmentManagement: 'Departments',
       resourceManagement: 'Resource management',
+      modelManagement: 'Model management',
       sandboxSettings: 'Sandbox settings',
       registrationWhitelist: 'Registration whitelist',
       roles: 'Roles',
@@ -3520,6 +3521,53 @@ Important structured information may include: names, dates, locations, events, k
         deleteAction: 'Delete {{name}}',
         managedBySource:
           'This folder or file is managed by the system or its source resource and cannot be deleted here',
+      },
+
+      modelManagementPage: {
+        title: 'Model management',
+        description:
+          'Configure shared models centrally and control which personal or team workspaces can use them. Users may still add private models to their own workspaces.',
+        addModel: 'Add shared model',
+        editModel: 'Edit shared model',
+        search: 'Search models, providers, or instances',
+        total: 'Shared models',
+        provider: 'Provider',
+        instance: 'Instance name',
+        modelName: 'Model name',
+        modelTypes: 'Model types',
+        endpoint: 'Base URL',
+        apiKey: 'API key',
+        maxTokens: 'Max tokens',
+        status: 'Status',
+        active: 'Active',
+        inactive: 'Inactive',
+        visibility: 'Availability',
+        allWorkspaces: 'All personal and team workspaces',
+        selectedWorkspaces: 'Selected personal or team workspaces',
+        selectWorkspaces: 'Select workspaces that can use this model',
+        defaultVisibilityTip:
+          'Models created in the admin console are visible to all workspaces by default.',
+        instanceConfigTip:
+          'Models with the same instance name under one provider share the base URL and API key. Updating them affects other models in that instance.',
+        save: 'Save model',
+        saved: 'Model configuration saved',
+        deleted: 'Model deleted',
+        deleteModel: 'Delete model',
+        deleteConfirmation:
+          'Delete “{{name}}”? If a dataset, chat, or another resource references this model, deletion will be rejected and the references will be shown.',
+        editAction: 'Edit {{name}}',
+        deleteAction: 'Delete {{name}}',
+        required:
+          'Enter the model and instance names and select at least one model type',
+        types: {
+          chat: 'Chat',
+          embedding: 'Embedding',
+          asr: 'Speech recognition',
+          vision: 'Vision',
+          rerank: 'Rerank',
+          tts: 'Text to speech',
+          ocr: 'OCR',
+        },
       },
 
       knowledgeMonitoring: {

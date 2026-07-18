@@ -117,6 +117,9 @@ const {
   adminListManagedResources,
   adminManagedResource,
   adminListFailedDocuments,
+  adminManagedModels,
+  adminManagedModel,
+  adminModelWorkspaces,
 
   adminListServices,
   adminShowServiceDetails,
@@ -302,6 +305,27 @@ export const deleteManagedResource = (
   request.delete<ResponseData<{ resource_type: string; resource_id: string }>>(
     adminManagedResource(resourceType, resourceId),
   );
+export const listManagedModels = () =>
+  request.get<ResponseData<AdminService.ManagedModel[]>>(adminManagedModels);
+export const listModelWorkspaces = () =>
+  request.get<ResponseData<AdminService.ModelWorkspace[]>>(
+    adminModelWorkspaces,
+  );
+export const createManagedModel = (data: AdminService.ManagedModelInput) =>
+  request.post<ResponseData<AdminService.ManagedModel>>(
+    adminManagedModels,
+    data,
+  );
+export const updateManagedModel = (
+  modelId: string,
+  data: Partial<AdminService.ManagedModelInput>,
+) =>
+  request.patch<ResponseData<AdminService.ManagedModel>>(
+    adminManagedModel(modelId),
+    data,
+  );
+export const deleteManagedModel = (modelId: string) =>
+  request.delete<ResponseData<boolean>>(adminManagedModel(modelId));
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });
 export const updateUserPassword = (email: string, password: string) =>

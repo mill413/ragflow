@@ -127,6 +127,7 @@ def _load_module(monkeypatch, *, tenant_model_records, factory_llm_infos=None):
         "api.db.services.tenant_model_service",
         TenantModelService=SimpleNamespace(
             get_models_by_provider_ids_and_instance_ids=lambda p_ids, i_ids: list(tenant_model_records),
+            get_models_by_ids=lambda model_ids: [],
             # Default returns an "active" model so `_get_model_info` treats
             # the row as enabled when exercising the bare-model branch.
             get_by_provider_id_and_instance_id_and_model_type_and_model_name=lambda *args: SimpleNamespace(status=1),
@@ -140,6 +141,7 @@ def _load_module(monkeypatch, *, tenant_model_records, factory_llm_infos=None):
         monkeypatch,
         "api.db.joint_services.tenant_model_service",
         ensure_mineru_from_env=lambda *a, **kw: None,
+        get_model_config_by_id=MagicMock(side_effect=LookupError),
         resolve_model_id=MagicMock(),
     )
     _stub(
@@ -148,6 +150,14 @@ def _load_module(monkeypatch, *, tenant_model_records, factory_llm_infos=None):
         tenant_model_service=sys.modules["api.db.joint_services.tenant_model_service"],
     )
 
+    _stub(
+        monkeypatch,
+        "api.db.services.shared_model_service",
+        SharedModelService=SimpleNamespace(
+            is_managed=lambda model_id: False,
+            list_accessible_model_ids=lambda tenant_id: set(),
+        ),
+    )
     _stub(
         monkeypatch,
         "common.constants",
