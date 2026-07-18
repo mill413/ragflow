@@ -1,4 +1,6 @@
 import {
+  type KeyboardEvent,
+  type MouseEvent,
   useCallback,
   useContext,
   useLayoutEffect,
@@ -140,6 +142,17 @@ const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
   actions: 'w-44 min-w-44',
 };
 
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [role="combobox"], [role="menuitem"], [role="option"]',
+      ),
+    )
+  );
+}
+
 function AdminUserManagement() {
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
 
@@ -279,6 +292,12 @@ function AdminUserManagement() {
       throw error;
     }
   }, []);
+
+  const openUserDetail = useCallback(
+    (email: string) =>
+      navigate(`${Routes.AdminUserManagement}/${encodeURIComponent(email)}`),
+    [navigate],
+  );
 
   // Update user status mutation
   const updateUserStatusMutation = useMutation({
@@ -469,11 +488,7 @@ function AdminUserManagement() {
                 className="border-0"
                 title={t('admin.userDetails')}
                 aria-label={t('admin.userDetails')}
-                onClick={() =>
-                  navigate(
-                    `${Routes.AdminUserManagement}/${row.original.email}`,
-                  )
-                }
+                onClick={() => openUserDetail(row.original.email)}
               >
                 <LucideClipboardList />
               </Button>
@@ -534,7 +549,7 @@ function AdminUserManagement() {
       updateDepartmentMutation,
       departments,
       openUserHome,
-      navigate,
+      openUserDetail,
     ],
   );
 
@@ -756,7 +771,27 @@ function AdminUserManagement() {
                 <TableBody>
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id} className="group/row">
+                      <TableRow
+                        key={row.id}
+                        className="group/row cursor-pointer"
+                        tabIndex={0}
+                        aria-label={`${t('admin.userDetails')}：${row.original.email}`}
+                        onClick={(event: MouseEvent<HTMLTableRowElement>) => {
+                          if (!isInteractiveTarget(event.target)) {
+                            openUserDetail(row.original.email);
+                          }
+                        }}
+                        onKeyDown={(
+                          event: KeyboardEvent<HTMLTableRowElement>,
+                        ) => {
+                          if (
+                            event.key === 'Enter' &&
+                            !isInteractiveTarget(event.target)
+                          ) {
+                            openUserDetail(row.original.email);
+                          }
+                        }}
+                      >
                         {row.getVisibleCells().map((cell) => (
                           <TableCell
                             key={cell.id}
