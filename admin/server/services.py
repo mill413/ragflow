@@ -1006,7 +1006,7 @@ class ResourceMgr:
         elif resource_type == "memory":
             from api.apps.services import memory_api_service
 
-            success = bool(await memory_api_service.delete_memory(resource_id))
+            success = bool(await memory_api_service.delete_memory_as_admin(resource_id))
             result = True if success else "Failed to delete memory"
         else:
             if (

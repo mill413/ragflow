@@ -269,13 +269,23 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
     return True, _build_memory_response(updated_memory)
 
 
-async def delete_memory(memory_id):
-    memory = _require_memory_access(memory_id, manage=True)
+def _delete_memory(memory):
     ResourceReferenceService.ensure_not_referenced("memory", [memory])
-    MemoryService.delete_memory(memory_id)
-    if MessageService.has_index(memory.tenant_id, memory_id):
-        MessageService.delete_message({"memory_id": memory_id}, memory.tenant_id, memory_id)
+    MemoryService.delete_memory(memory.id)
+    if MessageService.has_index(memory.tenant_id, memory.id):
+        MessageService.delete_message({"memory_id": memory.id}, memory.tenant_id, memory.id)
     return True
+
+
+async def delete_memory(memory_id):
+    return _delete_memory(_require_memory_access(memory_id, manage=True))
+
+
+async def delete_memory_as_admin(memory_id):
+    memory = MemoryService.get_by_memory_id(memory_id)
+    if not memory:
+        raise NotFoundException(f"Memory '{memory_id}' not found.")
+    return _delete_memory(memory)
 
 
 async def list_memory(filter_params: dict, keywords: str, page: int = 1, page_size: int = 50):

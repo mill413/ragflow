@@ -69,3 +69,36 @@ async def test_message_mutations_require_memory_management(monkeypatch):
     assert await memory_api_service.forget_message("memory", 1)
     assert await memory_api_service.update_message_status("memory", 1, False)
     assert requested_manage_flags == [True, True]
+
+
+@pytest.mark.asyncio
+async def test_delete_memory_as_admin_does_not_require_current_user(monkeypatch):
+    memory = SimpleNamespace(id="memory", tenant_id="team")
+    checked_references = []
+    deleted_memories = []
+    deleted_messages = []
+
+    class CurrentUserMustNotBeRead:
+        @property
+        def id(self):
+            raise AssertionError("admin deletion must not read the main-site current_user")
+
+    monkeypatch.setattr(memory_api_service, "current_user", CurrentUserMustNotBeRead())
+    monkeypatch.setattr(memory_api_service.MemoryService, "get_by_memory_id", lambda _memory_id: memory)
+    monkeypatch.setattr(
+        memory_api_service.ResourceReferenceService,
+        "ensure_not_referenced",
+        lambda resource_type, resources: checked_references.append((resource_type, resources)),
+    )
+    monkeypatch.setattr(memory_api_service.MemoryService, "delete_memory", deleted_memories.append)
+    monkeypatch.setattr(memory_api_service.MessageService, "has_index", lambda _tenant_id, _memory_id: True)
+    monkeypatch.setattr(
+        memory_api_service.MessageService,
+        "delete_message",
+        lambda condition, tenant_id, memory_id: deleted_messages.append((condition, tenant_id, memory_id)),
+    )
+
+    assert await memory_api_service.delete_memory_as_admin("memory")
+    assert checked_references == [("memory", [memory])]
+    assert deleted_memories == ["memory"]
+    assert deleted_messages == [({"memory_id": "memory"}, "team", "memory")]
