@@ -20,14 +20,25 @@ from typing import Any
 
 from quart import g, has_request_context
 
-from api.db import TenantPermission, UserTenantRole, WorkspaceType
+from api.db import KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME, TenantPermission, UserTenantRole, WorkspaceType
 from api.db.db_models import (
+    APIToken,
     DB,
     Dialog,
+    File,
+    File2Document,
+    FileCommit,
+    FileCommitItem,
     Knowledgebase,
     Memory,
     Search,
     Tenant,
+    TenantLangfuse,
+    TenantLLM,
+    TenantModel,
+    TenantModelGroupMapping,
+    TenantModelInstance,
+    TenantModelProvider,
     UserCanvas,
     UserTenant,
 )
@@ -351,6 +362,59 @@ class WorkspaceAccessService:
         return cls._value(conversation, "user_id") == user_id
 
     @classmethod
+    def can_read_agent_session(
+        cls,
+        user_id: str,
+        agent: Mapping[str, Any] | Any,
+        session: Mapping[str, Any] | Any,
+    ) -> bool:
+        agent_id = cls._value(agent, "id")
+        if not agent_id or cls._value(session, "dialog_id") != agent_id:
+            return False
+        if not cls.can_read_shared_resource(
+            user_id,
+            agent,
+            workspace_field="user_id",
+            permission_field="permission",
+        ):
+            return False
+
+        workspace_id = cls._value(agent, "user_id")
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+            return True
+        return cls.is_superuser(user_id) or cls._value(session, "user_id") == user_id
+
+    @classmethod
+    def can_manage_agent_session(
+        cls,
+        user_id: str,
+        agent: Mapping[str, Any] | Any,
+        session: Mapping[str, Any] | Any,
+    ) -> bool:
+        if not cls.can_read_agent_session(user_id, agent, session):
+            return False
+        if cls.is_superuser(user_id):
+            return True
+
+        workspace_id = cls._value(agent, "user_id")
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM and cls.can_manage_workspace(user_id, workspace_id):
+            return True
+        return cls._value(session, "user_id") == user_id
+
+    @classmethod
+    def get_agent_session_capabilities(
+        cls,
+        user_id: str,
+        agent: Mapping[str, Any] | Any,
+        session: Mapping[str, Any] | Any,
+    ) -> dict[str, bool]:
+        return {
+            "read": cls.can_read_agent_session(user_id, agent, session),
+            "update": cls.can_manage_agent_session(user_id, agent, session),
+            "delete": cls.can_manage_agent_session(user_id, agent, session),
+        }
+
+    @classmethod
     def extract_knowledgebase_ids(cls, value: Any) -> set[str]:
         knowledgebase_ids: set[str] = set()
 
@@ -605,18 +669,66 @@ class TeamService:
 
     @classmethod
     def delete(cls, actor_id: str, tenant_id: str) -> None:
+        if WorkspaceAccessService.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
+            raise LookupError("Team not found.")
         membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
         if not WorkspaceAccessService.is_superuser(actor_id) and (not membership or membership.role != UserTenantRole.OWNER):
             raise PermissionError("Only the owner can delete a team.")
-        resource_queries = (
-            Knowledgebase.select().where((Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)),
-            Dialog.select().where((Dialog.tenant_id == tenant_id) & (Dialog.status == StatusEnum.VALID.value)),
-            Search.select().where((Search.tenant_id == tenant_id) & (Search.status == StatusEnum.VALID.value)),
-            UserCanvas.select().where(UserCanvas.user_id == tenant_id),
-            Memory.select().where(Memory.tenant_id == tenant_id),
-        )
-        if any(query.exists() for query in resource_queries):
-            raise ValueError("Delete all team resources before deleting the team.")
-        with DB.atomic():
-            UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
-            Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()
+        with DB.lock(cls._lock_name("delete", tenant_id), 10):
+            team_files = File.select().where(
+                (File.tenant_id == tenant_id)
+                & ~(
+                    (File.type == "folder")
+                    & ((File.parent_id == File.id) | File.name.in_([KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME]))
+                )
+            )
+            resource_queries = (
+                Knowledgebase.select().where((Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)),
+                Dialog.select().where((Dialog.tenant_id == tenant_id) & (Dialog.status == StatusEnum.VALID.value)),
+                Search.select().where((Search.tenant_id == tenant_id) & (Search.status == StatusEnum.VALID.value)),
+                UserCanvas.select().where(UserCanvas.user_id == tenant_id),
+                Memory.select().where(Memory.tenant_id == tenant_id),
+                team_files,
+            )
+            if any(query.exists() for query in resource_queries):
+                raise ValueError("Delete all team resources before deleting the team.")
+            with DB.atomic():
+                file_ids = [file_id for (file_id,) in File.select(File.id).where(File.tenant_id == tenant_id).tuples()]
+                knowledgebase_ids = [
+                    knowledgebase_id
+                    for (knowledgebase_id,) in Knowledgebase.select(Knowledgebase.id).where(Knowledgebase.tenant_id == tenant_id).tuples()
+                ]
+                commit_ids = [
+                    commit_id
+                    for (commit_id,) in FileCommit.select(FileCommit.id).where(FileCommit.folder_id.in_(file_ids + knowledgebase_ids)).tuples()
+                ]
+                provider_ids = [
+                    provider_id
+                    for (provider_id,) in TenantModelProvider.select(TenantModelProvider.id).where(TenantModelProvider.tenant_id == tenant_id).tuples()
+                ]
+                instance_ids = [
+                    instance_id
+                    for (instance_id,) in TenantModelInstance.select(TenantModelInstance.id).where(TenantModelInstance.provider_id.in_(provider_ids)).tuples()
+                ]
+                model_ids = [
+                    model_id
+                    for (model_id,) in TenantModel.select(TenantModel.id).where(TenantModel.provider_id.in_(provider_ids)).tuples()
+                ]
+
+                FileCommitItem.delete().where(FileCommitItem.commit_id.in_(commit_ids)).execute()
+                FileCommit.delete().where(FileCommit.id.in_(commit_ids)).execute()
+                File2Document.delete().where(File2Document.file_id.in_(file_ids)).execute()
+                File.delete().where(File.tenant_id == tenant_id).execute()
+                APIToken.delete().where(APIToken.tenant_id == tenant_id).execute()
+                TenantLangfuse.delete().where(TenantLangfuse.tenant_id == tenant_id).execute()
+                TenantLLM.delete().where(TenantLLM.tenant_id == tenant_id).execute()
+                TenantModelGroupMapping.delete().where(
+                    (TenantModelGroupMapping.provider_id.in_(provider_ids))
+                    | (TenantModelGroupMapping.instance_id.in_(instance_ids))
+                    | (TenantModelGroupMapping.model_id.in_(model_ids))
+                ).execute()
+                TenantModel.delete().where(TenantModel.provider_id.in_(provider_ids)).execute()
+                TenantModelInstance.delete().where(TenantModelInstance.provider_id.in_(provider_ids)).execute()
+                TenantModelProvider.delete().where(TenantModelProvider.tenant_id == tenant_id).execute()
+                UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
+                Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()

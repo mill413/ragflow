@@ -38,7 +38,7 @@ from quart import Response, jsonify, request, make_response
 from api.apps import AUTH_JWT, AUTH_API, AUTH_BETA, current_user, login_required
 from api.apps.services.canvas_replica_service import CanvasReplicaService
 from api.db import CanvasCategory, TenantPermission, WorkspaceType
-from api.db.db_models import Task
+from api.db.db_models import APIToken, Task
 from api.db.services.api_service import API4ConversationService
 from api.db.services.canvas_service import (
     CanvasTemplateService,
@@ -251,6 +251,27 @@ def _normalize_agent_session(conv):
     return conv
 
 
+def _agent_session_owner_filter(agent):
+    workspace_id = str(agent.user_id)
+    if WorkspaceAccessService.is_superuser(current_user.id) or WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+        return None
+    return str(current_user.id)
+
+
+def _build_agent_session_response(session, agent):
+    data = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, data)
+    return _normalize_agent_session(data)
+
+
+def _build_agent_session_name_response(session, agent):
+    data = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, data)
+    data.pop("dialog_id", None)
+    data.pop("user_id", None)
+    return data
+
+
 def _agent_session_list_result(data, total):
     return jsonify({"code": RetCode.SUCCESS, "message": "success", "data": data, "total": total})
 
@@ -459,7 +480,10 @@ async def _run_workflow_session(
 @_require_canvas_access_sync
 def list_agent_sessions(agent_id, tenant_id):
     session_id = request.args.get("id")
-    user_id = tenant_id
+    exists, agent = UserCanvasService.get_by_id(agent_id)
+    if not exists:
+        return get_data_error_result(message="Agent not found.")
+    owner_filter = _agent_session_owner_filter(agent)
     page_number = int(request.args.get("page", 1))
     items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 30)))
     keywords = request.args.get("keywords")
@@ -467,11 +491,11 @@ def list_agent_sessions(agent_id, tenant_id):
     to_date = request.args.get("to_date")
     orderby = request.args.get("orderby", "update_time")
     names_only = bool(request.args.get("exp_user_id"))
-    exp_user_id = tenant_id
     desc = request.args.get("desc") not in {"False", "false"}
 
     if names_only:
-        sessions = API4ConversationService.get_names(agent_id, exp_user_id)
+        sessions = API4ConversationService.get_names(agent_id, owner_filter)
+        sessions = [_build_agent_session_name_response(session, agent) for session in sessions]
         return _agent_session_list_result(sessions, len(sessions))
 
     include_dsl = request.args.get("dsl") not in {"False", "false"}
@@ -483,14 +507,13 @@ def list_agent_sessions(agent_id, tenant_id):
         orderby,
         desc,
         session_id,
-        user_id,
+        owner_filter,
         include_dsl,
         keywords,
         from_date,
         to_date,
-        exp_user_id=exp_user_id,
     )
-    sessions = [_normalize_agent_session(session) for session in sessions]
+    sessions = [_build_agent_session_response(session, agent) for session in sessions]
     return _agent_session_list_result(sessions, total)
 
 
@@ -531,7 +554,7 @@ async def create_agent_session(agent_id, tenant_id):
         "version_title": version_title,
     }
     API4ConversationService.save(**conv)
-    return get_result(data=_normalize_agent_session(conv))
+    return get_result(data=_build_agent_session_response(conv, cvs))
 
 
 @manager.route("/agents/<agent_id>/sessions/<session_id>", methods=["GET"])  # noqa: F821
@@ -539,10 +562,13 @@ async def create_agent_session(agent_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_access_sync
 def get_agent_session(agent_id, session_id, tenant_id):
+    agent_exists, agent = UserCanvasService.get_by_id(agent_id)
     exists, conv = API4ConversationService.get_by_id(session_id)
-    if not exists or conv.dialog_id != agent_id or str(conv.user_id) != str(tenant_id):
+    if not agent_exists or not exists or not WorkspaceAccessService.can_read_agent_session(current_user.id, agent, conv):
         return get_data_error_result(message="Session not found!")
-    return get_json_result(data=conv.to_dict())
+    data = conv.to_dict()
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, conv)
+    return get_json_result(data=data)
 
 
 @manager.route("/agents/<agent_id>/sessions/<session_id>", methods=["DELETE"])  # noqa: F821
@@ -550,8 +576,9 @@ def get_agent_session(agent_id, session_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_access_sync
 def delete_agent_session_item(agent_id, session_id, tenant_id):
+    agent_exists, agent = UserCanvasService.get_by_id(agent_id)
     exists, conv = API4ConversationService.get_by_id(session_id)
-    if not exists or conv.dialog_id != agent_id or str(conv.user_id) != str(tenant_id):
+    if not agent_exists or not exists or not WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, conv):
         return get_data_error_result(message="Session not found!")
     return get_json_result(data=API4ConversationService.delete_by_id(session_id))
 
@@ -567,10 +594,15 @@ async def delete_agent_session(tenant_id, agent_id):
     if not req:
         return get_result()
 
+    agent_exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    if not agent_exists:
+        return get_data_error_result(message="Agent not found.")
+
     ids = req.get("ids")
     if not ids:
         if req.get("delete_all") is True:
-            ids = [conv.id for conv in await thread_pool_exec(API4ConversationService.query, dialog_id=agent_id, user_id=tenant_id)]
+            sessions = await thread_pool_exec(API4ConversationService.query, dialog_id=agent_id)
+            ids = [conv.id for conv in sessions if WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, conv)]
             if not ids:
                 return get_result()
         else:
@@ -582,9 +614,9 @@ async def delete_agent_session(tenant_id, agent_id):
     conv_list = unique_conv_ids
 
     for session_id in conv_list:
-        conv = await thread_pool_exec(API4ConversationService.query, id=session_id, dialog_id=agent_id, user_id=tenant_id)
-        if not conv:
-            errors.append(f"The agent doesn't own the session {session_id}")
+        sessions = await thread_pool_exec(API4ConversationService.query, id=session_id, dialog_id=agent_id)
+        if not sessions or not WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, sessions[0]):
+            errors.append(f"No permission to delete session {session_id}")
             continue
         await thread_pool_exec(API4ConversationService.delete_by_id, session_id)
         success_count += 1
@@ -1064,7 +1096,11 @@ async def get_agent_logs(agent_id, message_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_owner_sync
 def delete_agent(agent_id, tenant_id):
-    UserCanvasService.delete_by_id(agent_id)
+    with UserCanvasService.model._meta.database.atomic():
+        API4ConversationService.delete_by_dialog_ids([agent_id])
+        UserCanvasVersionService.model.delete().where(UserCanvasVersionService.model.user_canvas_id == agent_id).execute()
+        APIToken.delete().where(APIToken.dialog_id == agent_id).execute()
+        UserCanvasService.delete_by_id(agent_id)
     return get_json_result(data=True)
 
 
@@ -1399,7 +1435,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
                 message="Session does not belong to the requested agent.",
                 code=RetCode.OPERATING_ERROR,
             )
-        if str(conv.user_id) != str(tenant_id):
+        if not WorkspaceAccessService.can_manage_agent_session(current_user.id, cvs, conv):
             return get_json_result(
                 data=False,
                 message="Session not found!",

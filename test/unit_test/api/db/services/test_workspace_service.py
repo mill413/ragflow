@@ -271,3 +271,25 @@ def test_personal_conversations_are_visible_to_owner_and_superuser(workspace_dep
     assert WorkspaceAccessService.can_manage_conversation("user-1", personal_chat, conversation)
     assert WorkspaceAccessService.can_manage_conversation("system-admin", personal_chat, conversation)
     assert not WorkspaceAccessService.can_read_conversation("member-1", personal_chat, conversation)
+
+
+def test_team_agent_sessions_are_shared_and_managed_by_team_administrators(workspace_dependencies):
+    team_agent = {"id": "agent-1", "user_id": "team-1", "permission": TenantPermission.TEAM}
+    member_session = {"id": "session-1", "dialog_id": "agent-1", "user_id": "member-1"}
+
+    assert WorkspaceAccessService.can_read_agent_session("member-2", team_agent, member_session)
+    assert not WorkspaceAccessService.can_manage_agent_session("member-2", team_agent, member_session)
+    assert WorkspaceAccessService.can_manage_agent_session("member-1", team_agent, member_session)
+    assert WorkspaceAccessService.can_manage_agent_session("admin-1", team_agent, member_session)
+    assert WorkspaceAccessService.can_manage_agent_session("system-admin", team_agent, member_session)
+    assert not WorkspaceAccessService.can_read_agent_session("outsider", team_agent, member_session)
+    assert not WorkspaceAccessService.can_read_agent_session("member-2", team_agent, {**member_session, "dialog_id": "agent-2"})
+
+
+def test_personal_agent_sessions_are_visible_to_owner_and_superuser(workspace_dependencies):
+    personal_agent = {"id": "agent-1", "user_id": "user-1", "permission": TenantPermission.ME}
+    session = {"id": "session-1", "dialog_id": "agent-1", "user_id": "user-1"}
+
+    assert WorkspaceAccessService.can_manage_agent_session("user-1", personal_agent, session)
+    assert WorkspaceAccessService.can_manage_agent_session("system-admin", personal_agent, session)
+    assert not WorkspaceAccessService.can_read_agent_session("member-1", personal_agent, session)

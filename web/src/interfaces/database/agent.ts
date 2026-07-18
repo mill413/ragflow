@@ -270,6 +270,11 @@ export interface IAgentLogResponse {
   reference: IReference[];
   name: string;
   version_title: string;
+  capabilities?: {
+    read: boolean;
+    update: boolean;
+    delete: boolean;
+  };
 }
 export interface IAgentLogsResponse {
   total: number;
