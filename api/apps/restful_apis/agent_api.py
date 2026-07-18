@@ -192,7 +192,7 @@ def _build_agent_response(agent: dict, user_id: str) -> dict:
             workspace_field="user_id" if data.get("user_id") else "tenant_id",
         )
     )
-    data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(
+    data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(
         user_id,
         data,
         workspace_field="user_id" if data.get("user_id") else "tenant_id",
@@ -908,7 +908,7 @@ async def update_agent_tags(tenant_id, canvas_id):
 async def create_agent(tenant_id):
     req = {k: v for k, v in (await get_request_json()).items() if v is not None}
     workspace_id = req.pop("workspace_id", req.pop("user_id", tenant_id))
-    if not WorkspaceAccessService.can_create_shared_resource(tenant_id, workspace_id):
+    if not WorkspaceAccessService.can_create_collaborative_resource(tenant_id, workspace_id):
         return get_json_result(data=False, message="No authorization.", code=RetCode.OPERATING_ERROR)
     req["canvas_type"] = req.get("canvas_type", "")
     req["user_id"] = workspace_id

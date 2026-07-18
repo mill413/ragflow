@@ -23,7 +23,7 @@ export default function ChatList() {
     canRunInWritableWorkspace,
     runInWritableWorkspace,
     workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   const {
     data,
     setPagination,

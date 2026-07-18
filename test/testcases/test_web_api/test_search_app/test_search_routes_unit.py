@@ -239,7 +239,7 @@ def _load_search_api(monkeypatch):
 
     class _WorkspaceAccessService:
         @staticmethod
-        def can_create_shared_resource(_user_id, _workspace_id):
+        def can_create_collaborative_resource(_user_id, _workspace_id):
             return True
 
         @staticmethod
@@ -251,7 +251,7 @@ def _load_search_api(monkeypatch):
             return True
 
         @staticmethod
-        def can_manage_shared_resource(_user_id, _resource):
+        def can_manage_collaborative_resource(_user_id, _resource):
             return True
 
         @staticmethod
@@ -259,7 +259,7 @@ def _load_search_api(monkeypatch):
             return "personal"
 
         @staticmethod
-        def get_shared_resource_capabilities(_user_id, _resource):
+        def get_collaborative_resource_capabilities(_user_id, _resource):
             return {"read": True, "update": True, "delete": True}
 
         @staticmethod
@@ -386,14 +386,14 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
     assert "large than" in res["message"]
 
     # update: no access
-    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_shared_resource", lambda _user_id, _resource: False)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: False)
     _set_request_json(monkeypatch, module, {"name": "ok", "search_config": {}})
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
     assert "authorization" in res["message"].lower()
 
     # update: search not found
-    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_shared_resource", lambda _user_id, _resource: True)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: True)
     monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: (False, None))
     _set_request_json(monkeypatch, module, {"name": "ok", "search_config": {}})
     res = _run(module.update(search_id="s1"))
@@ -552,13 +552,13 @@ def test_list_and_delete_route_matrix_unit(monkeypatch):
     assert "list boom" in res["message"]
 
     # delete: no authorization
-    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_shared_resource", lambda _user_id, _resource: False)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: False)
     res = module.delete_search(search_id="search-1")
     assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
     assert "authorization" in res["message"].lower()
 
     # delete: delete_by_id fails
-    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_shared_resource", lambda _user_id, _resource: True)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: True)
     monkeypatch.setattr(module.SearchService, "delete_by_id", lambda _search_id: False)
     res = module.delete_search(search_id="search-1")
     assert res["code"] == module.RetCode.DATA_ERROR

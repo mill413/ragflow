@@ -21,7 +21,7 @@ export default function SearchList() {
     canRunInWritableWorkspace,
     runInWritableWorkspace,
     workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('search');
   const { t: tc } = useTranslate('common');

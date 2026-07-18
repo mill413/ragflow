@@ -12,6 +12,7 @@ export interface IWorkspace {
   capabilities: IWorkspaceCapabilities & {
     create_knowledgebase?: boolean;
     create_shared_resource?: boolean;
+    create_collaborative_resource?: boolean;
     manage_members?: boolean;
   };
 }

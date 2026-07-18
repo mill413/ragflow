@@ -34,7 +34,7 @@ def _load_list_manageable_chat_ids():
     return namespace["_list_manageable_chat_ids"]
 
 
-def test_list_manageable_chat_ids_includes_personal_and_managed_teams():
+def test_list_manageable_chat_ids_includes_personal_and_member_teams():
     list_manageable_chat_ids = _load_list_manageable_chat_ids()
     chats = [
         {"id": "personal-chat", "tenant_id": "user-1"},
@@ -51,14 +51,14 @@ def test_list_manageable_chat_ids_includes_personal_and_managed_teams():
 
     workspace_access = SimpleNamespace(
         list_visible_workspace_ids=lambda user_id: [user_id, "team-admin", "team-member"],
-        can_manage_shared_resource=lambda user_id, chat: chat["tenant_id"] != "team-member",
+        can_manage_collaborative_resource=lambda _user_id, _chat: True,
     )
     list_manageable_chat_ids.__globals__.update(
         DialogService=DialogService,
         WorkspaceAccessService=workspace_access,
     )
 
-    assert list_manageable_chat_ids("user-1") == ["personal-chat", "managed-team-chat"]
+    assert list_manageable_chat_ids("user-1") == ["personal-chat", "managed-team-chat", "readonly-team-chat"]
     assert captured["query"] == (
         ["user-1", "team-admin", "team-member"],
         "user-1",

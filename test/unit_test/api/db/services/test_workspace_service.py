@@ -214,6 +214,7 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
         "read": True,
         "create_knowledgebase": True,
         "create_shared_resource": True,
+        "create_collaborative_resource": True,
         "manage_members": True,
         "update": True,
         "delete": True,
@@ -222,6 +223,7 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
         "read": True,
         "create_knowledgebase": False,
         "create_shared_resource": False,
+        "create_collaborative_resource": True,
         "manage_members": False,
         "update": False,
         "delete": False,
@@ -230,18 +232,20 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
         "read": True,
         "create_knowledgebase": True,
         "create_shared_resource": True,
+        "create_collaborative_resource": True,
         "manage_members": True,
         "update": True,
         "delete": True,
     }
 
 
-def test_team_members_cannot_create_or_modify_team_resources(workspace_dependencies):
+def test_team_member_permissions_distinguish_collaborative_and_managed_resources(workspace_dependencies):
     team_file = {"tenant_id": "team-1"}
     personal_file = {"tenant_id": "user-1"}
 
     assert not WorkspaceAccessService.can_create_knowledgebase("member-1", "team-1")
     assert not WorkspaceAccessService.can_create_shared_resource("member-1", "team-1")
+    assert WorkspaceAccessService.can_create_collaborative_resource("member-1", "team-1")
     assert not WorkspaceAccessService.can_manage_file("member-1", team_file)
     assert WorkspaceAccessService.can_manage_file("admin-1", team_file)
     assert WorkspaceAccessService.can_manage_file("system-admin", team_file)
@@ -297,6 +301,30 @@ def test_workspace_resources_are_readable_by_members_and_writable_by_managers(wo
         "update": True,
         "delete": True,
     }
+
+
+def test_collaborative_resources_are_writable_by_all_team_members(workspace_dependencies):
+    team_resource = {
+        "tenant_id": "team-1",
+        "permission": TenantPermission.TEAM,
+        "status": StatusEnum.VALID.value,
+    }
+
+    assert WorkspaceAccessService.get_collaborative_resource_capabilities(
+        "member-1",
+        team_resource,
+        permission_field="permission",
+    ) == {"read": True, "update": True, "delete": True}
+    assert WorkspaceAccessService.get_collaborative_resource_capabilities(
+        "admin-1",
+        team_resource,
+        permission_field="permission",
+    ) == {"read": True, "update": True, "delete": True}
+    assert WorkspaceAccessService.get_collaborative_resource_capabilities(
+        "outsider",
+        team_resource,
+        permission_field="permission",
+    ) == {"read": False, "update": False, "delete": False}
 
 
 def test_connector_mcp_and_compilation_references_must_stay_in_workspace(workspace_dependencies, monkeypatch):
@@ -377,12 +405,12 @@ def test_memory_and_static_file_references_must_stay_in_workspace(workspace_depe
     assert not WorkspaceAccessService.can_reference_files("member-1", "team-1", ["personal-file"])
 
 
-def test_team_conversations_are_shared_and_managed_by_team_administrators(workspace_dependencies):
+def test_team_conversations_are_shared_and_managed_by_all_team_members(workspace_dependencies):
     team_chat = {"id": "chat-1", "tenant_id": "team-1", "status": StatusEnum.VALID.value}
     member_conversation = {"id": "conv-1", "dialog_id": "chat-1", "user_id": "member-1"}
 
     assert WorkspaceAccessService.can_read_conversation("member-2", team_chat, member_conversation)
-    assert not WorkspaceAccessService.can_manage_conversation("member-2", team_chat, member_conversation)
+    assert WorkspaceAccessService.can_manage_conversation("member-2", team_chat, member_conversation)
     assert WorkspaceAccessService.can_manage_conversation("member-1", team_chat, member_conversation)
     assert WorkspaceAccessService.can_manage_conversation("admin-1", team_chat, member_conversation)
     assert WorkspaceAccessService.can_manage_conversation("system-admin", team_chat, member_conversation)
@@ -397,12 +425,12 @@ def test_personal_conversations_are_visible_to_owner_and_superuser(workspace_dep
     assert not WorkspaceAccessService.can_read_conversation("member-1", personal_chat, conversation)
 
 
-def test_team_agent_sessions_are_shared_and_managed_by_team_administrators(workspace_dependencies):
+def test_team_agent_sessions_are_shared_and_managed_by_all_team_members(workspace_dependencies):
     team_agent = {"id": "agent-1", "user_id": "team-1", "permission": TenantPermission.TEAM}
     member_session = {"id": "session-1", "dialog_id": "agent-1", "user_id": "member-1"}
 
     assert WorkspaceAccessService.can_read_agent_session("member-2", team_agent, member_session)
-    assert not WorkspaceAccessService.can_manage_agent_session("member-2", team_agent, member_session)
+    assert WorkspaceAccessService.can_manage_agent_session("member-2", team_agent, member_session)
     assert WorkspaceAccessService.can_manage_agent_session("member-1", team_agent, member_session)
     assert WorkspaceAccessService.can_manage_agent_session("admin-1", team_agent, member_session)
     assert WorkspaceAccessService.can_manage_agent_session("system-admin", team_agent, member_session)

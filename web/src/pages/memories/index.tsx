@@ -22,7 +22,7 @@ export default function MemoryList() {
     canRunInWritableWorkspace,
     runInWritableWorkspace,
     workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('memories');
   const [addOrEditType, setAddOrEditType] = useState<'add' | 'edit'>('add');

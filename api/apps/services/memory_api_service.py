@@ -51,7 +51,7 @@ def _joined_tenant_ids(user_id: str) -> set[str]:
 
 
 def _memory_accessible(memory, *, manage: bool = False) -> bool:
-    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    check = WorkspaceAccessService.can_manage_collaborative_resource if manage else WorkspaceAccessService.can_read_shared_resource
     return check(
         current_user.id,
         memory,
@@ -61,7 +61,7 @@ def _memory_accessible(memory, *, manage: bool = False) -> bool:
 
 def _require_memory_access(memory_id: str, *, manage=False):
     memory = MemoryService.get_by_memory_id(memory_id)
-    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    check = WorkspaceAccessService.can_manage_collaborative_resource if manage else WorkspaceAccessService.can_read_shared_resource
     if not memory or not check(current_user.id, memory, permission_field="permissions"):
         raise NotFoundException(f"Memory '{memory_id}' not found.")
     return memory
@@ -70,7 +70,7 @@ def _require_memory_access(memory_id: str, *, manage=False):
 def _build_memory_response(memory):
     data = format_ret_data_from_memory(memory) if not isinstance(memory, dict) else dict(memory)
     data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
-    data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(
+    data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(
         current_user.id,
         data,
         permission_field="permissions",
@@ -112,7 +112,7 @@ async def create_memory(memory_info: dict):
         raise ArgumentException(f"Memory type '{invalid_type}' is not supported.")
     memory_type = list(memory_type)
     workspace_id = memory_info.get("workspace_id", current_user.id)
-    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+    if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
         raise ArgumentException("No authorization for the selected workspace.")
     permissions = (
         TenantPermission.TEAM

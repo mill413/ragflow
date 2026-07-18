@@ -73,9 +73,18 @@ export const useWorkspace = () => {
   };
 };
 
-export const useWritableWorkspaceAction = () => {
-  const { options, isAllWorkspaces, canCreateSharedResource, setWorkspaceId } =
+type WorkspaceCreateCapability =
+  | 'create_shared_resource'
+  | 'create_collaborative_resource';
+
+export const useWritableWorkspaceAction = (
+  capability: WorkspaceCreateCapability = 'create_shared_resource',
+) => {
+  const { options, isAllWorkspaces, selectedWorkspace, setWorkspaceId } =
     useWorkspace();
+  const canCreateResource = Boolean(
+    selectedWorkspace?.capabilities?.[capability],
+  );
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   const pendingAction = useRef<(() => void) | null>(null);
   const writableOptions = useMemo(
@@ -83,14 +92,14 @@ export const useWritableWorkspaceAction = () => {
       options.filter(
         (option) =>
           option.value !== AllWorkspacesId &&
-          option.capabilities?.create_shared_resource,
+          option.capabilities?.[capability],
       ),
-    [options],
+    [capability, options],
   );
 
   const runInWritableWorkspace = useCallback(
     (action: () => void) => {
-      if (canCreateSharedResource) {
+      if (canCreateResource) {
         action();
         return;
       }
@@ -99,7 +108,7 @@ export const useWritableWorkspaceAction = () => {
         setWorkspaceDialogOpen(true);
       }
     },
-    [canCreateSharedResource, isAllWorkspaces, writableOptions.length],
+    [canCreateResource, isAllWorkspaces, writableOptions.length],
   );
 
   const selectWorkspace = useCallback(
@@ -115,7 +124,7 @@ export const useWritableWorkspaceAction = () => {
 
   return {
     canRunInWritableWorkspace:
-      canCreateSharedResource ||
+      canCreateResource ||
       (isAllWorkspaces && writableOptions.length > 0),
     runInWritableWorkspace,
     workspaceDialogProps: {

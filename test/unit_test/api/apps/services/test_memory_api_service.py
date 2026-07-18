@@ -33,7 +33,7 @@ async def test_add_message_requires_management_of_every_memory(monkeypatch):
     monkeypatch.setattr(memory_api_service.MemoryService, "get_by_ids", lambda _ids: memories)
     monkeypatch.setattr(
         memory_api_service.WorkspaceAccessService,
-        "can_manage_shared_resource",
+        "can_manage_collaborative_resource",
         lambda _user_id, memory, **_kwargs: memory.id == "managed",
     )
 

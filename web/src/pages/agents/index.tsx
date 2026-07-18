@@ -33,7 +33,7 @@ export default function Agents() {
     canRunInWritableWorkspace,
     runInWritableWorkspace,
     workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   const {
     data,
     pagination,

@@ -293,7 +293,7 @@ class UserCanvasService(CommonService):
         e, canvas = UserCanvasService.get_by_canvas_id(canvas_id)
         if not e:
             return False
-        if not WorkspaceAccessService.can_manage_shared_resource(
+        if not WorkspaceAccessService.can_manage_collaborative_resource(
             tenant_id,
             canvas,
             workspace_field="user_id",

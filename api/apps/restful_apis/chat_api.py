@@ -124,7 +124,7 @@ def _build_chat_response(chat, user_id=None):
     data["kb_names"] = kb_names
     if user_id:
         data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
-        data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(user_id, data)
+        data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(user_id, data)
     return data
 
 
@@ -176,7 +176,7 @@ async def _get_accessible_chat(chat_id, *, manage=False):
     ok, chat = await thread_pool_exec(DialogService.get_by_id, chat_id)
     if not ok:
         return None
-    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    check = WorkspaceAccessService.can_manage_collaborative_resource if manage else WorkspaceAccessService.can_read_shared_resource
     return chat if await thread_pool_exec(check, current_user.id, chat) else None
 
 
@@ -211,7 +211,7 @@ def _list_manageable_chat_ids(user_id: str) -> list[str]:
         True,
         "",
     )
-    return [chat["id"] for chat in chats if WorkspaceAccessService.can_manage_shared_resource(user_id, chat)]
+    return [chat["id"] for chat in chats if WorkspaceAccessService.can_manage_collaborative_resource(user_id, chat)]
 
 
 async def _get_accessible_search(search_id):
@@ -423,7 +423,7 @@ async def create():
     try:
         req = await get_request_json()
         workspace_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
-        if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
             return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
         ok, tenant = TenantService.get_by_id(workspace_id)
         if not ok:
@@ -933,7 +933,7 @@ async def delete_sessions(chat_id):
             if req.get("delete_all") is True:
                 owner_filter = (
                     None
-                    if WorkspaceAccessService.can_manage_shared_resource(current_user.id, chat)
+                    if WorkspaceAccessService.can_manage_collaborative_resource(current_user.id, chat)
                     else current_user.id
                 )
                 query = {"dialog_id": chat_id}

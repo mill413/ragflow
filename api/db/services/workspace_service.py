@@ -218,6 +218,20 @@ class WorkspaceAccessService:
         return False
 
     @classmethod
+    def can_create_collaborative_resource(cls, user_id: str, tenant_id: str) -> bool:
+        """Allow every active team member to create chats, agents, searches, and memories."""
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
+        workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type and cls.is_superuser(user_id):
+            return True
+        if workspace_type == WorkspaceType.PERSONAL:
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        if workspace_type == WorkspaceType.TEAM:
+            return cls.is_member(user_id, tenant_id)
+        return False
+
+    @classmethod
     def can_read_workspace_resource(cls, user_id: str, resource: Mapping[str, Any] | Any, *, workspace_field: str = "tenant_id") -> bool:
         tenant_id = cls._value(resource, workspace_field)
         return bool(tenant_id and tenant_id in cls.list_visible_workspace_ids(user_id))
@@ -320,6 +334,54 @@ class WorkspaceAccessService:
                 permission_field=permission_field,
             ),
         }
+
+    @classmethod
+    def can_manage_collaborative_resource(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> bool:
+        """Allow active team members to manage chats, agents, searches, and memories."""
+        if not cls.can_read_shared_resource(
+            user_id,
+            resource,
+            workspace_field=workspace_field,
+            permission_field=permission_field,
+        ):
+            return False
+
+        tenant_id = cls._value(resource, workspace_field)
+        if cls.is_superuser(user_id):
+            return True
+        if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        return cls.is_member(user_id, tenant_id)
+
+    @classmethod
+    def get_collaborative_resource_capabilities(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> dict[str, bool]:
+        can_read = cls.can_read_shared_resource(
+            user_id,
+            resource,
+            workspace_field=workspace_field,
+            permission_field=permission_field,
+        )
+        can_manage = cls.can_manage_collaborative_resource(
+            user_id,
+            resource,
+            workspace_field=workspace_field,
+            permission_field=permission_field,
+        )
+        return {"read": can_read, "update": can_manage, "delete": can_manage}
 
     @classmethod
     def can_read_knowledgebase(cls, user_id: str, knowledgebase: Mapping[str, Any] | Any) -> bool:
@@ -454,8 +516,8 @@ class WorkspaceAccessService:
             return True
 
         workspace_id = cls._value(dialog, "tenant_id")
-        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM and cls.can_manage_workspace(user_id, workspace_id):
-            return True
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+            return cls.is_member(user_id, workspace_id)
         return cls._value(conversation, "user_id") == user_id
 
     @classmethod
@@ -494,8 +556,8 @@ class WorkspaceAccessService:
             return True
 
         workspace_id = cls._value(agent, "user_id")
-        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM and cls.can_manage_workspace(user_id, workspace_id):
-            return True
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+            return cls.is_member(user_id, workspace_id)
         return cls._value(session, "user_id") == user_id
 
     @classmethod
@@ -619,6 +681,7 @@ class WorkspaceAccessService:
             "read": bool(is_member or is_superuser),
             "create_knowledgebase": cls.can_create_knowledgebase(user_id, tenant_id),
             "create_shared_resource": cls.can_create_shared_resource(user_id, tenant_id),
+            "create_collaborative_resource": cls.can_create_collaborative_resource(user_id, tenant_id),
             "manage_members": bool(is_team and (role in cls.MANAGER_ROLES or is_superuser)),
             "update": bool(is_team and (role in cls.MANAGER_ROLES or is_superuser)),
             "delete": bool(is_team and (role == UserTenantRole.OWNER or is_superuser)),

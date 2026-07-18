@@ -419,11 +419,11 @@ def _load_agents_app(monkeypatch, *, target="rest"):
 
     workspace_service_mod = ModuleType("api.db.services.workspace_service")
     workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
-        can_create_shared_resource=lambda *_args, **_kwargs: True,
+        can_create_collaborative_resource=lambda *_args, **_kwargs: True,
         can_read_shared_resource=lambda *_args, **_kwargs: True,
         can_reference_knowledgebases=lambda *_args, **_kwargs: True,
         extract_knowledgebase_ids=lambda *_args, **_kwargs: set(),
-        get_shared_resource_capabilities=lambda *_args, **_kwargs: {
+        get_collaborative_resource_capabilities=lambda *_args, **_kwargs: {
             "read": True,
             "update": True,
             "delete": True,

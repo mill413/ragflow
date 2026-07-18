@@ -43,7 +43,7 @@ def _full_text_weight(vector_similarity_weight):
 def _build_search_response(search):
     data = search.to_dict() if hasattr(search, "to_dict") else dict(search)
     data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
-    data["capabilities"] = WorkspaceAccessService.get_shared_resource_capabilities(current_user.id, data)
+    data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(current_user.id, data)
     return data
 
 
@@ -51,7 +51,7 @@ def _get_search(search_id, *, manage=False):
     exists, search = SearchService.get_by_id(search_id)
     if not exists:
         return None
-    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    check = WorkspaceAccessService.can_manage_collaborative_resource if manage else WorkspaceAccessService.can_read_shared_resource
     return search if check(current_user.id, search) else None
 
 
@@ -72,7 +72,7 @@ def _validate_search_knowledgebases(search_config, workspace_id):
 async def create():
     req = await get_request_json()
     workspace_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
-    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+    if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
         return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     search_name = req["name"]
     description = req.get("description", "")
