@@ -109,6 +109,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
     control: form.control,
     name: 'parseType',
   });
+  const selectedWorkspaceId = useWatch({
+    control: form.control,
+    name: 'workspace_id',
+  });
 
   function onSubmit(data: z.infer<typeof FormSchema>) {
     const nextData =
@@ -130,6 +134,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
       form.setValue('workspace_id', defaultWorkspaceId);
     }
   }, [defaultWorkspaceId, form]);
+
+  useEffect(() => {
+    form.setValue('pipeline_id', '');
+  }, [selectedWorkspaceId, form]);
 
   return (
     <Form {...form}>
@@ -187,6 +195,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
         )}
         {parseType === ParseType.Pipeline && (
           <DataFlowSelect
+            workspaceId={selectedWorkspaceId || ''}
             isMult={false}
             showToDataPipeline={true}
             formFieldName="pipeline_id"

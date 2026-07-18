@@ -304,6 +304,7 @@ export interface IPipeLineListRequest {
   orderby?: string;
   desc?: boolean;
   canvas_category?: AgentCategory;
+  owner_ids?: string;
   ext?: string;
 }
 

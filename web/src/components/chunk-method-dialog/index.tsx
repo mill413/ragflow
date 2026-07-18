@@ -393,6 +393,7 @@ export function ChunkMethodDialog({
             <div className="space-y-6 empty:hidden">
               {parseType === ParseType.Pipeline && (
                 <DataFlowSelect
+                  workspaceId={knowledgeDetails.tenant_id || ''}
                   isMult={false}
                   // toDataPipeline={navigateToAgents}
                   formFieldName="pipeline_id"

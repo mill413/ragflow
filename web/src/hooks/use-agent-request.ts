@@ -851,22 +851,22 @@ export const useFetchPrompt = () => {
   return { data, loading, refetch };
 };
 
-export const useFetchAgentList = ({
-  canvas_category,
-}: IPipeLineListRequest) => {
+export const useFetchAgentList = (
+  params: IPipeLineListRequest,
+  enabled = true,
+) => {
   const { data, isFetching: loading } = useQuery<{
     canvas: IFlow[];
     total: number;
   }>({
-    queryKey: [AgentApiAction.FetchAgentList],
+    queryKey: [AgentApiAction.FetchAgentList, params],
     initialData: { canvas: [], total: 0 },
+    enabled,
     gcTime: 0,
     queryFn: async () => {
-      const { data } = await fetchPipeLineList({
-        canvas_category,
-      });
+      const { data } = await fetchPipeLineList(params);
 
-      return data?.data ?? [];
+      return data?.data ?? { canvas: [], total: 0 };
     },
   });
 

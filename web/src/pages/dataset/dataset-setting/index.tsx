@@ -281,6 +281,7 @@ export default function DatasetSettings() {
                     )}
                     {parseType === ParseType.Pipeline && (
                       <DataFlowSelect
+                        workspaceId={knowledgeDetails.tenant_id || ''}
                         isMult={false}
                         showToDataPipeline={true}
                         formFieldName="pipeline_id"

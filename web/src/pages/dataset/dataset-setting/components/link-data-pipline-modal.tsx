@@ -5,7 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal/modal';
-import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
+import { useFetchKnowledgeBaseConfiguration } from '@/hooks/use-knowledge-request';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from 'i18next';
 import { useState } from 'react';
@@ -35,10 +35,8 @@ const LinkDataPipelineModal = ({
       file_filter: '',
     },
   });
-  //   const [open, setOpen] = useState(false);
-  const { navigateToAgents } = useNavigatePage();
+  const { data: knowledgeDetails } = useFetchKnowledgeBaseConfiguration();
   const handleFormSubmit = (values: any) => {
-    console.log(values, data);
     // const param = {
     //   ...data,
     //   ...values,
@@ -63,7 +61,8 @@ const LinkDataPipelineModal = ({
           <div className="flex flex-col gap-4 ">
             {!isEdit && (
               <DataFlowSelect
-                toDataPipeline={navigateToAgents}
+                workspaceId={knowledgeDetails.tenant_id || ''}
+                showToDataPipeline
                 formFieldName="pipeline_id"
                 setDataList={setList}
               />

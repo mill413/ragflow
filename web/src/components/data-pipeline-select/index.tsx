@@ -1,4 +1,3 @@
-import { AgentCategory } from '@/constants/agent';
 import { FormLayout } from '@/constants/form';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
@@ -16,6 +15,7 @@ import {
   FormMessage,
 } from '../ui/form';
 import { MultiSelect } from '../ui/multi-select';
+import { buildWorkspaceDataFlowQuery } from './query';
 export interface IDataPipelineSelectNode {
   id?: string;
   name?: string;
@@ -23,6 +23,7 @@ export interface IDataPipelineSelectNode {
 }
 
 interface IProps {
+  workspaceId: string;
   showToDataPipeline?: boolean;
   formFieldName: string;
   isMult?: boolean;
@@ -37,6 +38,7 @@ export function DataFlowSelect(props: IProps) {
     isMult = false,
     setDataList,
     layout = FormLayout.Vertical,
+    workspaceId,
   } = props;
 
   const { t } = useTranslate('knowledgeConfiguration');
@@ -45,9 +47,11 @@ export function DataFlowSelect(props: IProps) {
   const toDataPipLine = () => {
     navigateToAgents();
   };
-  const { data: dataPipelineOptions } = useFetchAgentList({
-    canvas_category: AgentCategory.DataflowCanvas,
-  });
+  const dataFlowQuery = buildWorkspaceDataFlowQuery(workspaceId);
+  const { data: dataPipelineOptions } = useFetchAgentList(
+    dataFlowQuery.params,
+    dataFlowQuery.enabled,
+  );
   const options = useMemo(() => {
     const option = buildSelectOptions(
       dataPipelineOptions?.canvas,
