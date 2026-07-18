@@ -59,6 +59,8 @@ import {
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import { matchesSelectedFilter } from './components/table-filter-utils';
 
 type DepartmentTreeNode = AdminService.Department & {
   children: DepartmentTreeNode[];
@@ -75,6 +77,7 @@ export default function AdminDepartments() {
   const [parentId, setParentId] = useState('none');
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
+  const [parentFilters, setParentFilters] = useState<string[]>([]);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<{
     key: DepartmentSortKey;
@@ -120,14 +123,16 @@ export default function AdminDepartments() {
     const visit = (items: DepartmentTreeNode[], depth: number) => {
       items.forEach((department) => {
         rows.push({ department, depth });
-        if (!collapsedIds.has(department.id)) {
+        if (parentFilters.length > 0 || !collapsedIds.has(department.id)) {
           visit(department.children, depth + 1);
         }
       });
     };
     visit(roots, 0);
-    return rows;
-  }, [collapsedIds, departments, sort]);
+    return rows.filter(({ department }) =>
+      matchesSelectedFilter(department.parent_id || 'root', parentFilters),
+    );
+  }, [collapsedIds, departments, parentFilters, sort]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -195,6 +200,28 @@ export default function AdminDepartments() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <AdminTableMultiFilters
+              filters={[
+                {
+                  id: 'parent-department',
+                  label: t('admin.parentDepartment'),
+                  options: [
+                    {
+                      value: 'root',
+                      label: t('admin.noParentDepartment'),
+                    },
+                    ...departments.map((department) => ({
+                      value: department.id,
+                      label: department.path,
+                    })),
+                  ],
+                  value: parentFilters,
+                  onChange: setParentFilters,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => setParentFilters([])}
+            />
             <Input
               className="w-64 bg-bg-input border-border-button"
               value={searchInput}

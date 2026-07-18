@@ -68,6 +68,11 @@ import {
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 
 const PROVIDERS = ['MinerU', 'OpenAI-API-Compatible', 'Xinference'];
 const MODEL_TYPES = [
@@ -102,6 +107,10 @@ export default function AdminModels() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
+  const [providerFilters, setProviderFilters] = useState<string[]>([]);
+  const [typeFilters, setTypeFilters] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [visibilityFilters, setVisibilityFilters] = useState<string[]>([]);
   const [sort, setSort] = useState<SortState>({
     key: 'update_date',
     direction: 'desc',
@@ -148,15 +157,34 @@ export default function AdminModels() {
             .includes(keyword),
         )
       : models;
-    return [...rows].sort((left, right) => {
-      const result = String(left[sort.key] ?? '').localeCompare(
-        String(right[sort.key] ?? ''),
-        undefined,
-        { numeric: true },
-      );
-      return sort.direction === 'asc' ? result : -result;
-    });
-  }, [models, query, sort]);
+    return [...rows]
+      .filter(
+        (model) =>
+          matchesSelectedFilter(model.provider_name, providerFilters) &&
+          matchesSelectedFilter(model.status, statusFilters) &&
+          matchesSelectedFilter(model.visibility, visibilityFilters) &&
+          (!typeFilters.length ||
+            model.model_types.some((modelType) =>
+              typeFilters.includes(modelType),
+            )),
+      )
+      .sort((left, right) => {
+        const result = String(left[sort.key] ?? '').localeCompare(
+          String(right[sort.key] ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return sort.direction === 'asc' ? result : -result;
+      });
+  }, [
+    models,
+    providerFilters,
+    query,
+    sort,
+    statusFilters,
+    typeFilters,
+    visibilityFilters,
+  ]);
 
   const workspaceOptions = useMemo(
     () =>
@@ -250,14 +278,81 @@ export default function AdminModels() {
               </div>
             </div>
 
-            <div className="relative w-80">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
-              <Input
-                className="h-10 pl-9"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('admin.modelManagementPage.search')}
+            <div className="flex flex-wrap items-center gap-3">
+              <AdminTableMultiFilters
+                filters={[
+                  {
+                    id: 'provider',
+                    label: t('admin.modelManagementPage.provider'),
+                    options: createFilterOptions(
+                      models,
+                      (model) => model.provider_name,
+                    ),
+                    value: providerFilters,
+                    onChange: setProviderFilters,
+                  },
+                  {
+                    id: 'model-type',
+                    label: t('admin.modelManagementPage.modelTypes'),
+                    options: MODEL_TYPES.map((modelType) => ({
+                      value: modelType,
+                      label: t(`admin.modelManagementPage.types.${modelType}`),
+                    })),
+                    value: typeFilters,
+                    onChange: setTypeFilters,
+                  },
+                  {
+                    id: 'status',
+                    label: t('admin.modelManagementPage.status'),
+                    options: [
+                      {
+                        value: 'active',
+                        label: t('admin.modelManagementPage.active'),
+                      },
+                      {
+                        value: 'inactive',
+                        label: t('admin.modelManagementPage.inactive'),
+                      },
+                    ],
+                    value: statusFilters,
+                    onChange: setStatusFilters,
+                  },
+                  {
+                    id: 'visibility',
+                    label: t('admin.modelManagementPage.visibility'),
+                    options: [
+                      {
+                        value: 'all',
+                        label: t('admin.modelManagementPage.allWorkspaces'),
+                      },
+                      {
+                        value: 'selected',
+                        label: t(
+                          'admin.modelManagementPage.selectedWorkspaces',
+                        ),
+                      },
+                    ],
+                    value: visibilityFilters,
+                    onChange: setVisibilityFilters,
+                  },
+                ]}
+                resetLabel={t('admin.reset')}
+                onReset={() => {
+                  setProviderFilters([]);
+                  setTypeFilters([]);
+                  setStatusFilters([]);
+                  setVisibilityFilters([]);
+                }}
               />
+              <div className="relative w-80">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
+                <Input
+                  className="h-10 pl-9"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('admin.modelManagementPage.search')}
+                />
+              </div>
             </div>
           </CardHeader>
 

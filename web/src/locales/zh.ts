@@ -6,6 +6,7 @@ export default {
       noResults: '未查到结果',
       selectPlaceholder: '请选择',
       selectAll: '全选',
+      moreSelected: '另有 {{count}} 项',
       delete: '删除',
       deleteModalTitle: '确定删除吗?',
       deleteThem: '确定要删除吗？',
@@ -3086,6 +3087,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       description: '描述',
       noDescription: '暂无描述',
       none: '无',
+      emailDomain: '邮箱域名',
 
       resourceType: {
         dataset: '知识库',

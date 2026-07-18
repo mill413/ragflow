@@ -443,7 +443,12 @@ def list_resources():
         page = max(int(request.args.get("page", 1)), 1)
         page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
         keywords = request.args.get("keywords", "")
-        return success_response(ResourceMgr.list_resources(resource_type, page, page_size, keywords))
+        workspace_ids = [
+            value for value in request.args.get("workspace_ids", "").split(",") if value
+        ]
+        return success_response(
+            ResourceMgr.list_resources(resource_type, page, page_size, keywords, workspace_ids)
+        )
     except AdminException as e:
         return error_response(e.message, e.code)
     except (TypeError, ValueError) as e:
@@ -461,7 +466,12 @@ def list_failed_documents():
         page = max(int(request.args.get("page", 1)), 1)
         page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
         keywords = request.args.get("keywords", "")
-        return success_response(ResourceMgr.list_failed_documents(page, page_size, keywords))
+        workspace_ids = [
+            value for value in request.args.get("workspace_ids", "").split(",") if value
+        ]
+        return success_response(
+            ResourceMgr.list_failed_documents(page, page_size, keywords, workspace_ids)
+        )
     except (TypeError, ValueError) as e:
         return error_response(str(e), 400)
     except Exception as e:

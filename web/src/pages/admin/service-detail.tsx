@@ -1,5 +1,6 @@
 import { isPlainObject } from 'lodash';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -11,12 +12,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getSortIcon } from './utils';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 
 interface ServiceDetailProps {
   content?: any;
 }
 
 function ServiceDetail({ content }: ServiceDetailProps) {
+  const { t } = useTranslation();
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sort, setSort] = useState<{
     key: string;
     direction: 'asc' | 'desc';
@@ -28,8 +36,16 @@ function ServiceDetail({ content }: ServiceDetailProps) {
       content.every(isPlainObject)
     ) {
       const headers = Object.keys(content[0]);
+      const filteredRows = content.filter((row) =>
+        headers.every((header) =>
+          matchesSelectedFilter(
+            String(row[header] ?? ''),
+            filters[header] ?? [],
+          ),
+        ),
+      );
       const rows = sort.key
-        ? [...content].sort((left, right) => {
+        ? [...filteredRows].sort((left, right) => {
             const result = String(left[sort.key] ?? '').localeCompare(
               String(right[sort.key] ?? ''),
               undefined,
@@ -37,44 +53,63 @@ function ServiceDetail({ content }: ServiceDetailProps) {
             );
             return sort.direction === 'asc' ? result : -result;
           })
-        : content;
+        : filteredRows;
 
       return (
-        <Table rootClassName="min-w-max">
-          <TableHeader>
-            <TableRow>
-              {headers.map((header) => (
-                <TableHead key={header}>
-                  <Button
-                    variant="ghost"
-                    onClick={() =>
-                      setSort((current) => ({
-                        key: header,
-                        direction:
-                          current.key === header && current.direction === 'asc'
-                            ? 'desc'
-                            : 'asc',
-                      }))
-                    }
-                  >
-                    {header}
-                    {getSortIcon(sort.key === header ? sort.direction : false)}
-                  </Button>
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {rows.map((item, index) => (
-              <TableRow key={(item.id as string) ?? index}>
-                {headers.map((header: string) => (
-                  <TableCell key={header}>{item[header] as string}</TableCell>
+        <section className="space-y-4">
+          <AdminTableMultiFilters
+            filters={headers.map((header) => ({
+              id: header,
+              label: header,
+              options: createFilterOptions(content, (row) =>
+                String(row[header] ?? ''),
+              ),
+              value: filters[header] ?? [],
+              onChange: (value) =>
+                setFilters((current) => ({ ...current, [header]: value })),
+            }))}
+            resetLabel={t('admin.reset')}
+            onReset={() => setFilters({})}
+          />
+          <Table rootClassName="min-w-max">
+            <TableHeader>
+              <TableRow>
+                {headers.map((header) => (
+                  <TableHead key={header}>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        setSort((current) => ({
+                          key: header,
+                          direction:
+                            current.key === header &&
+                            current.direction === 'asc'
+                              ? 'desc'
+                              : 'asc',
+                        }))
+                      }
+                    >
+                      {header}
+                      {getSortIcon(
+                        sort.key === header ? sort.direction : false,
+                      )}
+                    </Button>
+                  </TableHead>
                 ))}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+
+            <TableBody>
+              {rows.map((item, index) => (
+                <TableRow key={(item.id as string) ?? index}>
+                  {headers.map((header: string) => (
+                    <TableCell key={header}>{item[header] as string}</TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
       );
     }
 
@@ -117,7 +152,7 @@ function ServiceDetail({ content }: ServiceDetailProps) {
     }
 
     return content;
-  }, [content, sort]);
+  }, [content, filters, sort, t]);
 
   return contentElement;
 }

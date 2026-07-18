@@ -66,13 +66,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -84,7 +77,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Routes } from '@/routes';
-import { LucideFilter, LucideSearch } from 'lucide-react';
+import { LucideSearch } from 'lucide-react';
 
 import useChangePasswordForm from './forms/change-password-form';
 import useCreateUserForm from './forms/user-form';
@@ -106,8 +99,8 @@ import {
 } from '@/services/admin-service';
 
 import {
-  createColumnFilterFn,
   createFuzzySearchFn,
+  createMultiSelectFilterFn,
   EMPTY_DATA,
   getSortIcon,
   IS_ENTERPRISE,
@@ -121,8 +114,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import EnterpriseFeature from './components/enterprise-feature';
 import DepartmentTreeSelect from './components/department-tree-select';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import { createFilterOptions } from './components/table-filter-utils';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 
 const columnHelper = createColumnHelper<AdminService.ListUsersItem>();
@@ -131,12 +125,6 @@ const globalFilterFn = createFuzzySearchFn<AdminService.ListUsersItem>([
   'nickname',
   'department_path',
 ]);
-
-const STATUS_FILTER_OPTIONS = [
-  { value: '', label: 'admin.all' },
-  { value: 'active', label: 'admin.active' },
-  { value: 'inactive', label: 'admin.inactive' },
-];
 
 const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
   email: 'min-w-44',
@@ -333,10 +321,7 @@ function AdminUserManagement() {
             }
           />
         ),
-        filterFn: createColumnFilterFn(
-          (row, id, filterValue) => row.getValue(id) === filterValue,
-          { autoRemove: (value) => !value },
-        ),
+        filterFn: createMultiSelectFilterFn(),
       }),
 
       ...(IS_ENTERPRISE
@@ -368,12 +353,7 @@ function AdminUserManagement() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ),
-              filterFn: createColumnFilterFn(
-                (row, id, filterValue) => row.getValue(id) === filterValue,
-                {
-                  autoRemove: (v) => !v,
-                },
-              ),
+              filterFn: createMultiSelectFilterFn(),
             }),
           ]
         : []),
@@ -414,18 +394,14 @@ function AdminUserManagement() {
             </Select>
           );
         },
-        filterFn: createColumnFilterFn(
-          (row, id, filterValue) => row.getValue(id) === filterValue,
-          {
-            autoRemove: (v) => !v,
-            resolveFilterValue: (v) =>
-              v ? (v === 'active' ? '1' : '0') : null,
-          },
-        ),
+        filterFn: createMultiSelectFilterFn(),
       }),
 
       columnHelper.accessor('is_superuser', {
         header: t('admin.userType'),
+        filterFn: createMultiSelectFilterFn((value) =>
+          value ? 'superuser' : 'normal',
+        ),
         cell: ({ cell, row }) => {
           const isMe = row.original.email === userInfo?.email;
 
@@ -576,11 +552,13 @@ function AdminUserManagement() {
     autoResetPageIndex: false,
   });
 
+  const filteredUserCount = table.getFilteredRowModel().rows.length;
+
   useLayoutEffect(() => {
-    if (table.getState().pagination.pageIndex > table.getPageCount()) {
+    if (table.getState().pagination.pageIndex >= table.getPageCount()) {
       table.setPageIndex(Math.max(0, table.getPageCount() - 1));
     }
-  }, [usersList, table]);
+  }, [filteredUserCount, table]);
 
   const totalUsers = usersList?.length ?? 0;
   const activeUsers =
@@ -607,126 +585,73 @@ function AdminUserManagement() {
               </div>
             </div>
 
-            <div className="ml-auto flex justify-end gap-4">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="icon-lg" variant="outline">
-                    <LucideFilter className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-
-                <PopoverContent
-                  align="end"
-                  className="bg-bg-base text-text-secondary"
-                >
-                  <div className="p-2 space-y-6">
-                    <EnterpriseFeature>
-                      {() => (
-                        <section>
-                          <div className="font-bold mb-3">
-                            {t('admin.role')}
-                          </div>
-
-                          <RadioGroup
-                            value={
-                              (table
-                                .getColumn('role')
-                                ?.getFilterValue() as string) ?? ''
-                            }
-                            onValueChange={(value) =>
-                              table.getColumn('role')?.setFilterValue(value)
-                            }
-                          >
-                            <Label className="flex items-center space-x-2">
-                              <RadioGroupItem value="" />
-                              <span>{t('admin.all')}</span>
-                            </Label>
-
-                            {roleList?.map(({ id, role_name }) => (
-                              <Label
-                                key={id}
-                                className="flex items-center space-x-2"
-                              >
-                                <RadioGroupItem
-                                  className="bg-bg-input border-border-button"
-                                  value={role_name}
-                                />
-                                <span>{role_name}</span>
-                              </Label>
-                            ))}
-                          </RadioGroup>
-                        </section>
-                      )}
-                    </EnterpriseFeature>
-
-                    <section>
-                      <div className="font-bold mb-3">
-                        {t('admin.department')}
-                      </div>
-                      <DepartmentTreeSelect
-                        departments={departments ?? []}
-                        value={
-                          departments?.find(
-                            (department) =>
-                              department.path ===
-                              table
-                                .getColumn('department_path')
-                                ?.getFilterValue(),
-                          )?.id
-                        }
-                        placeholder={t('admin.all')}
-                        onChange={(departmentId) =>
-                          table
-                            .getColumn('department_path')
-                            ?.setFilterValue(
-                              departments?.find(
-                                (department) => department.id === departmentId,
-                              )?.path ?? '',
-                            )
-                        }
-                      />
-                    </section>
-
-                    <section>
-                      <div className="font-bold mb-3">{t('admin.status')}</div>
-
-                      <RadioGroup
-                        value={
-                          (table
-                            .getColumn('is_active')
-                            ?.getFilterValue() as string) ?? ''
-                        }
-                        onValueChange={(value) =>
-                          table.getColumn('is_active')?.setFilterValue(value)
-                        }
-                      >
-                        {STATUS_FILTER_OPTIONS.map(({ label, value }) => (
-                          <Label
-                            key={value}
-                            className="flex items-center space-x-2"
-                          >
-                            <RadioGroupItem
-                              className="bg-bg-input border-border-button"
-                              value={value}
-                            />
-                            <span>{t(label)}</span>
-                          </Label>
-                        ))}
-                      </RadioGroup>
-                    </section>
-                  </div>
-
-                  <div className="pt-4 flex justify-end">
-                    <Button
-                      variant="outline"
-                      className="dark:bg-bg-input dark:border-border-button text-text-secondary"
-                      onClick={() => table.resetColumnFilters()}
-                    >
-                      {t('admin.reset')}
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+            <div className="ml-auto flex flex-wrap justify-end gap-4">
+              <AdminTableMultiFilters
+                filters={[
+                  ...(IS_ENTERPRISE
+                    ? [
+                        {
+                          id: 'role',
+                          label: t('admin.role'),
+                          options: (roleList ?? []).map(({ role_name }) => ({
+                            value: role_name,
+                            label: role_name,
+                          })),
+                          value:
+                            (table
+                              .getColumn('role')
+                              ?.getFilterValue() as string[]) ?? [],
+                          onChange: (value: string[]) =>
+                            table.getColumn('role')?.setFilterValue(value),
+                        },
+                      ]
+                    : []),
+                  {
+                    id: 'department_path',
+                    label: t('admin.department'),
+                    options: createFilterOptions(
+                      usersList ?? [],
+                      (user) => user.department_path,
+                    ),
+                    value:
+                      (table
+                        .getColumn('department_path')
+                        ?.getFilterValue() as string[]) ?? [],
+                    onChange: (value) =>
+                      table.getColumn('department_path')?.setFilterValue(value),
+                  },
+                  {
+                    id: 'is_active',
+                    label: t('admin.status'),
+                    options: [
+                      { value: '1', label: t('admin.active') },
+                      { value: '0', label: t('admin.inactive') },
+                    ],
+                    value:
+                      (table
+                        .getColumn('is_active')
+                        ?.getFilterValue() as string[]) ?? [],
+                    onChange: (value) =>
+                      table.getColumn('is_active')?.setFilterValue(value),
+                  },
+                  {
+                    id: 'is_superuser',
+                    label: t('admin.userType'),
+                    options: [
+                      { value: 'normal', label: t('admin.normalUser') },
+                      { value: 'superuser', label: t('admin.superuser') },
+                    ],
+                    value:
+                      (table
+                        .getColumn('is_superuser')
+                        ?.getFilterValue() as string[]) ?? [],
+                    onChange: (value) =>
+                      table.getColumn('is_superuser')?.setFilterValue(value),
+                  },
+                ]}
+                resetLabel={t('admin.reset')}
+                onReset={() => table.resetColumnFilters()}
+              />
 
               <div className="relative w-56">
                 <LucideSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -852,7 +777,7 @@ function AdminUserManagement() {
 
           <CardFooter className="flex items-center justify-end">
             <RAGFlowPagination
-              total={table.getFilteredRowModel().rows.length}
+              total={filteredUserCount}
               current={table.getState().pagination.pageIndex + 1}
               pageSize={table.getState().pagination.pageSize}
               onChange={(page, pageSize) => {

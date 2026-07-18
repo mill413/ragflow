@@ -824,7 +824,14 @@ class ResourceMgr:
     }
 
     @classmethod
-    def list_resources(cls, resource_type: str, page: int, page_size: int, keywords: str = "") -> dict[str, Any]:
+    def list_resources(
+        cls,
+        resource_type: str,
+        page: int,
+        page_size: int,
+        keywords: str = "",
+        workspace_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         spec = cls.RESOURCE_SPECS.get(resource_type)
         if not spec:
             raise AdminException(f"Unsupported resource type: {resource_type}")
@@ -864,6 +871,8 @@ class ResourceMgr:
             query = query.where(model.status == StatusEnum.VALID.value)
         if spec.get("extra_filter") is not None:
             query = query.where(spec["extra_filter"])
+        if workspace_ids:
+            query = query.where(workspace_field.in_(workspace_ids))
         keywords = str(keywords or "").strip().lower()
         if keywords:
             query = query.where(fn.LOWER(name_field).contains(keywords))
@@ -1032,7 +1041,12 @@ class ResourceMgr:
         return {"resource_type": resource_type, "resource_id": resource_id, "result": result}
 
     @staticmethod
-    def list_failed_documents(page, page_size, keywords=""):
+    def list_failed_documents(
+        page,
+        page_size,
+        keywords="",
+        workspace_ids: list[str] | None = None,
+    ):
         valid = StatusEnum.VALID.value
         query = (
             Document.select(
@@ -1048,6 +1062,8 @@ class ResourceMgr:
             .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
             .where((Document.status == valid) & (Knowledgebase.status == valid) & (Document.progress < 0))
         )
+        if workspace_ids:
+            query = query.where(Knowledgebase.tenant_id.in_(workspace_ids))
         keywords = str(keywords or "").strip().lower()
         if keywords:
             query = query.where(

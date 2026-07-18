@@ -67,6 +67,16 @@ export function createColumnFilterFn<TData extends RowData>(
   return Object.assign(filterFn, options) as FilterFn<TData>;
 }
 
+export function createMultiSelectFilterFn<TData extends RowData>(
+  normalize: (value: unknown) => string = (value) => String(value ?? ''),
+) {
+  return createColumnFilterFn<TData>(
+    (row, id, filterValue: string[]) =>
+      !filterValue.length || filterValue.includes(normalize(row.getValue(id))),
+    { autoRemove: (value) => !Array.isArray(value) || value.length === 0 },
+  );
+}
+
 export function getSortIcon(sorting: false | SortDirection) {
   return (
     {

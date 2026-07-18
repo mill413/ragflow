@@ -9,6 +9,7 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
@@ -64,6 +65,11 @@ import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
 import DepartmentTreeSelect from './components/department-tree-select';
 import { UserStatusBadge, UserStatusText } from './components/user-status';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 
@@ -77,6 +83,10 @@ function UserDatasetTable(props: {
   data?: AdminService.ListUserDatasetItem[];
 }) {
   const { t } = useTranslation();
+  const [nameFilters, setNameFilters] = useState<string[]>([]);
+  const filteredData = (props.data ?? []).filter((dataset) =>
+    matchesSelectedFilter(dataset.name, nameFilters),
+  );
 
   const columnDefs = useMemo(
     () => [
@@ -97,15 +107,32 @@ function UserDatasetTable(props: {
   );
 
   const table = useReactTable({
-    data: props.data ?? [],
+    data: filteredData,
     columns: columnDefs,
 
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
 
   return (
     <section className="space-y-4">
+      <AdminTableMultiFilters
+        filters={[
+          {
+            id: 'dataset-name',
+            label: t('admin.name'),
+            options: createFilterOptions(
+              props.data ?? [],
+              (dataset) => dataset.name,
+            ),
+            value: nameFilters,
+            onChange: setNameFilters,
+          },
+        ]}
+        resetLabel={t('admin.reset')}
+        onReset={() => setNameFilters([])}
+      />
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -153,7 +180,7 @@ function UserDatasetTable(props: {
       </Table>
 
       <RAGFlowPagination
-        total={props.data?.length}
+        total={filteredData.length}
         current={table.getState().pagination.pageIndex + 1}
         pageSize={table.getState().pagination.pageSize}
         onChange={(page, pageSize) => {
@@ -169,6 +196,10 @@ function UserDatasetTable(props: {
 
 function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
   const { t } = useTranslation();
+  const [titleFilters, setTitleFilters] = useState<string[]>([]);
+  const filteredData = (props.data ?? []).filter((agent) =>
+    matchesSelectedFilter(agent.title, titleFilters),
+  );
 
   const columnDefs = useMemo(
     () => [
@@ -189,15 +220,32 @@ function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
   );
 
   const table = useReactTable({
-    data: props.data ?? [],
+    data: filteredData,
     columns: columnDefs,
 
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
 
   return (
     <section className="space-y-4">
+      <AdminTableMultiFilters
+        filters={[
+          {
+            id: 'agent-title',
+            label: t('admin.agentTitle'),
+            options: createFilterOptions(
+              props.data ?? [],
+              (agent) => agent.title,
+            ),
+            value: titleFilters,
+            onChange: setTitleFilters,
+          },
+        ]}
+        resetLabel={t('admin.reset')}
+        onReset={() => setTitleFilters([])}
+      />
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -245,7 +293,7 @@ function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
       </Table>
 
       <RAGFlowPagination
-        total={props.data?.length}
+        total={filteredData.length}
         current={table.getState().pagination.pageIndex + 1}
         pageSize={table.getState().pagination.pageSize}
         onChange={(page, pageSize) => {

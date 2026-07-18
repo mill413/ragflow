@@ -68,6 +68,11 @@ import useCreateEmailForm from './forms/email-form';
 import useImportExcelForm, {
   ImportExcelFormData,
 } from './forms/import-excel-form';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 
 const columnHelper = createColumnHelper<AdminService.ListWhitelistItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListWhitelistItem>([
@@ -87,6 +92,7 @@ function AdminWhitelist() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [domainFilters, setDomainFilters] = useState<string[]>([]);
 
   const [importModalOpen, setImportModalOpen] = useState(false);
 
@@ -216,7 +222,10 @@ function AdminWhitelist() {
   );
 
   const table = useReactTable({
-    data: whitelist ?? EMPTY_DATA,
+    data:
+      whitelist?.filter((item) =>
+        matchesSelectedFilter(item.email.split('@')[1], domainFilters),
+      ) ?? EMPTY_DATA,
     columns: columnDefs,
 
     globalFilterFn,
@@ -236,7 +245,23 @@ function AdminWhitelist() {
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
             <CardTitle>{t('admin.whitelistManagement')}</CardTitle>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-end gap-4">
+              <AdminTableMultiFilters
+                filters={[
+                  {
+                    id: 'email-domain',
+                    label: t('admin.emailDomain'),
+                    options: createFilterOptions(
+                      whitelist ?? [],
+                      (item) => item.email.split('@')[1],
+                    ),
+                    value: domainFilters,
+                    onChange: setDomainFilters,
+                  },
+                ]}
+                resetLabel={t('admin.reset')}
+                onReset={() => setDomainFilters([])}
+              />
               <SearchInput
                 className="w-56 h-10 bg-bg-input border-border-button"
                 placeholder={t('header.search')}

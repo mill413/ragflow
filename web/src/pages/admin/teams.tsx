@@ -75,6 +75,11 @@ import {
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
 import { UserStatusBadge } from './components/user-status';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 
 type TeamSortKey =
   | 'name'
@@ -101,6 +106,10 @@ export default function AdminTeams() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [keywords, setKeywords] = useState('');
+  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [ownerIds, setOwnerIds] = useState<string[]>([]);
+  const [memberRoles, setMemberRoles] = useState<string[]>([]);
+  const [memberStatuses, setMemberStatuses] = useState<string[]>([]);
   const [sort, setSort] = useState<{
     key: TeamSortKey;
     direction: 'asc' | 'desc';
@@ -213,6 +222,11 @@ export default function AdminTeams() {
             .includes(query),
         ),
       )
+      .filter(
+        (team) =>
+          matchesSelectedFilter(team.id, teamIds) &&
+          matchesSelectedFilter(team.owner_id, ownerIds),
+      )
       .sort((left, right) => {
         const result = String(left[sort.key] ?? '').localeCompare(
           String(right[sort.key] ?? ''),
@@ -221,7 +235,7 @@ export default function AdminTeams() {
         );
         return sort.direction === 'asc' ? result : -result;
       });
-  }, [keywords, sort, teams]);
+  }, [keywords, ownerIds, sort, teamIds, teams]);
 
   const availableUsers = users.filter(
     (user) =>
@@ -229,15 +243,21 @@ export default function AdminTeams() {
       !members.some((member) => member.user_id === user.id),
   );
   const sortedMembers = useMemo(() => {
-    return [...members].sort((left, right) => {
-      const result = String(left[memberSort.key] ?? '').localeCompare(
-        String(right[memberSort.key] ?? ''),
-        undefined,
-        { numeric: true },
-      );
-      return memberSort.direction === 'asc' ? result : -result;
-    });
-  }, [memberSort, members]);
+    return [...members]
+      .filter(
+        (member) =>
+          matchesSelectedFilter(member.role, memberRoles) &&
+          matchesSelectedFilter(member.is_active, memberStatuses),
+      )
+      .sort((left, right) => {
+        const result = String(left[memberSort.key] ?? '').localeCompare(
+          String(right[memberSort.key] ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return memberSort.direction === 'asc' ? result : -result;
+      });
+  }, [memberRoles, memberSort, memberStatuses, members]);
   const ownerOptions = editingTeam
     ? editingMembers.filter(
         (member) => member.is_active === '1' && member.role !== 'invite',
@@ -356,14 +376,51 @@ export default function AdminTeams() {
             })}
           </div>
 
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
-            <Input
-              className="pl-9"
-              value={keywords}
-              onChange={(event) => setKeywords(event.target.value)}
-              placeholder={t('admin.teamManagement.search')}
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminTableMultiFilters
+              filters={[
+                {
+                  id: 'team',
+                  label: t('admin.teamManagement.team'),
+                  options: teams.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })),
+                  value: teamIds,
+                  onChange: setTeamIds,
+                },
+                {
+                  id: 'owner',
+                  label: t('admin.teamManagement.owner'),
+                  options: createFilterOptions(
+                    teams,
+                    (team) => team.owner_id,
+                    (ownerId) => {
+                      const team = teams.find(
+                        (candidate) => candidate.owner_id === ownerId,
+                      );
+                      return team?.owner_name || team?.owner_email || ownerId;
+                    },
+                  ),
+                  value: ownerIds,
+                  onChange: setOwnerIds,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => {
+                setTeamIds([]);
+                setOwnerIds([]);
+              }}
             />
+            <div className="relative w-80">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
+              <Input
+                className="pl-9"
+                value={keywords}
+                onChange={(event) => setKeywords(event.target.value)}
+                placeholder={t('admin.teamManagement.search')}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -622,6 +679,37 @@ export default function AdminTeams() {
                 <UserRoundPlus /> {t('admin.teamManagement.addMember')}
               </Button>
             </div>
+            <AdminTableMultiFilters
+              className="pb-4"
+              filters={[
+                {
+                  id: 'member-role',
+                  label: t('admin.teamManagement.role'),
+                  options: createFilterOptions(
+                    members,
+                    (member) => member.role,
+                    (role) => roleLabel(role as AdminService.TeamMemberRole),
+                  ),
+                  value: memberRoles,
+                  onChange: setMemberRoles,
+                },
+                {
+                  id: 'member-status',
+                  label: t('admin.status'),
+                  options: [
+                    { value: '1', label: t('admin.active') },
+                    { value: '0', label: t('admin.inactive') },
+                  ],
+                  value: memberStatuses,
+                  onChange: setMemberStatuses,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => {
+                setMemberRoles([]);
+                setMemberStatuses([]);
+              }}
+            />
             <Table>
               <TableHeader>
                 <TableRow>
@@ -691,7 +779,7 @@ export default function AdminTeams() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!membersFetching && members.length === 0 && (
+                {!membersFetching && sortedMembers.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={5}

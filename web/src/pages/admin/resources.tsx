@@ -63,10 +63,12 @@ import {
   getMonitoringSummary,
   listFailedDocuments,
   listManagedResources,
+  listModelWorkspaces,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
 
 type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
@@ -117,6 +119,7 @@ export default function AdminResources() {
   const queryClient = useQueryClient();
   const view = RESOURCE_VIEW_ROUTES[resourceView ?? ''];
   const [keywords, setKeywords] = useState('');
+  const [workspaceIds, setWorkspaceIds] = useState<string[]>([]);
   const deferredKeywords = useDeferredValue(keywords);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -151,6 +154,7 @@ export default function AdminResources() {
       page,
       pageSize,
       deferredKeywords,
+      workspaceIds,
     ],
     queryFn: async () =>
       (
@@ -159,9 +163,14 @@ export default function AdminResources() {
           page,
           pageSize,
           keywords: deferredKeywords,
+          workspaceIds,
         })
       ).data.data,
     enabled: Boolean(resourceType),
+  });
+  const { data: workspaces = [] } = useQuery({
+    queryKey: ['admin/model-workspaces'],
+    queryFn: async () => (await listModelWorkspaces()).data.data,
   });
   const { data: failureData, isFetching: failuresFetching } = useQuery({
     queryKey: [
@@ -169,6 +178,7 @@ export default function AdminResources() {
       failurePage,
       failurePageSize,
       deferredKeywords,
+      workspaceIds,
     ],
     queryFn: async () =>
       (
@@ -176,6 +186,7 @@ export default function AdminResources() {
           page: failurePage,
           pageSize: failurePageSize,
           keywords: deferredKeywords,
+          workspaceIds,
         })
       ).data.data,
     enabled: view === 'dataset',
@@ -431,21 +442,6 @@ export default function AdminResources() {
                   )}
                 </div>
               </div>
-              <div className="relative w-72 shrink-0">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
-                <Input
-                  className="h-10 pl-9"
-                  value={keywords}
-                  onChange={(event) => {
-                    setKeywords(event.target.value);
-                    setPage(1);
-                    setFailurePage(1);
-                  }}
-                  placeholder={t(
-                    `admin.resourceManagementPage.searchPlaceholders.${currentView.type}`,
-                  )}
-                />
-              </div>
             </div>
 
             <div
@@ -467,6 +463,52 @@ export default function AdminResources() {
                   <div className="mt-2 text-2xl font-semibold">{value}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <AdminTableMultiFilters
+                filters={[
+                  {
+                    id: 'workspace',
+                    label: t('admin.workspaceOwner'),
+                    options: workspaces.map((workspace) => ({
+                      value: workspace.id,
+                      label: `${t(
+                        workspace.type === 'team'
+                          ? 'admin.teamWorkspace'
+                          : 'admin.personalWorkspace',
+                      )}-${workspace.name}`,
+                    })),
+                    value: workspaceIds,
+                    onChange: (value) => {
+                      setWorkspaceIds(value);
+                      setPage(1);
+                      setFailurePage(1);
+                    },
+                  },
+                ]}
+                resetLabel={t('admin.reset')}
+                onReset={() => {
+                  setWorkspaceIds([]);
+                  setPage(1);
+                  setFailurePage(1);
+                }}
+              />
+              <div className="relative w-72 shrink-0">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
+                <Input
+                  className="h-10 pl-9"
+                  value={keywords}
+                  onChange={(event) => {
+                    setKeywords(event.target.value);
+                    setPage(1);
+                    setFailurePage(1);
+                  }}
+                  placeholder={t(
+                    `admin.resourceManagementPage.searchPlaceholders.${currentView.type}`,
+                  )}
+                />
+              </div>
             </div>
           </CardHeader>
 

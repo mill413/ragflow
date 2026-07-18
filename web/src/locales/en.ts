@@ -6,6 +6,7 @@ export default {
       noResults: 'No results found',
       selectPlaceholder: 'Select value',
       selectAll: 'Select all',
+      moreSelected: '{{count}} more',
       delete: 'Delete',
       deleteModalTitle: 'Are you sure to delete it ?',
       deleteThem: 'Are you sure to delete them ?',
@@ -3376,6 +3377,7 @@ Important structured information may include: names, dates, locations, events, k
       description: 'Description',
       noDescription: 'No description',
       none: 'None',
+      emailDomain: 'Email domain',
 
       resourceType: {
         dataset: 'Dataset',

@@ -279,24 +279,42 @@ export const updateAdminTeamMember = (
   });
 export const deleteAdminTeamMember = (teamId: string, userId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeamMember(teamId, userId));
-export const listManagedResources = (params: {
+export const listManagedResources = ({
+  workspaceIds,
+  ...params
+}: {
   type: AdminService.ManagedResourceType;
   page: number;
   pageSize: number;
   keywords?: string;
+  workspaceIds?: string[];
 }) =>
   request.get<ResponseData<AdminService.ManagedResourceList>>(
     adminListManagedResources,
-    { params },
+    {
+      params: {
+        ...params,
+        workspace_ids: workspaceIds?.join(',') || undefined,
+      },
+    },
   );
-export const listFailedDocuments = (params: {
+export const listFailedDocuments = ({
+  workspaceIds,
+  ...params
+}: {
   page: number;
   pageSize: number;
   keywords?: string;
+  workspaceIds?: string[];
 }) =>
   request.get<ResponseData<AdminService.FailedDocumentList>>(
     adminListFailedDocuments,
-    { params },
+    {
+      params: {
+        ...params,
+        workspace_ids: workspaceIds?.join(',') || undefined,
+      },
+    },
   );
 export const deleteManagedResource = (
   resourceType: AdminService.ManagedResourceType,
