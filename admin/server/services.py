@@ -27,11 +27,12 @@ from typing import Any
 from peewee import Case, fn
 
 from common.constants import ActiveEnum, StatusEnum
-from api.db import CanvasCategory, TenantPermission
+from api.db import CanvasCategory, TenantPermission, UserTenantRole, WorkspaceType
 from api.db.services import UserService, generate_access_token
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.user_service import TenantService, UserTenantService
+from api.db.services.workspace_service import TeamService, WorkspaceAccessService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
@@ -533,6 +534,162 @@ class UserMgr:
         # update is_active
         UserService.update_user(usr.id, {"is_superuser": False})
         return "Revoke successfully!"
+
+
+class TeamMgr:
+    MEMBER_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
+    EDITABLE_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
+
+    @staticmethod
+    def _ensure_team(team_id):
+        if WorkspaceAccessService.get_workspace_type(team_id) != WorkspaceType.TEAM:
+            raise AdminException("Team not found", 404)
+
+    @staticmethod
+    def _owner_id(team_id):
+        owner = UserTenant.select().where((UserTenant.tenant_id == team_id) & (UserTenant.role == UserTenantRole.OWNER) & (UserTenant.status == StatusEnum.VALID.value)).first()
+        if not owner:
+            raise AdminException("Team owner not found", 409)
+        return owner.user_id
+
+    @classmethod
+    def _members(cls, team_id):
+        cls._ensure_team(team_id)
+        return TeamService.list_members(cls._owner_id(team_id), team_id)
+
+    @classmethod
+    def get_all_teams(cls):
+        teams = []
+        tenants = Tenant.select().where(Tenant.status == StatusEnum.VALID.value).order_by(Tenant.name)
+        for tenant in tenants:
+            if WorkspaceAccessService.get_workspace_type(tenant.id) != WorkspaceType.TEAM:
+                continue
+            members = cls._members(tenant.id)
+            owner = next((member for member in members if member["role"] == UserTenantRole.OWNER), {})
+            dataset_query = Knowledgebase.select().where(
+                (Knowledgebase.tenant_id == tenant.id) & (Knowledgebase.permission == TenantPermission.TEAM) & (Knowledgebase.status == StatusEnum.VALID.value)
+            )
+            document_stats = (
+                Document.select(
+                    fn.COUNT(Document.id).alias("document_count"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                )
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .where(
+                    (Knowledgebase.tenant_id == tenant.id)
+                    & (Knowledgebase.permission == TenantPermission.TEAM)
+                    & (Knowledgebase.status == StatusEnum.VALID.value)
+                    & (Document.status == StatusEnum.VALID.value)
+                )
+                .dicts()
+                .first()
+                or {}
+            )
+            teams.append(
+                {
+                    "id": tenant.id,
+                    "name": tenant.name,
+                    "owner_id": owner.get("user_id", ""),
+                    "owner_email": owner.get("email", ""),
+                    "owner_name": owner.get("nickname", ""),
+                    "member_count": sum(member["role"] in cls.MEMBER_ROLES for member in members),
+                    "invite_count": sum(member["role"] == UserTenantRole.INVITE for member in members),
+                    "dataset_count": dataset_query.count(),
+                    "document_count": int(document_stats.get("document_count", 0) or 0),
+                    "storage_bytes": int(document_stats.get("storage_bytes", 0) or 0),
+                    "create_date": tenant.create_date,
+                    "update_date": tenant.update_date,
+                }
+            )
+        return teams
+
+    @classmethod
+    def create_team(cls, owner_id, name):
+        exists, user = UserService.get_by_id(owner_id)
+        if not exists or user.status != StatusEnum.VALID.value:
+            raise AdminException("Owner not found", 404)
+        try:
+            return TeamService.create(owner_id, name)
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def update_team(cls, team_id, name):
+        cls._ensure_team(team_id)
+        try:
+            return TeamService.update(cls._owner_id(team_id), team_id, name)
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def delete_team(cls, team_id):
+        cls._ensure_team(team_id)
+        try:
+            TeamService.delete(cls._owner_id(team_id), team_id)
+            return True
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 409) from exc
+
+    @classmethod
+    def list_members(cls, team_id):
+        return cls._members(team_id)
+
+    @classmethod
+    def add_member(cls, team_id, user_id, role):
+        cls._ensure_team(team_id)
+        if role not in {UserTenantRole.ADMIN, UserTenantRole.NORMAL}:
+            raise AdminException("Role must be admin or normal", 400)
+        exists, user = UserService.get_by_id(user_id)
+        if not exists or user.status != StatusEnum.VALID.value:
+            raise AdminException("User not found", 404)
+        membership = WorkspaceAccessService.get_membership(user_id, team_id)
+        try:
+            if not membership:
+                TeamService.invite(cls._owner_id(team_id), team_id, user.email)
+            elif membership.role != UserTenantRole.INVITE:
+                raise AdminException("User is already a team member", 409)
+            TeamService.accept_invitation(user_id, team_id)
+            if role == UserTenantRole.ADMIN:
+                TeamService.update_member_role(cls._owner_id(team_id), team_id, user_id, role)
+            return True
+        except AdminException:
+            raise
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def update_member(cls, team_id, user_id, role):
+        cls._ensure_team(team_id)
+        if role not in cls.EDITABLE_ROLES:
+            raise AdminException("Invalid team role", 400)
+        membership = WorkspaceAccessService.get_membership(user_id, team_id)
+        if not membership:
+            raise AdminException("Membership not found", 404)
+        owner_id = cls._owner_id(team_id)
+        try:
+            if membership.role == UserTenantRole.INVITE:
+                TeamService.accept_invitation(user_id, team_id)
+                membership = WorkspaceAccessService.get_membership(user_id, team_id)
+            if role == UserTenantRole.OWNER:
+                TeamService.transfer_ownership(owner_id, team_id, user_id)
+            elif membership.role == UserTenantRole.OWNER:
+                raise AdminException("Transfer ownership before changing the owner role", 409)
+            else:
+                TeamService.update_member_role(cls._owner_id(team_id), team_id, user_id, role)
+            return True
+        except AdminException:
+            raise
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def delete_member(cls, team_id, user_id):
+        cls._ensure_team(team_id)
+        try:
+            TeamService.remove_member(cls._owner_id(team_id), team_id, user_id)
+            return True
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 409) from exc
 
 
 class UserServiceMgr:

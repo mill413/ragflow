@@ -234,6 +234,42 @@ export const updateDepartment = (
   );
 export const deleteDepartment = (departmentId: string) =>
   request.delete<ResponseData<boolean>>(adminDepartment(departmentId));
+export const listAdminTeams = () =>
+  request.get<ResponseData<AdminService.Team[]>>(api.adminTeams);
+export const createAdminTeam = (name: string, ownerId: string) =>
+  request.post<ResponseData<AdminService.Team>>(api.adminTeams, {
+    name,
+    owner_id: ownerId,
+  });
+export const updateAdminTeam = (teamId: string, name: string) =>
+  request.put<ResponseData<AdminService.Team>>(api.adminTeam(teamId), {
+    name,
+  });
+export const deleteAdminTeam = (teamId: string) =>
+  request.delete<ResponseData<boolean>>(api.adminTeam(teamId));
+export const listAdminTeamMembers = (teamId: string) =>
+  request.get<ResponseData<AdminService.TeamMember[]>>(
+    api.adminTeamMembers(teamId),
+  );
+export const addAdminTeamMember = (
+  teamId: string,
+  userId: string,
+  role: AdminService.TeamMemberRole,
+) =>
+  request.post<ResponseData<boolean>>(api.adminTeamMembers(teamId), {
+    user_id: userId,
+    role,
+  });
+export const updateAdminTeamMember = (
+  teamId: string,
+  userId: string,
+  role: AdminService.TeamMemberRole,
+) =>
+  request.put<ResponseData<boolean>>(api.adminTeamMember(teamId, userId), {
+    role,
+  });
+export const deleteAdminTeamMember = (teamId: string, userId: string) =>
+  request.delete<ResponseData<boolean>>(api.adminTeamMember(teamId, userId));
 export const listManagedResources = (params: {
   type: AdminService.ManagedResourceType;
   page: number;

@@ -34,6 +34,35 @@ declare namespace AdminService {
     updated_at?: string;
   };
 
+  export type TeamMemberRole = 'owner' | 'admin' | 'normal' | 'invite';
+
+  export type Team = {
+    id: string;
+    name: string;
+    owner_id: string;
+    owner_email: string;
+    owner_name: string;
+    member_count: number;
+    invite_count: number;
+    dataset_count: number;
+    document_count: number;
+    storage_bytes: number;
+    create_date: string;
+    update_date: string;
+  };
+
+  export type TeamMember = {
+    id: string;
+    user_id: string;
+    email: string;
+    nickname: string;
+    avatar?: string;
+    role: TeamMemberRole;
+    is_active: '0' | '1';
+    is_superuser: boolean;
+    update_date: string;
+  };
+
   export type ListUsersItem = {
     id: string;
     create_date: string;

@@ -425,6 +425,12 @@ export default {
   adminDepartments: `${restAPIv1}/admin/departments`,
   adminDepartment: (departmentId: string) =>
     `${restAPIv1}/admin/departments/${departmentId}`,
+  adminTeams: `${restAPIv1}/admin/teams`,
+  adminTeam: (teamId: string) => `${restAPIv1}/admin/teams/${teamId}`,
+  adminTeamMembers: (teamId: string) =>
+    `${restAPIv1}/admin/teams/${teamId}/members`,
+  adminTeamMember: (teamId: string, userId: string) =>
+    `${restAPIv1}/admin/teams/${teamId}/members/${userId}`,
   adminListManagedResources: `${restAPIv1}/admin/resources`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
 

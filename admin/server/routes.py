@@ -24,7 +24,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.versions import get_ragflow_version
@@ -278,6 +278,108 @@ def get_user_agents(username):
         agents_list = UserServiceMgr.get_user_agents(username)
         return success_response(agents_list)
 
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_teams():
+    try:
+        return success_response(TeamMgr.get_all_teams())
+    except Exception as e:
+        logging.exception("Failed to list teams")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_team():
+    try:
+        data = request.get_json() or {}
+        if not data.get("owner_id") or not data.get("name"):
+            return error_response("Owner and team name are required", 400)
+        return success_response(TeamMgr.create_team(data["owner_id"], data["name"]))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to create team")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team(team_id):
+    try:
+        return success_response(TeamMgr.update_team(team_id, (request.get_json() or {}).get("name")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_team(team_id):
+    try:
+        return success_response(TeamMgr.delete_team(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_team_members(team_id):
+    try:
+        return success_response(TeamMgr.list_members(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members", methods=["POST"])
+@login_required
+@check_admin_auth
+def add_team_member(team_id):
+    try:
+        data = request.get_json() or {}
+        if not data.get("user_id"):
+            return error_response("User is required", 400)
+        return success_response(TeamMgr.add_member(team_id, data["user_id"], data.get("role", "normal")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members/<user_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team_member(team_id, user_id):
+    try:
+        return success_response(TeamMgr.update_member(team_id, user_id, (request.get_json() or {}).get("role")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members/<user_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_team_member(team_id, user_id):
+    try:
+        return success_response(TeamMgr.delete_member(team_id, user_id))
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:
