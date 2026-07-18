@@ -17,6 +17,7 @@
 import pytest
 
 from test.testcases.restful_api.helpers.assertions import assert_auth_error
+from test.testcases.restful_api.helpers.client import RestClient
 
 
 @pytest.mark.p1
@@ -106,7 +107,7 @@ def test_system_tokens_auth_and_crud(rest_client, rest_client_noauth):
 
 
 @pytest.mark.p2
-def test_system_stats_auth_and_shape(rest_client, rest_client_noauth):
+def test_system_stats_auth_and_shape(auth, rest_client, rest_client_noauth):
     unauth_res = rest_client_noauth.get("/system/stats")
     assert unauth_res.status_code == 401
     unauth_payload = unauth_res.json()
@@ -120,6 +121,22 @@ def test_system_stats_auth_and_shape(rest_client, rest_client_noauth):
     for key in ("pv", "uv", "speed", "tokens", "round", "thumb_up"):
         assert key in data, payload
         assert isinstance(data[key], list), payload
+
+    user_res = rest_client.get("/users/me")
+    user_id = user_res.json()["data"]["id"]
+    jwt_client = RestClient(auth)
+    workspace_res = jwt_client.get("/system/stats", params={"workspace_id": user_id})
+    assert workspace_res.json()["code"] == 0, workspace_res.json()
+
+    all_res = jwt_client.get("/system/stats", params={"workspace_id": "__all__"})
+    assert all_res.json()["code"] == 0, all_res.json()
+
+    forbidden_res = jwt_client.get("/system/stats", params={"workspace_id": "invisible-workspace"})
+    forbidden_payload = forbidden_res.json()
+    assert forbidden_payload["code"] == 403, forbidden_payload
+
+    token_all_res = rest_client.get("/system/stats", params={"workspace_id": "__all__"})
+    assert token_all_res.json()["code"] == 403, token_all_res.json()
 
 
 @pytest.mark.p2

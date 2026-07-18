@@ -113,7 +113,9 @@ class API4ConversationService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def stats(cls, tenant_id, from_date, to_date, source=None):
+    def stats(cls, tenant_ids, from_date, to_date, source=None):
+        if isinstance(tenant_ids, str):
+            tenant_ids = [tenant_ids]
         if len(to_date) == 10:
             to_date += " 23:59:59"
         return (
@@ -126,7 +128,7 @@ class API4ConversationService(CommonService):
                 peewee.fn.AVG(cls.model.round).alias("round"),
                 peewee.fn.SUM(cls.model.thumb_up).alias("thumb_up"),
             )
-            .join(Dialog, on=((cls.model.dialog_id == Dialog.id) & (Dialog.tenant_id == tenant_id)))
+            .join(Dialog, on=((cls.model.dialog_id == Dialog.id) & (Dialog.tenant_id.in_(tenant_ids))))
             .where(cls.model.create_date >= from_date, cls.model.create_date <= to_date, cls.model.source == source)
             .group_by(cls.model.create_date.truncate("day"))
             .dicts()
