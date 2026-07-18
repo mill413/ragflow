@@ -92,13 +92,14 @@ class _DummyRequest:
 
 
 class _CanvasRecord:
-    def __init__(self, *, canvas_category, dsl, user_id="tenant-1"):
+    def __init__(self, *, canvas_category, dsl, user_id="tenant-1", permission="me"):
         self.canvas_category = canvas_category
         self.dsl = dsl
         self.user_id = user_id
+        self.permission = permission
 
     def to_dict(self):
-        return {"user_id": self.user_id, "dsl": self.dsl}
+        return {"user_id": self.user_id, "dsl": self.dsl, "permission": self.permission}
 
 
 class _StubCanvas:
@@ -415,6 +416,24 @@ def _load_agents_app(monkeypatch, *, target="rest"):
     services_pkg.user_service = user_service_mod
     services_pkg.TenantService = _StubTenantService
     services_pkg.UserService = _StubUserService
+
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
+        can_create_shared_resource=lambda *_args, **_kwargs: True,
+        can_read_shared_resource=lambda *_args, **_kwargs: True,
+        can_reference_knowledgebases=lambda *_args, **_kwargs: True,
+        extract_knowledgebase_ids=lambda *_args, **_kwargs: set(),
+        get_shared_resource_capabilities=lambda *_args, **_kwargs: {
+            "read": True,
+            "update": True,
+            "delete": True,
+        },
+        get_workspace_type=lambda *_args, **_kwargs: None,
+        is_superuser=lambda *_args, **_kwargs: False,
+        list_visible_workspace_ids=lambda tenant_id: [tenant_id],
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
+    services_pkg.workspace_service = workspace_service_mod
 
     # Stub api.apps package to prevent api/apps/__init__.py from executing
     # (it triggers heavy imports like quart, settings, DB connections).
@@ -1126,6 +1145,27 @@ def test_webhook_trace_polling_branches(monkeypatch):
     assert [event["ts"] for event in res["data"]["events"]] == [101.2, 102.5]
     assert res["data"]["next_since_ts"] == 102.5
     assert res["data"]["finished"] is True
+
+
+@pytest.mark.p2
+def test_webhook_trace_enforces_agent_workspace_permission(monkeypatch):
+    module = _load_agents_app(monkeypatch)
+    canvas = _CanvasRecord(
+        canvas_category=module.CanvasCategory.Agent,
+        dsl={},
+        user_id="team-1",
+        permission="team",
+    )
+    monkeypatch.setattr(module.UserCanvasService, "get_by_id", lambda _id: (True, canvas))
+    monkeypatch.setattr(
+        module.WorkspaceAccessService,
+        "can_read_shared_resource",
+        lambda *_args, **_kwargs: False,
+    )
+
+    result = _run(module.webhook_trace("agent-1"))
+    assert result["code"] != module.RetCode.SUCCESS
+    assert result["message"] == "Canvas not found."
 
 
 @pytest.mark.p2

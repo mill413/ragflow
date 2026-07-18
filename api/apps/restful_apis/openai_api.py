@@ -23,6 +23,7 @@ from api.apps import current_user, login_required
 from api.apps.restful_apis._generation_params import extract_generation_config, merge_generation_config
 from api.db.services.dialog_service import DialogService, async_chat
 from api.db.services.doc_metadata_service import DocMetadataService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.joint_services.tenant_model_service import resolve_model_config, get_api_key
 from api.utils.api_utils import get_error_data_result, get_request_json, validate_request
 from common.constants import RetCode, StatusEnum
@@ -267,16 +268,16 @@ async def openai_chat_completions(chat_id):
     requested_model = req.get("model", "") or ""
     completion_id = f"chatcmpl-{chat_id}"
 
-    dia = DialogService.query(tenant_id=current_user.id, id=chat_id, status=StatusEnum.VALID.value)
-    if not dia:
-        return get_error_data_result(f"You don't own the chat {chat_id}")
-    dia = dia[0]
+    dialogs = DialogService.query(id=chat_id, status=StatusEnum.VALID.value)
+    if not dialogs or not WorkspaceAccessService.can_read_shared_resource(current_user.id, dialogs[0]):
+        return get_error_data_result(f"Chat {chat_id} not found")
+    dia = dialogs[0]
 
     using_placeholder_model = requested_model == "model"
     if using_placeholder_model:
         requested_model = dia.llm_id or requested_model
     else:
-        llm_id_error = _validate_llm_id(requested_model, current_user.id, {"model_type": "chat"})
+        llm_id_error = _validate_llm_id(requested_model, dia.tenant_id, {"model_type": "chat"})
         if llm_id_error:
             return get_error_data_result(message=llm_id_error, code=RetCode.ARGUMENT_ERROR)
         dia.llm_id = requested_model

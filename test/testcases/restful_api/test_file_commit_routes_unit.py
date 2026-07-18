@@ -358,6 +358,19 @@ def _load_module(monkeypatch):
     kb_svc_mod.KnowledgebaseService = _StubKnowledgebaseService
     monkeypatch.setitem(sys.modules, "api.db.services.knowledgebase_service", kb_svc_mod)
 
+    workspace_svc_mod = ModuleType("api.db.services.workspace_service")
+    workspace_svc_mod.WorkspaceAccessService = type(
+        "_StubWorkspaceAccessService",
+        (),
+        {
+            "can_read_knowledgebase": staticmethod(lambda *_args, **_kwargs: True),
+            "can_update_knowledgebase": staticmethod(lambda *_args, **_kwargs: True),
+            "can_read_shared_resource": staticmethod(lambda *_args, **_kwargs: True),
+            "can_manage_file": staticmethod(lambda *_args, **_kwargs: True),
+        },
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_svc_mod)
+
     # Remove cached file_commit_service so it reimports with our SQLite stubs.
     # Keep api.db.db_models in sys.modules — it's already patched above.
     for mod_name in list(sys.modules.keys()):
@@ -404,6 +417,14 @@ def set_tenant_info():
 def reset_db():
     """Clear all rows before each test to prevent order-dependent failures."""
     _clear_db()
+    FileTestModel.create(
+        id="root-folder",
+        parent_id="root-folder",
+        tenant_id="t1",
+        created_by="test-user",
+        name="/",
+        type="folder",
+    )
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────
@@ -441,6 +462,20 @@ def test_create_commit_missing_fields(monkeypatch):
 
     res = _run(module.create_commit("root-folder"))
     assert res["code"] == 101, f"Expected validation error, got {res}"
+
+
+@pytest.mark.p2
+def test_commit_routes_enforce_workspace_permissions(monkeypatch):
+    module = _load_module(monkeypatch)
+    _setup_request(module, json_payload={"message": "blocked", "files": []})
+
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_file", lambda *_args, **_kwargs: False)
+    create_res = _run(module.create_commit("root-folder"))
+    assert create_res["code"] == 102
+
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_read_shared_resource", lambda *_args, **_kwargs: False)
+    list_res = _run(module.list_commits("root-folder"))
+    assert list_res["code"] == 102
 
 
 @pytest.mark.p2

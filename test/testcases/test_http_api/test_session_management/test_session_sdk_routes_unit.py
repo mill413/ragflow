@@ -856,6 +856,12 @@ def _load_openai_api_module(monkeypatch):
     api_apps_mod.current_user = SimpleNamespace(id="tenant-1")
     monkeypatch.setitem(sys.modules, "api.apps", api_apps_mod)
 
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
+        can_read_shared_resource=lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
+
     api_apps_restful_mod = ModuleType("api.apps.restful_apis")
     api_apps_restful_mod.__path__ = [str(repo_root / "api" / "apps" / "restful_apis")]
     monkeypatch.setitem(sys.modules, "api.apps.restful_apis", api_apps_restful_mod)
@@ -949,6 +955,39 @@ def test_openai_chat_validation_matrix_unit(monkeypatch):
         monkeypatch.setattr(module, "get_request_json", lambda p=payload: _AwaitableValue(p))
         res = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
         assert expected in res["message"]
+
+
+@pytest.mark.p2
+def test_openai_chat_uses_chat_workspace_instead_of_token_owner(monkeypatch):
+    module = _load_openai_api_module(monkeypatch)
+    query_args = {}
+    model_tenant_ids = []
+    dialog = SimpleNamespace(kb_ids=[], llm_id="team-model", tenant_id="team-1", llm_setting={})
+
+    def query_dialog(**kwargs):
+        query_args.update(kwargs)
+        return [dialog]
+
+    monkeypatch.setattr(module.DialogService, "query", query_dialog)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_read_shared_resource", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(module, "_validate_llm_id", lambda _model, tenant_id, _setting: model_tenant_ids.append(tenant_id))
+    monkeypatch.setattr(module, "get_api_key", lambda **_kwargs: "key")
+    monkeypatch.setattr(module, "num_tokens_from_string", lambda text: len(text or ""))
+    monkeypatch.setattr(
+        module,
+        "get_request_json",
+        lambda: _AwaitableValue({"model": "team-model", "messages": [{"role": "user", "content": "hello"}]}),
+    )
+
+    async def fake_async_chat(*_args, **_kwargs):
+        yield {"answer": "ok", "reference": {}}
+
+    monkeypatch.setattr(module, "async_chat", fake_async_chat)
+    result = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
+
+    assert result["choices"][0]["message"]["content"] == "ok"
+    assert "tenant_id" not in query_args
+    assert model_tenant_ids == ["team-1"]
 
 
 @pytest.mark.p2

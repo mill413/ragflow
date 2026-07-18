@@ -2412,7 +2412,12 @@ async def _webhook_impl(agent_id: str, is_test: bool):
 @login_required
 async def webhook_trace(agent_id: str):
     exists, cvs = UserCanvasService.get_by_id(agent_id)
-    if not exists or str(cvs.user_id) != str(current_user.id):
+    if not exists or not WorkspaceAccessService.can_read_shared_resource(
+        current_user.id,
+        cvs,
+        workspace_field="user_id",
+        permission_field="permission",
+    ):
         return get_data_error_result(
             message="Canvas not found.",
         )
