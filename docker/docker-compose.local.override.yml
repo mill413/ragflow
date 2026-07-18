@@ -50,6 +50,7 @@ services:
     working_dir: /workspace/web
     volumes:
       - ../web:/workspace/web
+      - ../docs:/workspace/docs:ro
     ports:
       - "18084:9222"
     environment:

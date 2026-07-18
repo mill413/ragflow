@@ -19,6 +19,7 @@ import logging
 from quart import request
 
 from api.apps import current_user, login_required
+from api.apps.workspace_access import personal_workspace_required
 from api.db import InputType
 from api.db.services.connector_service import ConnectorService, SyncLogsService
 from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json
@@ -48,6 +49,7 @@ def _connector_auth_error(connector_id: str, user_id: str):
 
 @manager.route("/connectors/<connector_id>", methods=["PATCH"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def update_connector(connector_id):
     """Update an accessible connector's polling configuration."""
     if not ConnectorService.accessible(connector_id, current_user.id):
@@ -88,6 +90,7 @@ async def update_connector(connector_id):
 
 @manager.route("/connectors", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def create_connector():
     """Create a connector owned by the current tenant."""
     req = await get_request_json()
@@ -118,6 +121,7 @@ async def create_connector():
 
 @manager.route("/connectors", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def list_connector():
     """List connectors owned by the current tenant."""
     return get_json_result(
@@ -131,6 +135,7 @@ def list_connector():
 
 @manager.route("/connectors/<connector_id>", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def get_connector(connector_id):
     """Return connector details when the current user can access it."""
     if not ConnectorService.accessible(connector_id, current_user.id):
@@ -144,6 +149,7 @@ def get_connector(connector_id):
 
 @manager.route("/connectors/<connector_id>/logs", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def list_logs(connector_id):
     """List sync logs for a connector the current user can access."""
     if not ConnectorService.accessible(connector_id, current_user.id):
@@ -162,6 +168,7 @@ def list_logs(connector_id):
 
 @manager.route("/connectors/<connector_id>/rebuild", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def rebuild(connector_id):
     """Schedule a rebuild for an accessible connector and knowledge base."""
     if not ConnectorService.accessible(connector_id, current_user.id):
@@ -181,6 +188,7 @@ async def rebuild(connector_id):
 
 @manager.route("/connectors/<connector_id>", methods=["DELETE"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def rm_connector(connector_id):
     """Delete an accessible connector after canceling its sync tasks."""
     if not ConnectorService.accessible(connector_id, current_user.id):

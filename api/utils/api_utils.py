@@ -241,9 +241,9 @@ def active_required(func):
 def add_tenant_id_to_kwargs(func):
     @wraps(func)
     async def wrapper(**kwargs):
-        from api.apps import current_user
+        from api.apps import current_user, g
 
-        kwargs["tenant_id"] = current_user.id
+        kwargs["tenant_id"] = getattr(g, "api_token_workspace_id", None) or current_user.id
         if inspect.iscoroutinefunction(func):
             return await func(**kwargs)
         return func(**kwargs)

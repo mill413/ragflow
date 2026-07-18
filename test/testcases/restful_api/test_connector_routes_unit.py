@@ -101,6 +101,10 @@ def _load_connector_app(monkeypatch):
     apps_mod.login_required = lambda fn: fn
     monkeypatch.setitem(sys.modules, "api.apps", apps_mod)
 
+    workspace_access_mod = ModuleType("api.apps.workspace_access")
+    workspace_access_mod.personal_workspace_required = lambda fn: fn
+    monkeypatch.setitem(sys.modules, "api.apps.workspace_access", workspace_access_mod)
+
     db_mod = ModuleType("api.db")
     db_mod.InputType = SimpleNamespace(POLL="POLL")
     monkeypatch.setitem(sys.modules, "api.db", db_mod)

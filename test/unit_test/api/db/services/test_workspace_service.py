@@ -17,6 +17,7 @@
 from types import SimpleNamespace
 
 import pytest
+from quart import Quart, g
 
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
@@ -124,6 +125,19 @@ def test_superuser_can_read_and_manage_every_workspace_resource(workspace_depend
     assert WorkspaceAccessService.can_read_shared_resource("system-admin", team_resource)
     assert WorkspaceAccessService.can_manage_shared_resource("system-admin", personal_resource)
     assert WorkspaceAccessService.can_manage_shared_resource("system-admin", team_resource)
+
+
+@pytest.mark.asyncio
+async def test_api_token_scope_blocks_other_workspaces(workspace_dependencies):
+    app = Quart(__name__)
+    team_resource = {"tenant_id": "team-1", "status": StatusEnum.VALID.value}
+    personal_resource = {"tenant_id": "user-1", "status": StatusEnum.VALID.value}
+
+    async with app.test_request_context("/"):
+        g.api_token_workspace_id = "team-1"
+        assert WorkspaceAccessService.can_read_shared_resource("system-admin", team_resource)
+        assert not WorkspaceAccessService.can_read_shared_resource("system-admin", personal_resource)
+        assert not WorkspaceAccessService.can_create_shared_resource("system-admin", "user-1")
 
 
 def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_dependencies):

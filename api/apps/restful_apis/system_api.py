@@ -19,17 +19,18 @@ import logging
 from datetime import datetime
 from timeit import default_timer as timer
 
-from quart import jsonify
+from quart import jsonify, request
 
 from api.apps import login_required, current_user
 from api.utils.api_utils import get_json_result, get_data_error_result, server_error_response, generate_confirmation_token
 from api.utils.health_utils import run_health_checks, get_oceanbase_status
 from common.versions import get_ragflow_version
+from common.constants import RetCode
 from common.time_utils import current_timestamp, datetime_format
 from api.db.db_models import APIToken
 from api.db.services.api_service import APITokenService
 from api.db.services.knowledgebase_service import KnowledgebaseService
-from api.db.services.user_service import UserTenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 from common.log_utils import get_log_levels, set_log_level
 from common import settings
 from rag.utils.redis_conn import REDIS_CONN
@@ -271,17 +272,16 @@ def token_list():
                     description: Token creation time.
     """
     try:
-        tenants = UserTenantService.query(user_id=current_user.id)
-        if not tenants:
-            return get_data_error_result(message="Tenant not found!")
+        workspace_id = request.args.get("workspace_id") or current_user.id
+        if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+            return get_json_result(code=RetCode.FORBIDDEN, message="Permission denied for this workspace.")
 
-        tenant_id = [tenant for tenant in tenants if tenant.role == "owner"][0].tenant_id
-        objs = APITokenService.query(tenant_id=tenant_id)
+        objs = APITokenService.query(tenant_id=workspace_id)
         objs = [o.to_dict() for o in objs]
         for o in objs:
             if not o["beta"]:
                 o["beta"] = generate_confirmation_token().replace("ragflow-", "")[:32]
-                APITokenService.filter_update([APIToken.tenant_id == tenant_id, APIToken.token == o["token"]], o)
+                APITokenService.filter_update([APIToken.tenant_id == workspace_id, APIToken.token == o["token"]], o)
         return get_json_result(data=objs)
     except Exception as e:
         return server_error_response(e)
@@ -289,7 +289,7 @@ def token_list():
 
 @manager.route("/system/tokens", methods=["POST"])  # noqa: F821
 @login_required
-def new_token():
+async def new_token():
     """
     Generate a new API token.
     ---
@@ -314,14 +314,14 @@ def new_token():
               description: The generated API token.
     """
     try:
-        tenants = UserTenantService.query(user_id=current_user.id)
-        if not tenants:
-            return get_data_error_result(message="Tenant not found!")
+        req = (await request.get_json(silent=True)) or {}
+        workspace_id = request.args.get("workspace_id") or req.get("workspace_id") or current_user.id
+        if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+            return get_json_result(code=RetCode.FORBIDDEN, message="Permission denied for this workspace.")
 
-        tenant_id = [tenant for tenant in tenants if tenant.role == "owner"][0].tenant_id
         obj = {
-            "tenant_id": tenant_id,
-            "token": generate_confirmation_token(),
+            "tenant_id": workspace_id,
+            "token": f"{generate_confirmation_token()}|{current_user.id}",
             "beta": generate_confirmation_token().replace("ragflow-", "")[:32],
             "create_time": current_timestamp(),
             "create_date": datetime_format(datetime.now()),
@@ -339,7 +339,7 @@ def new_token():
 
 @manager.route("/system/tokens/<token>", methods=["DELETE"])  # noqa: F821
 @login_required
-def rm(token):
+async def rm(token):
     """
     Remove an API token.
     ---
@@ -364,12 +364,12 @@ def rm(token):
               description: Deletion status.
     """
     try:
-        tenants = UserTenantService.query(user_id=current_user.id)
-        if not tenants:
-            return get_data_error_result(message="Tenant not found!")
+        req = (await request.get_json(silent=True)) or {}
+        workspace_id = request.args.get("workspace_id") or req.get("workspace_id") or current_user.id
+        if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+            return get_json_result(code=RetCode.FORBIDDEN, message="Permission denied for this workspace.")
 
-        tenant_id = tenants[0].tenant_id
-        APITokenService.filter_delete([APIToken.tenant_id == tenant_id, APIToken.token == token])
+        APITokenService.filter_delete([APIToken.tenant_id == workspace_id, APIToken.token == token])
         return get_json_result(data=True)
     except Exception as e:
         return server_error_response(e)

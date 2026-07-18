@@ -65,6 +65,10 @@ def _load_apps_module(monkeypatch):
     services_mod.get_user_id_from_access_token = lambda token: token.rsplit("|", 1)[1] if "|" in token and len(token.rsplit("|", 1)[0]) >= 32 else None
     monkeypatch.setitem(sys.modules, "api.db.services", services_mod)
 
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(list_visible_workspace_ids=lambda _user_id: ["tenant-1"])
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
+
     commands_mod = ModuleType("api.utils.commands")
     commands_mod.register_commands = lambda _app: None
     monkeypatch.setitem(sys.modules, "api.utils.commands", commands_mod)
@@ -198,6 +202,29 @@ def test_load_user_api_token_fallback_and_fallback_exception(monkeypatch, caplog
 
     _run(_case())
     assert "api token fallback failed" in caplog.text
+
+
+@pytest.mark.p2
+def test_team_api_token_uses_actor_suffix_and_binds_workspace(monkeypatch):
+    quart_app, apps_module = _load_apps_module(monkeypatch)
+    actor = SimpleNamespace(id="user-1", email="user@example.com", access_token="active")
+    token_record = SimpleNamespace(tenant_id="team-1", token="ragflow-secret|user-1")
+
+    monkeypatch.setattr(apps_module.UserService, "query", lambda **kwargs: [actor] if kwargs.get("id") == actor.id else [])
+    workspace_service = sys.modules["api.db.services.workspace_service"].WorkspaceAccessService
+    monkeypatch.setattr(workspace_service, "list_visible_workspace_ids", lambda _user_id: ["team-1"])
+
+    async def _case():
+        async with quart_app.test_request_context("/"):
+            user = apps_module._load_user_from_api_token_record(token_record, apps_module.AUTH_API)
+            assert user is actor
+            assert apps_module.g.api_token_workspace_id == "team-1"
+
+        monkeypatch.setattr(workspace_service, "list_visible_workspace_ids", lambda _user_id: [])
+        async with quart_app.test_request_context("/"):
+            assert apps_module._load_user_from_api_token_record(token_record, apps_module.AUTH_API) is None
+
+    _run(_case())
 
 
 @pytest.mark.p2

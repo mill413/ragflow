@@ -17,6 +17,7 @@
 from quart import Response, request
 
 from api.apps import current_user, login_required
+from api.apps.workspace_access import personal_workspace_required
 from api.apps.restful_apis.utils.compilation_template_validation import validate_template_payload
 from api.db.services.compilation_template_group_service import (
     CompilationTemplateGroupService,
@@ -68,6 +69,7 @@ def _validate_group_payload(req: dict, require_all: bool = True) -> str:
 
 @manager.route("/compilation_template_groups", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def list_groups() -> Response:
     keywords = request.args.get("keywords", "")
     scope = request.args.get("scope", "")
@@ -88,6 +90,7 @@ def list_groups() -> Response:
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def detail(group_id: str) -> Response:
     try:
         group = CompilationTemplateGroupService.get_saved(group_id, current_user.id)
@@ -100,6 +103,7 @@ def detail(group_id: str) -> Response:
 
 @manager.route("/compilation_template_groups", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 @validate_request("name", "templates")
 async def create() -> Response:
     req = await get_request_json()
@@ -127,6 +131,7 @@ async def create() -> Response:
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["PUT"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def update(group_id: str) -> Response:
     req = await get_request_json()
     error = _validate_group_payload(req, require_all=False)
@@ -162,6 +167,7 @@ async def update(group_id: str) -> Response:
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["DELETE"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def delete(group_id: str) -> Response:
     try:
         ok = CompilationTemplateGroupService.delete_group(group_id, current_user.id)

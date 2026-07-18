@@ -278,17 +278,19 @@ export const useFetchManualSystemTokenList = () => {
   return { data, loading, fetchSystemTokenList: mutateAsync };
 };
 
-export const useFetchSystemTokenList = () => {
+export const useFetchSystemTokenList = (workspaceId?: string) => {
   const {
     data,
     isFetching: loading,
     refetch,
   } = useQuery<IToken[]>({
-    queryKey: [UserSettingApiAction.FetchSystemTokenList],
+    queryKey: [UserSettingApiAction.FetchSystemTokenList, workspaceId],
     initialData: [],
     gcTime: 0,
     queryFn: async () => {
-      const { data } = await userService.listToken();
+      const { data } = await userService.listToken(
+        workspaceId ? { workspace_id: workspaceId } : undefined,
+      );
 
       return data?.data ?? [];
     },
@@ -297,7 +299,7 @@ export const useFetchSystemTokenList = () => {
   return { data, loading, refetch };
 };
 
-export const useRemoveSystemToken = () => {
+export const useRemoveSystemToken = (workspaceId?: string) => {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
@@ -308,7 +310,10 @@ export const useRemoveSystemToken = () => {
   } = useMutation({
     mutationKey: [UserSettingApiAction.RemoveSystemToken],
     mutationFn: async (token: string) => {
-      const { data } = await userService.removeToken({}, token);
+      const { data } = await userService.removeToken(
+        workspaceId ? { workspace_id: workspaceId } : {},
+        token,
+      );
       if (data.code === 0) {
         message.success(t('message.deleted'));
         queryClient.invalidateQueries({

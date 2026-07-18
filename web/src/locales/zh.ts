@@ -1081,6 +1081,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       embedded: '嵌入',
       serviceApiEndpoint: '服务API端点',
       apiKey: 'API KEY',
+      workspace: '工作空间',
       apiReference: 'API 文档',
       dateRange: '日期范围：',
       backendServiceApi: 'API 服务器',

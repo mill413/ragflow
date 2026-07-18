@@ -17,12 +17,33 @@
 import inspect
 from functools import wraps
 
-from quart import request
+from quart import g, request
 
 from api.db import WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import get_error_data_result
 from common.constants import RetCode
+
+
+def personal_workspace_required(func):
+    """Restrict an endpoint to the authenticated user's personal workspace."""
+
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        from api.apps import current_user
+
+        actor_id = current_user.id
+        requested_workspace_id = request.args.get("workspace_id")
+        token_workspace_id = getattr(g, "api_token_workspace_id", None)
+        is_personal = WorkspaceAccessService.get_workspace_type(actor_id) == WorkspaceType.PERSONAL
+        if token_workspace_id not in (None, actor_id) or (requested_workspace_id and requested_workspace_id != actor_id) or not is_personal:
+            return get_error_data_result(message="This resource is only available in a personal workspace.", code=RetCode.FORBIDDEN)
+
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 def workspace_required(*, write: bool = False):

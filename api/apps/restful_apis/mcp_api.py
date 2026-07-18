@@ -17,6 +17,7 @@
 from quart import Response, request
 
 from api.apps import current_user, login_required
+from api.apps.workspace_access import personal_workspace_required
 from api.db.db_models import MCPServer
 from api.db.services.mcp_server_service import MCPServerService
 from api.db.services.user_service import TenantService
@@ -69,6 +70,7 @@ def _assert_mcp_url_is_safe(url, invalid_message: str = "Invalid url.") -> tuple
 
 @manager.route("/mcp/servers", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def list_mcp() -> Response:
     keywords = request.args.get("keywords", "")
     page_number = int(request.args.get("page", 0))
@@ -94,6 +96,7 @@ async def list_mcp() -> Response:
 
 @manager.route("/mcp/servers/<mcp_id>", methods=["GET"])  # noqa: F821
 @login_required
+@personal_workspace_required
 def detail(mcp_id: str) -> Response:
     try:
         if request.args.get("mode") == "download":
@@ -114,6 +117,7 @@ def detail(mcp_id: str) -> Response:
 
 @manager.route("/mcp/servers", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 @validate_request("name", "url", "server_type")
 async def create() -> Response:
     req = await get_request_json()
@@ -171,6 +175,7 @@ async def create() -> Response:
 
 @manager.route("/mcp/servers/<mcp_id>", methods=["PUT"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def update(mcp_id: str) -> Response:
     req = await get_request_json()
 
@@ -230,6 +235,7 @@ async def update(mcp_id: str) -> Response:
 
 @manager.route("/mcp/servers/<mcp_id>", methods=["DELETE"])  # noqa: F821
 @login_required
+@personal_workspace_required
 async def rm(mcp_id: str) -> Response:
     try:
         e, mcp_server = MCPServerService.get_by_id(mcp_id)
@@ -245,6 +251,7 @@ async def rm(mcp_id: str) -> Response:
 
 @manager.route("/mcp/servers/import", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 @validate_request("mcpServers")
 async def import_multiple() -> Response:
     req = await get_request_json()
@@ -320,6 +327,7 @@ async def import_multiple() -> Response:
 
 @manager.route("/mcp/servers/<mcp_id>/test", methods=["POST"])  # noqa: F821
 @login_required
+@personal_workspace_required
 @validate_request("url", "server_type")
 async def test_mcp(mcp_id: str) -> Response:
     req = await get_request_json()

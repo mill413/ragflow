@@ -184,6 +184,10 @@ def _load_mcp_api(monkeypatch):
     apps_mod.login_required = lambda func: func
     monkeypatch.setitem(sys.modules, "api.apps", apps_mod)
 
+    workspace_access_mod = ModuleType("api.apps.workspace_access")
+    workspace_access_mod.personal_workspace_required = lambda fn: fn
+    monkeypatch.setitem(sys.modules, "api.apps.workspace_access", workspace_access_mod)
+
     db_models_mod = ModuleType("api.db.db_models")
     db_models_mod.MCPServer = _DummyMCPServer
     monkeypatch.setitem(sys.modules, "api.db.db_models", db_models_mod)

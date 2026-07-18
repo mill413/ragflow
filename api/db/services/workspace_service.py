@@ -18,6 +18,8 @@ from collections.abc import Mapping
 import hashlib
 from typing import Any
 
+from quart import g, has_request_context
+
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
 from api.db.db_models import (
     DB,
@@ -52,12 +54,24 @@ class WorkspaceAccessService:
     def is_superuser(user_id: str) -> bool:
         return UserService.is_admin(user_id)
 
+    @staticmethod
+    def _api_token_scope_allows(tenant_id: str) -> bool:
+        if not has_request_context():
+            return True
+        token_workspace_id = getattr(g, "api_token_workspace_id", None)
+        return token_workspace_id is None or token_workspace_id == tenant_id
+
     @classmethod
     def list_visible_workspace_ids(cls, user_id: str) -> list[str]:
+        token_workspace_id = getattr(g, "api_token_workspace_id", None) if has_request_context() else None
         if cls.is_superuser(user_id):
             tenant_ids = Tenant.select(Tenant.id).where(Tenant.status == StatusEnum.VALID.value).tuples()
-            return [tenant_id for (tenant_id,) in tenant_ids]
-        return [workspace["tenant_id"] for workspace in TenantService.list_accessible_by_user_id(user_id)]
+            workspace_ids = [tenant_id for (tenant_id,) in tenant_ids]
+        else:
+            workspace_ids = [workspace["tenant_id"] for workspace in TenantService.list_accessible_by_user_id(user_id)]
+        if token_workspace_id is not None:
+            return [token_workspace_id] if token_workspace_id in workspace_ids else []
+        return workspace_ids
 
     @classmethod
     def list_visible_workspaces(cls, user_id: str) -> list[dict[str, Any]]:
@@ -124,6 +138,8 @@ class WorkspaceAccessService:
 
     @classmethod
     def can_manage_workspace(cls, user_id: str, tenant_id: str) -> bool:
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         if cls.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
             return False
         if cls.is_superuser(user_id):
@@ -133,6 +149,8 @@ class WorkspaceAccessService:
 
     @classmethod
     def can_create_knowledgebase(cls, user_id: str, tenant_id: str) -> bool:
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         workspace_type = cls.get_workspace_type(tenant_id)
         if workspace_type and cls.is_superuser(user_id):
             return True
@@ -144,6 +162,8 @@ class WorkspaceAccessService:
 
     @classmethod
     def can_create_shared_resource(cls, user_id: str, tenant_id: str) -> bool:
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         workspace_type = cls.get_workspace_type(tenant_id)
         if workspace_type and cls.is_superuser(user_id):
             return True
@@ -167,6 +187,8 @@ class WorkspaceAccessService:
             return False
 
         tenant_id = cls._value(resource, workspace_field)
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         workspace_type = cls.get_workspace_type(tenant_id)
         permission = cls._value(resource, permission_field) if permission_field else None
         if workspace_type and cls.is_superuser(user_id):
@@ -237,6 +259,8 @@ class WorkspaceAccessService:
             return False
 
         tenant_id = cls._value(knowledgebase, "tenant_id")
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         workspace_type = cls.get_workspace_type(tenant_id)
         permission = cls._value(knowledgebase, "permission")
 
@@ -264,6 +288,8 @@ class WorkspaceAccessService:
     @classmethod
     def can_manage_file(cls, user_id: str, file: Mapping[str, Any] | Any) -> bool:
         tenant_id = cls._value(file, "tenant_id")
+        if not cls._api_token_scope_allows(tenant_id):
+            return False
         workspace_type = cls.get_workspace_type(tenant_id)
         if workspace_type and cls.is_superuser(user_id):
             return True
@@ -275,6 +301,8 @@ class WorkspaceAccessService:
 
     @classmethod
     def can_reference_knowledgebases(cls, user_id: str, workspace_id: str, knowledgebase_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        if not cls._api_token_scope_allows(workspace_id):
+            return False
         for knowledgebase_id in set(knowledgebase_ids or []):
             knowledgebase = Knowledgebase.get_or_none(id=knowledgebase_id, status=StatusEnum.VALID.value)
             if not knowledgebase or knowledgebase.tenant_id != workspace_id:

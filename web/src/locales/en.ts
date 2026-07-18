@@ -1143,6 +1143,7 @@ This auto-tagging feature enhances retrieval by adding another layer of domain-s
       embedded: 'Embedded',
       serviceApiEndpoint: 'Service API endpoint',
       apiKey: 'API KEY',
+      workspace: 'Workspace',
       apiReference: 'API documents',
       dateRange: 'Date range:',
       backendServiceApi: 'API server',

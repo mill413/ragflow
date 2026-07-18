@@ -14,10 +14,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import message from '../ui/message';
 
-export const useOperateApiKey = (idKey: string, dialogId?: string) => {
-  const { removeToken } = useRemoveSystemToken();
+export const useOperateApiKey = (
+  idKey: string,
+  dialogId?: string,
+  workspaceId?: string,
+) => {
+  const { removeToken } = useRemoveSystemToken(workspaceId);
   const { createToken, loading: creatingLoading } = useCreateSystemToken();
-  const { data: tokenList, loading: listLoading } = useFetchSystemTokenList();
+  const { data: tokenList, loading: listLoading } =
+    useFetchSystemTokenList(workspaceId);
 
   const showDeleteConfirm = useShowDeleteConfirm();
 
@@ -28,8 +33,8 @@ export const useOperateApiKey = (idKey: string, dialogId?: string) => {
   };
 
   const onCreateToken = useCallback(() => {
-    createToken({ [idKey]: dialogId });
-  }, [createToken, idKey, dialogId]);
+    createToken({ [idKey]: dialogId, workspace_id: workspaceId });
+  }, [createToken, idKey, dialogId, workspaceId]);
 
   return {
     removeToken: onRemoveToken,
