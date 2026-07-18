@@ -79,7 +79,6 @@ export enum Routes {
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
   AdminRoles = `${Admin}/roles`,
-  AdminMonitoring = `${Admin}/monitoring`,
 }
 
 const defaultRouteFallback = (
@@ -421,10 +420,6 @@ const routeConfigOptions = [
               {
                 path: Routes.AdminSandboxSettings,
                 Component: () => import('@/pages/admin/sandbox-settings'),
-              },
-              {
-                path: Routes.AdminMonitoring,
-                Component: () => import('@/pages/admin/monitoring'),
               },
               ...(IS_ENTERPRISE
                 ? [

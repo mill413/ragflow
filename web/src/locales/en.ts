@@ -3371,7 +3371,6 @@ Important structured information may include: names, dates, locations, events, k
       sandboxSettings: 'Sandbox settings',
       registrationWhitelist: 'Registration whitelist',
       roles: 'Roles',
-      monitoring: 'Monitoring',
 
       monitoringPage: {
         title: 'Operations monitoring',

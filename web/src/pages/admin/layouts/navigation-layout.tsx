@@ -5,7 +5,6 @@ import { NavLink, Outlet, useNavigate } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import {
-  LucideMonitor,
   LucideBoxes,
   LucideBuilding2,
   LucideLogOut,
@@ -77,11 +76,6 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminSandboxSettings,
         name: t('admin.sandboxSettings'),
         icon: <LucideZap className="size-[1em]" />,
-      },
-      {
-        path: Routes.AdminMonitoring,
-        name: t('admin.monitoring'),
-        icon: <LucideMonitor className="size-[1em]" />,
       },
       ...(IS_ENTERPRISE
         ? [

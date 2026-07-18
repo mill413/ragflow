@@ -2943,7 +2943,6 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       sandboxSettings: '沙箱设置',
       registrationWhitelist: '注册白名单',
       roles: '角色管理',
-      monitoring: '监控',
 
       monitoringPage: {
         title: '运行监控',

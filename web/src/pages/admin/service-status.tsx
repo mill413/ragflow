@@ -72,6 +72,7 @@ import 'react18-json-view/src/style.css';
 
 import ServiceDetail from './service-detail';
 import TaskExecutorDetail from './task-executor-detail';
+import MonitoringPanel from './components/monitoring-panel';
 
 const columnHelper = createColumnHelper<AdminService.ListServicesItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListServicesItem>([
@@ -221,6 +222,7 @@ function AdminServiceStatus() {
         <Spotlight />
 
         <ScrollArea className="size-full">
+          <MonitoringPanel />
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
             <CardTitle>{t('admin.serviceStatus')}</CardTitle>
 
