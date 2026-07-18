@@ -28,14 +28,11 @@ from api.db.db_models import (
     Memory,
     Search,
     Tenant,
-    TenantLLM,
-    TenantModel,
-    TenantModelInstance,
-    TenantModelProvider,
     UserCanvas,
     UserTenant,
 )
 from api.db.services.user_service import TenantService, UserService, UserTenantService
+from common import settings
 from common.constants import StatusEnum
 from common.misc_utils import get_uuid
 
@@ -367,25 +364,6 @@ class WorkspaceAccessService:
 
 
 class TeamService:
-    TENANT_CONFIG_FIELDS = (
-        "public_key",
-        "llm_id",
-        "tenant_llm_id",
-        "embd_id",
-        "tenant_embd_id",
-        "asr_id",
-        "tenant_asr_id",
-        "img2txt_id",
-        "tenant_img2txt_id",
-        "rerank_id",
-        "tenant_rerank_id",
-        "tts_id",
-        "tenant_tts_id",
-        "ocr_id",
-        "tenant_ocr_id",
-        "parser_ids",
-    )
-
     @staticmethod
     def _lock_name(operation: str, *identifiers: str) -> str:
         digest = hashlib.sha256(":".join(identifiers).encode()).hexdigest()[:48]
@@ -397,17 +375,22 @@ class TeamService:
         if not name or len(name) > 100:
             raise ValueError("Team name must contain between 1 and 100 characters.")
         personal_membership = TenantService.get_personal_by_user_id(owner_id)
-        exists, personal = TenantService.get_by_id(owner_id)
+        exists, _personal = TenantService.get_by_id(owner_id)
         if not personal_membership or not exists:
             raise LookupError("Personal workspace not found.")
         tenant_id = get_uuid()
         with DB.atomic():
-            model_id_map = cls._copy_model_config(owner_id, tenant_id)
-            payload = {field: getattr(personal, field, None) for field in cls.TENANT_CONFIG_FIELDS}
-            for field in ("tenant_llm_id", "tenant_embd_id", "tenant_asr_id", "tenant_img2txt_id", "tenant_rerank_id", "tenant_tts_id", "tenant_ocr_id"):
-                if payload.get(field) in model_id_map:
-                    payload[field] = model_id_map[payload[field]]
-            payload.update({"id": tenant_id, "name": name, "status": StatusEnum.VALID.value})
+            payload = {
+                "id": tenant_id,
+                "name": name,
+                "llm_id": settings.CHAT_MDL,
+                "embd_id": settings.EMBEDDING_MDL,
+                "asr_id": settings.ASR_MDL,
+                "parser_ids": settings.PARSERS,
+                "img2txt_id": settings.VISION_MDL,
+                "rerank_id": settings.RERANK_MDL,
+                "status": StatusEnum.VALID.value,
+            }
             Tenant.insert(**payload).execute()
             UserTenant.insert(
                 id=get_uuid(),
@@ -418,33 +401,6 @@ class TeamService:
                 status=StatusEnum.VALID.value,
             ).execute()
         return cls.get(owner_id, tenant_id)
-
-    @staticmethod
-    def _copy_model_config(source_tenant_id: str, target_tenant_id: str) -> dict[str, str]:
-        for source in TenantLLM.select().where(TenantLLM.tenant_id == source_tenant_id):
-            data = source.to_dict()
-            data["tenant_id"] = target_tenant_id
-            TenantLLM.insert(**data).execute()
-
-        model_id_map: dict[str, str] = {}
-        providers = list(TenantModelProvider.select().where(TenantModelProvider.tenant_id == source_tenant_id))
-        for source_provider in providers:
-            provider_id = get_uuid()
-            TenantModelProvider.insert(id=provider_id, provider_name=source_provider.provider_name, tenant_id=target_tenant_id).execute()
-            instances = list(TenantModelInstance.select().where(TenantModelInstance.provider_id == source_provider.id))
-            for source_instance in instances:
-                models = list(TenantModel.select().where(TenantModel.instance_id == source_instance.id))
-                instance_id = get_uuid()
-                instance_data = source_instance.to_dict()
-                instance_data.update({"id": instance_id, "provider_id": provider_id})
-                TenantModelInstance.insert(**instance_data).execute()
-                for source_model in models:
-                    model_id = get_uuid()
-                    model_data = source_model.to_dict()
-                    model_data.update({"id": model_id, "provider_id": provider_id, "instance_id": instance_id})
-                    TenantModel.insert(**model_data).execute()
-                    model_id_map[source_model.id] = model_id
-        return model_id_map
 
     @classmethod
     def list_by_user_id(cls, user_id: str) -> list[dict[str, Any]]:

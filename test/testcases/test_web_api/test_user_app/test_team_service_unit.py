@@ -111,3 +111,55 @@ def test_database_lock_names_fit_mysql_limit():
     lock_name = TeamService._lock_name("member", "a" * 32, "b" * 32)
     assert len(lock_name) <= 64
     assert lock_name == TeamService._lock_name("member", "a" * 32, "b" * 32)
+
+
+def test_create_team_starts_without_owner_model_configuration(monkeypatch):
+    inserted_tenants = []
+    inserted_memberships = []
+
+    class InsertQuery:
+        def __init__(self, rows, data):
+            self.rows = rows
+            self.data = data
+
+        def execute(self):
+            self.rows.append(self.data)
+
+    generated_ids = iter(["team-1", "membership-1"])
+    monkeypatch.setattr("api.db.services.workspace_service.get_uuid", lambda: next(generated_ids))
+    monkeypatch.setattr("api.db.services.workspace_service.settings.CHAT_MDL", "default-chat")
+    monkeypatch.setattr("api.db.services.workspace_service.settings.EMBEDDING_MDL", "default-embedding")
+    monkeypatch.setattr("api.db.services.workspace_service.settings.ASR_MDL", "default-asr")
+    monkeypatch.setattr("api.db.services.workspace_service.settings.PARSERS", "default-parsers")
+    monkeypatch.setattr("api.db.services.workspace_service.settings.VISION_MDL", "default-vision")
+    monkeypatch.setattr("api.db.services.workspace_service.settings.RERANK_MDL", "default-rerank")
+    monkeypatch.setattr("api.db.services.workspace_service.TenantService.get_personal_by_user_id", lambda _owner_id: {"tenant_id": "owner-1"})
+    monkeypatch.setattr("api.db.services.workspace_service.TenantService.get_by_id", lambda _owner_id: (True, object()))
+    monkeypatch.setattr("api.db.services.workspace_service.Tenant.insert", lambda **data: InsertQuery(inserted_tenants, data))
+    monkeypatch.setattr("api.db.services.workspace_service.UserTenant.insert", lambda **data: InsertQuery(inserted_memberships, data))
+    monkeypatch.setattr(TeamService, "get", classmethod(lambda _cls, _owner_id, team_id: {"tenant_id": team_id}))
+
+    assert TeamService.create("owner-1", "Platform") == {"tenant_id": "team-1"}
+    assert inserted_tenants == [
+        {
+            "id": "team-1",
+            "name": "Platform",
+            "llm_id": "default-chat",
+            "embd_id": "default-embedding",
+            "asr_id": "default-asr",
+            "parser_ids": "default-parsers",
+            "img2txt_id": "default-vision",
+            "rerank_id": "default-rerank",
+            "status": StatusEnum.VALID.value,
+        }
+    ]
+    assert inserted_memberships == [
+        {
+            "id": "membership-1",
+            "user_id": "owner-1",
+            "tenant_id": "team-1",
+            "invited_by": "owner-1",
+            "role": UserTenantRole.OWNER,
+            "status": StatusEnum.VALID.value,
+        }
+    ]
