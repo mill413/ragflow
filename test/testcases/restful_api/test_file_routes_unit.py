@@ -120,10 +120,10 @@ def _load_file_api_module(monkeypatch):
 
     file_api_service_mod = ModuleType("api.apps.services.file_api_service")
 
-    async def _upload_file(_tenant_id, _pf_id, _file_objs):
+    async def _upload_file(_workspace_id, _actor_id, _pf_id, _file_objs):
         return True, [{"id": "f1"}]
 
-    async def _create_folder(_tenant_id, _name, _parent_id=None, _file_type=None):
+    async def _create_folder(_workspace_id, _actor_id, _name, _parent_id=None, _file_type=None):
         return True, {"id": "folder1"}
 
     async def _delete_files(_tenant_id, _ids, _auth_header="", _workspace_id=None):
@@ -233,18 +233,18 @@ def test_create_or_upload_multipart_requires_file(monkeypatch):
 def test_create_or_upload_uploads_via_new_service(monkeypatch):
     module = _load_file_api_module(monkeypatch)
     files = _DummyFiles([_DummyUploadFile("a.txt")])
-    monkeypatch.setattr(module, "request", _DummyRequest(content_type="multipart/form-data", form={"parent_id": "pf1"}, files=files))
+    monkeypatch.setattr(module, "request", _DummyRequest(content_type="multipart/form-data", form={"workspace_id": "team1", "parent_id": "pf1"}, files=files))
 
     seen = {}
 
-    async def _upload_file(tenant_id, pf_id, file_objs):
-        seen["args"] = (tenant_id, pf_id, [f.filename for f in file_objs])
+    async def _upload_file(workspace_id, actor_id, pf_id, file_objs):
+        seen["args"] = (workspace_id, actor_id, pf_id, [f.filename for f in file_objs])
         return True, [{"id": "f1"}]
 
     monkeypatch.setattr(module.file_api_service, "upload_file", _upload_file)
-    res = _run(module.create_or_upload("tenant1"))
+    res = _run(module.create_or_upload("user1"))
 
-    assert seen["args"] == ("tenant1", "pf1", ["a.txt"])
+    assert seen["args"] == ("team1", "user1", "pf1", ["a.txt"])
     assert res["code"] == 0
     assert res["data"] == [{"id": "f1"}]
 
@@ -255,17 +255,18 @@ def test_create_or_upload_creates_folder_from_json(monkeypatch):
     monkeypatch.setattr(module, "request", _DummyRequest(content_type="application/json"))
 
     async def _validate(_request, _schema):
-        return {"name": "folder-a", "parent_id": "pf1", "type": "folder"}, None
+        return {"workspace_id": "team1", "name": "folder-a", "parent_id": "pf1", "type": "folder"}, None
 
-    async def _create_folder(tenant_id, name, parent_id=None, file_type=None):
-        return True, {"tenant_id": tenant_id, "name": name, "parent_id": parent_id, "type": file_type}
+    async def _create_folder(workspace_id, actor_id, name, parent_id=None, file_type=None):
+        return True, {"tenant_id": workspace_id, "created_by": actor_id, "name": name, "parent_id": parent_id, "type": file_type}
 
     monkeypatch.setattr(module, "validate_and_parse_json_request", _validate)
     monkeypatch.setattr(module.file_api_service, "create_folder", _create_folder)
 
-    res = _run(module.create_or_upload("tenant1"))
+    res = _run(module.create_or_upload("user1"))
     assert res["code"] == 0
-    assert res["data"]["tenant_id"] == "tenant1"
+    assert res["data"]["tenant_id"] == "team1"
+    assert res["data"]["created_by"] == "user1"
     assert res["data"]["name"] == "folder-a"
 
 
@@ -849,7 +850,7 @@ def test_upload_file_requires_existing_folder(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     monkeypatch.setattr(module.FileService, "get_by_id", lambda _file_id: (False, None))
 
-    ok, message = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt")]))
+    ok, message = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt")]))
     assert ok is False
     assert message == "Can't find this folder!"
 
@@ -865,7 +866,7 @@ def test_upload_file_respects_user_limit(monkeypatch):
     monkeypatch.setattr(module.DocumentService, "get_doc_count", lambda _uid: 1)
     monkeypatch.setenv("MAX_FILE_NUM_PER_USER", "1")
 
-    ok, message = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt")]))
+    ok, message = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt")]))
     assert ok is False
     assert message == "Exceed the maximum file number of a free user!"
     monkeypatch.delenv("MAX_FILE_NUM_PER_USER", raising=False)
@@ -898,10 +899,23 @@ def test_upload_file_success_uses_new_service_layer(monkeypatch):
         ),
     )
 
-    ok, data = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt", b"hello")]))
+    ok, data = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt", b"hello")]))
     assert ok is True
     assert data[0]["name"] == "a.txt"
+    assert data[0]["tenant_id"] == "tenant1"
+    assert data[0]["created_by"] == "user1"
     assert storage_puts == [("pf1", "a.txt", b"hello")]
+
+
+@pytest.mark.p2
+def test_create_folder_records_actor_separately_from_workspace(monkeypatch):
+    module = _load_file_api_service(monkeypatch)
+
+    ok, data = _run(module.create_folder("tenant1", "user1", "folder", "pf1", module.FileType.FOLDER.value))
+
+    assert ok is True
+    assert data["tenant_id"] == "tenant1"
+    assert data["created_by"] == "user1"
 
 
 @pytest.mark.p2
@@ -909,7 +923,7 @@ def test_create_folder_rejects_duplicate_name(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     monkeypatch.setattr(module.FileService, "query", lambda **_kwargs: [SimpleNamespace(id="existing")])
 
-    ok, message = _run(module.create_folder("tenant1", "dup", "pf1", module.FileType.FOLDER.value))
+    ok, message = _run(module.create_folder("tenant1", "user1", "dup", "pf1", module.FileType.FOLDER.value))
     assert ok is False
     assert message == "Duplicated folder name in the same folder."
 
@@ -926,11 +940,11 @@ def test_upload_and_create_folder_reject_cross_workspace_parent(monkeypatch):
         ),
     )
 
-    ok, message = _run(module.upload_file("team-1", "foreign-folder", [_DummyUploadFile("a.txt")]))
+    ok, message = _run(module.upload_file("team-1", "user-1", "foreign-folder", [_DummyUploadFile("a.txt")]))
     assert ok is False
     assert message == "Parent folder does not belong to the selected workspace."
 
-    ok, message = _run(module.create_folder("team-1", "folder", "foreign-folder", module.FileType.FOLDER.value))
+    ok, message = _run(module.create_folder("team-1", "user-1", "folder", "foreign-folder", module.FileType.FOLDER.value))
     assert ok is False
     assert message == "Parent folder does not belong to the selected workspace."
 

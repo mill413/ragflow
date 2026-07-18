@@ -203,6 +203,20 @@ def _session_owner_filter(chat) -> str | None:
     return current_user.id
 
 
+def _list_manageable_chat_ids(user_id: str) -> list[str]:
+    workspace_ids = WorkspaceAccessService.list_visible_workspace_ids(user_id)
+    chats, _ = DialogService.get_by_tenant_ids(
+        workspace_ids,
+        user_id,
+        0,
+        0,
+        "create_time",
+        True,
+        "",
+    )
+    return [chat["id"] for chat in chats if WorkspaceAccessService.can_manage_shared_resource(user_id, chat)]
+
+
 async def _get_accessible_search(search_id):
     ok, search = await thread_pool_exec(SearchService.get_by_id, search_id)
     if not ok:
@@ -749,7 +763,7 @@ async def bulk_delete_chats():
     ids = req.get("ids")
     if not ids:
         if req.get("delete_all") is True:
-            ids = [chat.id for chat in DialogService.query(tenant_id=current_user.id, status=StatusEnum.VALID.value)]
+            ids = _list_manageable_chat_ids(current_user.id)
             if not ids:
                 return get_json_result(data={})
         else:

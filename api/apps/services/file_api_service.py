@@ -29,29 +29,30 @@ from common.constants import FileSource
 from common.misc_utils import get_uuid, thread_pool_exec
 
 
-async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
+async def upload_file(workspace_id: str, actor_id: str, pf_id: str, file_objs: list):
     """
     Upload files to a folder.
 
-    :param tenant_id: tenant ID
+    :param workspace_id: target workspace ID
+    :param actor_id: authenticated user or workspace service principal creating the file
     :param pf_id: parent folder ID
     :param file_objs: list of file objects from request
     :return: (success, result_list) or (success, error_message)
     """
     if not pf_id:
-        root_folder = FileService.get_root_folder(tenant_id)
+        root_folder = FileService.get_root_folder(workspace_id)
         pf_id = root_folder["id"]
 
     e, pf_folder = FileService.get_by_id(pf_id)
     if not e:
         return False, "Can't find this folder!"
-    if pf_folder.tenant_id != tenant_id:
+    if pf_folder.tenant_id != workspace_id:
         return False, "Parent folder does not belong to the selected workspace."
 
     file_res = []
     for file_obj in file_objs:
         MAX_FILE_NUM_PER_USER = int(os.environ.get("MAX_FILE_NUM_PER_USER", 0))
-        if 0 < MAX_FILE_NUM_PER_USER <= await thread_pool_exec(DocumentService.get_doc_count, tenant_id):
+        if 0 < MAX_FILE_NUM_PER_USER <= await thread_pool_exec(DocumentService.get_doc_count, workspace_id):
             return False, "Exceed the maximum file number of a free user!"
 
         if not file_obj.filename:
@@ -68,12 +69,12 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
             e, file = await thread_pool_exec(FileService.get_by_id, file_id_list[len_id_list - 1])
             if not e:
                 return False, "Folder not found!"
-            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 1], file_obj_names, len_id_list, tenant_id, tenant_id)
+            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 1], file_obj_names, len_id_list, workspace_id, actor_id)
         else:
             e, file = await thread_pool_exec(FileService.get_by_id, file_id_list[len_id_list - 2])
             if not e:
                 return False, "Folder not found!"
-            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 2], file_obj_names, len_id_list, tenant_id, tenant_id)
+            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 2], file_obj_names, len_id_list, workspace_id, actor_id)
 
         filetype = filename_type(file_obj_names[file_len - 1])
         location = file_obj_names[file_len - 1]
@@ -85,8 +86,8 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
         file_data = {
             "id": get_uuid(),
             "parent_id": last_folder.id,
-            "tenant_id": tenant_id,
-            "created_by": tenant_id,
+            "tenant_id": workspace_id,
+            "created_by": actor_id,
             "type": filetype,
             "name": filename,
             "location": location,
@@ -98,24 +99,25 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
     return True, file_res
 
 
-async def create_folder(tenant_id: str, name: str, pf_id: str = None, file_type: str = None):
+async def create_folder(workspace_id: str, actor_id: str, name: str, pf_id: str = None, file_type: str = None):
     """
     Create a new folder or virtual file.
 
-    :param tenant_id: tenant ID
+    :param workspace_id: target workspace ID
+    :param actor_id: authenticated user or workspace service principal creating the folder
     :param name: folder name
     :param pf_id: parent folder ID
     :param file_type: file type (folder or virtual)
     :return: (success, result) or (success, error_message)
     """
     if not pf_id:
-        root_folder = FileService.get_root_folder(tenant_id)
+        root_folder = FileService.get_root_folder(workspace_id)
         pf_id = root_folder["id"]
 
     if not FileService.is_parent_folder_exist(pf_id):
         return False, "Parent Folder Doesn't Exist!"
     parent_exists, parent_folder = FileService.get_by_id(pf_id)
-    if not parent_exists or parent_folder.tenant_id != tenant_id:
+    if not parent_exists or parent_folder.tenant_id != workspace_id:
         return False, "Parent folder does not belong to the selected workspace."
     if FileService.query(name=name, parent_id=pf_id):
         return False, "Duplicated folder name in the same folder."
@@ -129,8 +131,8 @@ async def create_folder(tenant_id: str, name: str, pf_id: str = None, file_type:
         {
             "id": get_uuid(),
             "parent_id": pf_id,
-            "tenant_id": tenant_id,
-            "created_by": tenant_id,
+            "tenant_id": workspace_id,
+            "created_by": actor_id,
             "name": name,
             "location": "",
             "size": 0,

@@ -81,7 +81,7 @@ async def create_or_upload(tenant_id: str = None):
                 if file_obj.filename == "":
                     return get_error_argument_result("No file selected!")
 
-            success, result = await file_api_service.upload_file(workspace_id, pf_id, file_objs)
+            success, result = await file_api_service.upload_file(workspace_id, tenant_id, pf_id, file_objs)
             if success:
                 return get_result(data=result)
             else:
@@ -94,7 +94,7 @@ async def create_or_upload(tenant_id: str = None):
             if not WorkspaceAccessService.can_create_shared_resource(tenant_id, workspace_id):
                 return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
-            success, result = await file_api_service.create_folder(workspace_id, req["name"], req.get("parent_id"), req.get("type"))
+            success, result = await file_api_service.create_folder(workspace_id, tenant_id, req["name"], req.get("parent_id"), req.get("type"))
             if success:
                 return get_result(data=result)
             else:
