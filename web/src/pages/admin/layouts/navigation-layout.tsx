@@ -251,7 +251,7 @@ const AdminNavigationLayout = () => {
                     className={cn(
                       'mt-1 space-y-1',
                       sidebarCollapsed
-                        ? 'ml-2'
+                        ? 'ml-2 border-l border-border-button pl-1'
                         : 'ml-6 border-l border-border-button pl-3',
                     )}
                   >
