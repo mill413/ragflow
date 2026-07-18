@@ -18,6 +18,7 @@ export default {
       rename: '重命名',
       name: '名称',
       save: '保存',
+      readOnlySaveTip: '当前仅有只读权限，无法保存修改。',
       namePlaceholder: '请输入名称',
       descriptionPlaceholder: '请输入描述',
       next: '下一步',

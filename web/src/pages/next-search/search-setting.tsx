@@ -15,6 +15,7 @@ import {
 import { ModelTreeSelect } from '@/components/model-tree-select';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
+import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
 import { SingleFormSlider } from '@/components/ui/dual-range-slider';
 import {
@@ -112,6 +113,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
 }) => {
   const [width0, setWidth0] = useState('w-[440px]');
   const { search_config } = data || {};
+  const readOnly = data?.capabilities?.update === false;
   const { llm_setting } = search_config || {};
   const formMethods = useForm<SearchSettingFormData>({
     resolver: zodResolver(SearchSettingFormSchema),
@@ -593,18 +595,20 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               >
                 {t('search.cancelText')}
               </Button>
-              <Button
-                data-testid="search-settings-save"
-                type="submit"
-                disabled={formSubmitLoading}
-              >
-                {formSubmitLoading && (
-                  <div className="size-4">
-                    <Spin size="small" />
-                  </div>
-                )}
-                {t('search.okText')}
-              </Button>
+              <ReadOnlySaveTooltip readOnly={readOnly}>
+                <Button
+                  data-testid="search-settings-save"
+                  type="submit"
+                  disabled={formSubmitLoading || readOnly}
+                >
+                  {formSubmitLoading && (
+                    <div className="size-4">
+                      <Spin size="small" />
+                    </div>
+                  )}
+                  {t('search.okText')}
+                </Button>
+              </ReadOnlySaveTooltip>
             </div>
           </form>
         </Form>

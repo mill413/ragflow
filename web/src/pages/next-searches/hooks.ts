@@ -172,7 +172,7 @@ interface IllmSettingEnableProps {
   presencePenaltyEnabled?: boolean;
   frequencyPenaltyEnabled?: boolean;
 }
-export interface ISearchAppDetailProps {
+export interface ISearchAppDetailProps extends IWorkspaceResource {
   avatar: any;
   created_by: string;
   description: string;

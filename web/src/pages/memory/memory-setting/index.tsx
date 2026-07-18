@@ -1,5 +1,6 @@
 import { DynamicForm } from '@/components/dynamic-form';
 import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
+import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
 import Divider from '@/components/ui/divider';
 import { Form } from '@/components/ui/form';
@@ -47,6 +48,7 @@ export default function MemoryMessage() {
     } as unknown as IMemory,
   });
   const { data } = useFetchMemoryBaseConfiguration();
+  const readOnly = data?.capabilities?.update === false;
   const { onMemoryRenameOk, loading } = useUpdateMemoryConfig();
 
   useEffect(() => {
@@ -103,13 +105,16 @@ export default function MemoryMessage() {
                 >
                   {t('knowledgeConfiguration.cancel')}
                 </Button>
-                <DynamicForm.SavingButton
-                  submitLoading={loading}
-                  submitFunc={(value) => {
-                    console.log('form-value', value);
-                    onSubmit(value as IMemory);
-                  }}
-                ></DynamicForm.SavingButton>
+                <ReadOnlySaveTooltip readOnly={readOnly}>
+                  <DynamicForm.SavingButton
+                    submitLoading={loading}
+                    disabled={readOnly}
+                    submitFunc={(value) => {
+                      console.log('form-value', value);
+                      onSubmit(value as IMemory);
+                    }}
+                  ></DynamicForm.SavingButton>
+                </ReadOnlySaveTooltip>
               </div>
             </form>
           </Form>

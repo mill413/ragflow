@@ -209,7 +209,10 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
                   >
                     {t('chat.cancel')}
                   </Button>
-                  <SavingButton loading={loading}></SavingButton>
+                  <SavingButton
+                    loading={loading}
+                    readOnly={data?.capabilities?.update === false}
+                  ></SavingButton>
                 </div>
               </form>
             </Form>

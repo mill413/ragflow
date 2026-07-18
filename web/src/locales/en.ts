@@ -18,6 +18,7 @@ export default {
       rename: 'Rename',
       name: 'Name',
       save: 'Save',
+      readOnlySaveTip: 'You only have read access and cannot save changes.',
       namePlaceholder: 'Please input name',
       descriptionPlaceholder: 'Enter description',
       next: 'Next',
