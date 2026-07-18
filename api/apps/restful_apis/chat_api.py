@@ -27,6 +27,7 @@ from quart import Response, request
 
 from api.apps import current_user, login_required
 from api.apps.restful_apis._generation_params import merge_generation_config, pop_generation_config
+from api.db import WorkspaceType
 from api.db.joint_services.tenant_model_service import get_api_key, get_tenant_default_model_by_type, resolve_model_config
 from api.db.services.chunk_feedback_service import ChunkFeedbackService
 from api.db.services.conversation_service import ConversationService, structure_answer
@@ -160,8 +161,15 @@ def _validate_name(name, *, required=True):
     return name, None
 
 
-def _build_session_response(conv: dict) -> dict:
+def _build_session_response(conv: dict, chat=None, user_id=None) -> dict:
     conv = dict(conv)
+    if chat is not None and user_id:
+        can_manage = WorkspaceAccessService.can_manage_conversation(user_id, chat, conv)
+        conv["capabilities"] = {
+            "read": WorkspaceAccessService.can_read_conversation(user_id, chat, conv),
+            "update": can_manage,
+            "delete": can_manage,
+        }
     conv["chat_id"] = conv.pop("dialog_id", conv.get("chat_id"))
     conv["messages"] = conv.pop("message", conv.get("messages", []))
     return conv
@@ -173,6 +181,26 @@ async def _get_accessible_chat(chat_id, *, manage=False):
         return None
     check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
     return chat if await thread_pool_exec(check, current_user.id, chat) else None
+
+
+async def _get_accessible_session(chat_id, session_id, *, manage=False):
+    chat = await _get_accessible_chat(chat_id)
+    if not chat:
+        return None, None
+    ok, conversation = await thread_pool_exec(ConversationService.get_by_id, session_id)
+    if not ok:
+        return chat, None
+    check = WorkspaceAccessService.can_manage_conversation if manage else WorkspaceAccessService.can_read_conversation
+    if not await thread_pool_exec(check, current_user.id, chat, conversation):
+        return chat, None
+    return chat, conversation
+
+
+def _session_owner_filter(chat) -> str | None:
+    workspace_type = WorkspaceAccessService.get_workspace_type(chat.tenant_id)
+    if workspace_type == WorkspaceType.TEAM or WorkspaceAccessService.is_superuser(current_user.id):
+        return None
+    return current_user.id
 
 
 async def _get_accessible_search(search_id):
@@ -787,7 +815,7 @@ async def create_session(chat_id):
         ok, conv_obj = ConversationService.get_by_id(conv["id"])
         if not ok:
             return get_data_error_result(message="Fail to create a session!")
-        return get_json_result(data=_build_session_response(conv_obj.to_dict()))
+        return get_json_result(data=_build_session_response(conv_obj.to_dict(), dia, current_user.id))
     except Exception as ex:
         return server_error_response(ex)
 
@@ -796,7 +824,8 @@ async def create_session(chat_id):
 @login_required
 async def list_sessions(chat_id):
     try:
-        if not await _get_accessible_chat(chat_id):
+        chat = await _get_accessible_chat(chat_id)
+        if not chat:
             return get_json_result(
                 data=False,
                 message="No authorization.",
@@ -808,10 +837,19 @@ async def list_sessions(chat_id):
         desc = request.args.get("desc", "true").lower() != "false"
         session_id = request.args.get("id")
         name = request.args.get("name")
-        convs = ConversationService.get_list(chat_id, page_number, items_per_page, orderby, desc, session_id, name, current_user.id)
+        convs = ConversationService.get_list(
+            chat_id,
+            page_number,
+            items_per_page,
+            orderby,
+            desc,
+            session_id,
+            name,
+            _session_owner_filter(chat),
+        )
         if items_per_page == 0:
             convs = []
-        return get_json_result(data=[_build_session_response(c) for c in convs])
+        return get_json_result(data=[_build_session_response(c, chat, current_user.id) for c in convs])
     except Exception as ex:
         return server_error_response(ex)
 
@@ -819,21 +857,18 @@ async def list_sessions(chat_id):
 @manager.route("/chats/<chat_id>/sessions/<session_id>", methods=["GET"])  # noqa: F821
 @login_required
 async def get_session(chat_id, session_id):
-    if not await _get_accessible_chat(chat_id):
-        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     try:
-        ok, conv = await thread_pool_exec(ConversationService.get_by_id, session_id)
-        if not ok:
+        dialog, conv = await _get_accessible_session(chat_id, session_id)
+        if not dialog:
+            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+        if not conv:
             return get_data_error_result(message="Session not found!")
-        if conv.dialog_id != chat_id or conv.user_id != current_user.id:
-            return get_data_error_result(message="Session does not belong to this chat!")
-        dialog = await _get_accessible_chat(chat_id)
         avatar = dialog.icon if dialog else ""
         for ref in conv.reference:
             if isinstance(ref, list):
                 continue
             ref["chunks"] = chunks_format(ref)
-        result = _build_session_response(conv.to_dict())
+        result = _build_session_response(conv.to_dict(), dialog, current_user.id)
         result["avatar"] = avatar
         return get_json_result(data=result)
     except Exception as ex:
@@ -843,12 +878,13 @@ async def get_session(chat_id, session_id):
 @manager.route("/chats/<chat_id>/sessions/<session_id>", methods=["PATCH"])  # noqa: F821
 @login_required
 async def update_session(chat_id, session_id):
-    if not await _get_accessible_chat(chat_id):
-        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     try:
-        req = await get_request_json()
-        if not ConversationService.query(id=session_id, dialog_id=chat_id, user_id=current_user.id):
+        dialog, conv = await _get_accessible_session(chat_id, session_id, manage=True)
+        if not dialog:
+            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+        if not conv:
             return get_data_error_result(message="Session not found!")
+        req = await get_request_json()
         if "message" in req or "messages" in req:
             return get_data_error_result(message="`messages` cannot be changed.")
         if "reference" in req:
@@ -864,7 +900,7 @@ async def update_session(chat_id, session_id):
         ok, conv = ConversationService.get_by_id(session_id)
         if not ok:
             return get_data_error_result(message="Fail to update a session!")
-        return get_json_result(data=_build_session_response(conv.to_dict()))
+        return get_json_result(data=_build_session_response(conv.to_dict(), dialog, current_user.id))
     except Exception as ex:
         return server_error_response(ex)
 
@@ -872,7 +908,8 @@ async def update_session(chat_id, session_id):
 @manager.route("/chats/<chat_id>/sessions", methods=["DELETE"])  # noqa: F821
 @login_required
 async def delete_sessions(chat_id):
-    if not await _get_accessible_chat(chat_id):
+    chat = await _get_accessible_chat(chat_id)
+    if not chat:
         return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     try:
         req = await get_request_json()
@@ -882,7 +919,15 @@ async def delete_sessions(chat_id):
         session_ids = req.get("ids")
         if not session_ids:
             if req.get("delete_all") is True:
-                session_ids = [conv.id for conv in ConversationService.query(dialog_id=chat_id, user_id=current_user.id)]
+                owner_filter = (
+                    None
+                    if WorkspaceAccessService.can_manage_shared_resource(current_user.id, chat)
+                    else current_user.id
+                )
+                query = {"dialog_id": chat_id}
+                if owner_filter:
+                    query["user_id"] = owner_filter
+                session_ids = [conv.id for conv in ConversationService.query(**query)]
                 if not session_ids:
                     return get_json_result(data={})
             else:
@@ -891,20 +936,20 @@ async def delete_sessions(chat_id):
         errors = []
         success_count = 0
         for sid in unique_ids:
-            if not ConversationService.query(id=sid, dialog_id=chat_id, user_id=current_user.id):
+            _dialog, conv = await _get_accessible_session(chat_id, sid, manage=True)
+            if not conv:
                 errors.append(f"The chat doesn't own the session {sid}")
                 continue
-            ok, conv = ConversationService.get_by_id(sid)
-            if ok:
-                for msg in conv.message or []:
-                    for file in msg.get("files") or []:
-                        file_id = file.get("id")
-                        if not file_id:
-                            continue
-                        try:
-                            settings.STORAGE_IMPL.rm(f"{current_user.id}-downloads", file_id)
-                        except Exception:
-                            logging.warning("Failed to delete chat upload blob %s/%s", current_user.id, file_id)
+            for msg in conv.message or []:
+                for file in msg.get("files") or []:
+                    file_id = file.get("id")
+                    if not file_id:
+                        continue
+                    file_owner_id = file.get("created_by") or conv.user_id
+                    try:
+                        settings.STORAGE_IMPL.rm(f"{file_owner_id}-downloads", file_id)
+                    except Exception:
+                        logging.warning("Failed to delete chat upload blob %s/%s", file_owner_id, file_id)
             ConversationService.delete_by_id(sid)
             success_count += 1
         all_errors = errors + duplicate_messages
@@ -923,11 +968,11 @@ async def delete_sessions(chat_id):
 @manager.route("/chats/<chat_id>/sessions/<session_id>/messages/<msg_id>", methods=["DELETE"])  # noqa: F821
 @login_required
 async def delete_session_message(chat_id, session_id, msg_id):
-    if not await _get_accessible_chat(chat_id):
-        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     try:
-        ok, conv = ConversationService.get_by_id(session_id)
-        if not ok or conv.dialog_id != chat_id or conv.user_id != current_user.id:
+        dialog, conv = await _get_accessible_session(chat_id, session_id, manage=True)
+        if not dialog:
+            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+        if not conv:
             return get_data_error_result(message="Session not found!")
         conv = conv.to_dict()
         for i, msg in enumerate(conv["message"]):
@@ -940,7 +985,7 @@ async def delete_session_message(chat_id, session_id, msg_id):
             conv["reference"].pop(ref_index)
             break
         ConversationService.update_by_id(conv["id"], conv)
-        return get_json_result(data=_build_session_response(conv))
+        return get_json_result(data=_build_session_response(conv, dialog, current_user.id))
     except Exception as ex:
         return server_error_response(ex)
 
@@ -948,14 +993,13 @@ async def delete_session_message(chat_id, session_id, msg_id):
 @manager.route("/chats/<chat_id>/sessions/<session_id>/messages/<msg_id>/feedback", methods=["PUT"])  # noqa: F821
 @login_required
 async def update_message_feedback(chat_id, session_id, msg_id):
-    owned = await _get_accessible_chat(chat_id)
-    if not owned:
-        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     try:
-        req = await get_request_json()
-        ok, conv = ConversationService.get_by_id(session_id)
-        if not ok or conv.dialog_id != chat_id or conv.user_id != current_user.id:
+        dialog, conv = await _get_accessible_session(chat_id, session_id, manage=True)
+        if not dialog:
+            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+        if not conv:
             return get_data_error_result(message="Session not found!")
+        req = await get_request_json()
         thumb_raw = req.get("thumbup")
         if not isinstance(thumb_raw, bool):
             return get_data_error_result(message="thumbup must be a boolean")
@@ -988,13 +1032,13 @@ async def update_message_feedback(chat_id, session_id, msg_id):
                         if isinstance(prior_thumb, bool) and prior_thumb != thumb_raw:
                             await thread_pool_exec(
                                 ChunkFeedbackService.apply_feedback,
-                                tenant_id=current_user.id,
+                                tenant_id=dialog.tenant_id,
                                 reference=reference,
                                 is_positive=not prior_thumb,
                             )
                         feedback_result = await thread_pool_exec(
                             ChunkFeedbackService.apply_feedback,
-                            tenant_id=current_user.id,
+                            tenant_id=dialog.tenant_id,
                             reference=reference,
                             is_positive=thumb_raw is True,
                         )
@@ -1007,7 +1051,7 @@ async def update_message_feedback(chat_id, session_id, msg_id):
                 logging.warning("Failed to apply chunk feedback: %s", e)
 
         await thread_pool_exec(ConversationService.update_by_id, conv_dict["id"], conv_dict)
-        return get_json_result(data=_build_session_response(conv_dict))
+        return get_json_result(data=_build_session_response(conv_dict, dialog, current_user.id))
     except Exception as ex:
         return server_error_response(ex)
 
@@ -1223,10 +1267,8 @@ async def session_completion(chat_id_in_arg=""):
                     code=RetCode.AUTHENTICATION_ERROR,
                 )
             if session_id:
-                e, conv = await thread_pool_exec(ConversationService.get_by_id, session_id)
-                if not e:
-                    return get_data_error_result(message="Session not found!")
-                if conv.dialog_id != chat_id or conv.user_id != current_user.id:
+                _session_dialog, conv = await _get_accessible_session(chat_id, session_id, manage=True)
+                if not conv:
                     return get_data_error_result(message="Session does not belong to this chat!")
             else:
                 conv = await _create_session_for_completion(chat_id, dia, current_user.id)

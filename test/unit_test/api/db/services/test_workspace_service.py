@@ -251,3 +251,23 @@ def test_knowledgebase_references_must_stay_in_workspace(workspace_dependencies,
     assert WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["team-kb"])
     assert not WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["personal-kb"])
     assert not WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["missing"])
+
+
+def test_team_conversations_are_shared_and_managed_by_team_administrators(workspace_dependencies):
+    team_chat = {"id": "chat-1", "tenant_id": "team-1", "status": StatusEnum.VALID.value}
+    member_conversation = {"id": "conv-1", "dialog_id": "chat-1", "user_id": "member-1"}
+
+    assert WorkspaceAccessService.can_read_conversation("member-2", team_chat, member_conversation)
+    assert not WorkspaceAccessService.can_manage_conversation("member-2", team_chat, member_conversation)
+    assert WorkspaceAccessService.can_manage_conversation("member-1", team_chat, member_conversation)
+    assert WorkspaceAccessService.can_manage_conversation("admin-1", team_chat, member_conversation)
+    assert WorkspaceAccessService.can_manage_conversation("system-admin", team_chat, member_conversation)
+
+
+def test_personal_conversations_are_visible_to_owner_and_superuser(workspace_dependencies):
+    personal_chat = {"id": "chat-1", "tenant_id": "user-1", "status": StatusEnum.VALID.value}
+    conversation = {"id": "conv-1", "dialog_id": "chat-1", "user_id": "user-1"}
+
+    assert WorkspaceAccessService.can_manage_conversation("user-1", personal_chat, conversation)
+    assert WorkspaceAccessService.can_manage_conversation("system-admin", personal_chat, conversation)
+    assert not WorkspaceAccessService.can_read_conversation("member-1", personal_chat, conversation)

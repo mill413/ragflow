@@ -316,6 +316,41 @@ class WorkspaceAccessService:
         return True
 
     @classmethod
+    def can_read_conversation(
+        cls,
+        user_id: str,
+        dialog: Mapping[str, Any] | Any,
+        conversation: Mapping[str, Any] | Any,
+    ) -> bool:
+        dialog_id = cls._value(dialog, "id")
+        if not dialog_id or cls._value(conversation, "dialog_id") != dialog_id:
+            return False
+        if not cls.can_read_shared_resource(user_id, dialog):
+            return False
+
+        workspace_id = cls._value(dialog, "tenant_id")
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+            return True
+        return cls.is_superuser(user_id) or cls._value(conversation, "user_id") == user_id
+
+    @classmethod
+    def can_manage_conversation(
+        cls,
+        user_id: str,
+        dialog: Mapping[str, Any] | Any,
+        conversation: Mapping[str, Any] | Any,
+    ) -> bool:
+        if not cls.can_read_conversation(user_id, dialog, conversation):
+            return False
+        if cls.is_superuser(user_id):
+            return True
+
+        workspace_id = cls._value(dialog, "tenant_id")
+        if cls.get_workspace_type(workspace_id) == WorkspaceType.TEAM and cls.can_manage_workspace(user_id, workspace_id):
+            return True
+        return cls._value(conversation, "user_id") == user_id
+
+    @classmethod
     def extract_knowledgebase_ids(cls, value: Any) -> set[str]:
         knowledgebase_ids: set[str] = set()
 

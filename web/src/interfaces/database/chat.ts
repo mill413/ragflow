@@ -103,6 +103,8 @@ export interface IConversation {
   update_date: string;
   update_time: number;
   is_new: true;
+  user_id?: string;
+  capabilities?: { read: boolean; update: boolean; delete: boolean };
 }
 
 export interface Message {

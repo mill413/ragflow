@@ -57,6 +57,14 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
   // Selection mode state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const manageableConversationList = useMemo(
+    () =>
+      conversationList.filter(
+        (conversation) =>
+          conversation.is_new || conversation.capabilities?.delete !== false,
+      ),
+    [conversationList],
+  );
 
   // Toggle selection mode (click batch delete icon)
   const toggleSelectionMode = useCallback(() => {
@@ -86,12 +94,12 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
   // Toggle select all
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) => {
-      if (prev.size === conversationList.length) {
+      if (prev.size === manageableConversationList.length) {
         return new Set();
       }
-      return new Set(conversationList.map((x) => x.id));
+      return new Set(manageableConversationList.map((x) => x.id));
     });
-  }, [conversationList]);
+  }, [manageableConversationList]);
 
   // Batch delete
   const handleBatchDelete = useCallback(async () => {
@@ -273,18 +281,20 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
               </Button>
             </ConfirmDeleteDialog>
           ) : (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={selectionMode ? toggleSelectAll : toggleSelectionMode}
-              data-testid={
-                selectionMode
-                  ? 'chat-detail-session-select-all'
-                  : 'chat-detail-session-selection-enable'
-              }
-            >
-              {selectionMode ? <LucideListChecks /> : <LucideCopyX />}
-            </Button>
+            manageableConversationList.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={selectionMode ? toggleSelectAll : toggleSelectionMode}
+                data-testid={
+                  selectionMode
+                    ? 'chat-detail-session-select-all'
+                    : 'chat-detail-session-selection-enable'
+                }
+              >
+                {selectionMode ? <LucideListChecks /> : <LucideCopyX />}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -300,7 +310,7 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
       <div className="flex-1 overflow-auto">
         {selectionMode ? (
           <ul className="space-y-2" role="listbox" aria-multiselectable>
-            {conversationList.map((x) => (
+            {manageableConversationList.map((x) => (
               <li
                 key={x.id}
                 className="py-2"
@@ -343,15 +353,17 @@ export function Sessions({ handleConversationCardClick }: SessionProps) {
                     {x.name}
                   </button>
 
-                  <ConversationDropdown
-                    conversation={x}
-                    removeTemporaryConversation={removeTemporaryConversation}
-                  >
-                    <MoreButton
-                      data-testid="chat-detail-session-actions"
-                      data-session-id={x.id}
-                    ></MoreButton>
-                  </ConversationDropdown>
+                  {(x.is_new || x.capabilities?.delete !== false) && (
+                    <ConversationDropdown
+                      conversation={x}
+                      removeTemporaryConversation={removeTemporaryConversation}
+                    >
+                      <MoreButton
+                        data-testid="chat-detail-session-actions"
+                        data-session-id={x.id}
+                      ></MoreButton>
+                    </ConversationDropdown>
+                  )}
                 </li>
               ))}
             </ul>
