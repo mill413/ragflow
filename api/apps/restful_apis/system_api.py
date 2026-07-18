@@ -321,7 +321,7 @@ async def new_token():
 
         obj = {
             "tenant_id": workspace_id,
-            "token": f"{generate_confirmation_token()}|{current_user.id}",
+            "token": generate_confirmation_token(),
             "beta": generate_confirmation_token().replace("ragflow-", "")[:32],
             "create_time": current_timestamp(),
             "create_date": datetime_format(datetime.now()),

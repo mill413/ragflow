@@ -125,6 +125,13 @@ class WorkspaceAccessService:
         return WorkspaceType.TEAM
 
     @classmethod
+    def get_workspace_owner_id(cls, tenant_id: str) -> str | None:
+        if not cls.get_workspace_type(tenant_id):
+            return None
+        owners = UserTenantService.query(tenant_id=tenant_id, role=UserTenantRole.OWNER, status=StatusEnum.VALID.value)
+        return cls._value(owners[0], "user_id") if owners else None
+
+    @classmethod
     def get_membership(cls, user_id: str, tenant_id: str):
         membership = UserTenantService.filter_by_tenant_and_user_id(tenant_id, user_id)
         if not membership or cls._value(membership, "status") != StatusEnum.VALID.value:

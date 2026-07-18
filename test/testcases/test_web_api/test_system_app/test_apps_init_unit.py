@@ -66,7 +66,7 @@ def _load_apps_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "api.db.services", services_mod)
 
     workspace_service_mod = ModuleType("api.db.services.workspace_service")
-    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(list_visible_workspace_ids=lambda _user_id: ["tenant-1"])
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(get_workspace_owner_id=lambda workspace_id: workspace_id)
     monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
 
     commands_mod = ModuleType("api.utils.commands")
@@ -158,7 +158,7 @@ def test_load_user_api_token_fallback_and_fallback_exception(monkeypatch, caplog
 
     monkeypatch.setattr(apps_module.Serializer, "loads", _raise_decode)
 
-    fallback_user_empty_token = SimpleNamespace(email="fallback@example.com", access_token="")
+    fallback_user = SimpleNamespace(email="fallback@example.com", access_token="")
     valid_token = "a" * 32
     beta_user = SimpleNamespace(
         id="tenant-1",
@@ -168,9 +168,9 @@ def test_load_user_api_token_fallback_and_fallback_exception(monkeypatch, caplog
 
     async def _case():
         monkeypatch.setattr(apps_module.APIToken, "query", lambda **_kwargs: [SimpleNamespace(tenant_id="tenant-1")])
-        monkeypatch.setattr(apps_module.UserService, "query", lambda **_kwargs: [fallback_user_empty_token])
+        monkeypatch.setattr(apps_module.UserService, "query", lambda **_kwargs: [fallback_user])
         async with quart_app.test_request_context("/", headers={"Authorization": "Bearer api-token"}):
-            assert apps_module._load_user() is None
+            assert apps_module._load_user() is fallback_user
 
         def _raise_api_token(**_kwargs):
             raise RuntimeError("api token fallback failed")
@@ -205,22 +205,33 @@ def test_load_user_api_token_fallback_and_fallback_exception(monkeypatch, caplog
 
 
 @pytest.mark.p2
-def test_team_api_token_uses_actor_suffix_and_binds_workspace(monkeypatch):
+def test_team_api_token_uses_current_workspace_owner_and_binds_workspace(monkeypatch):
     quart_app, apps_module = _load_apps_module(monkeypatch)
-    actor = SimpleNamespace(id="user-1", email="user@example.com", access_token="active")
-    token_record = SimpleNamespace(tenant_id="team-1", token="ragflow-secret|user-1")
+    owner = SimpleNamespace(id="owner-2", email="owner@example.com", access_token="active")
+    next_owner = SimpleNamespace(id="owner-3", email="next-owner@example.com", access_token="active")
+    token_record = SimpleNamespace(tenant_id="team-1", token="ragflow-secret|former-creator")
 
-    monkeypatch.setattr(apps_module.UserService, "query", lambda **kwargs: [actor] if kwargs.get("id") == actor.id else [])
+    users = {owner.id: owner, next_owner.id: next_owner}
+    monkeypatch.setattr(
+        apps_module.UserService,
+        "query",
+        lambda **kwargs: [users[kwargs["id"]]] if kwargs.get("id") in users else [],
+    )
     workspace_service = sys.modules["api.db.services.workspace_service"].WorkspaceAccessService
-    monkeypatch.setattr(workspace_service, "list_visible_workspace_ids", lambda _user_id: ["team-1"])
+    monkeypatch.setattr(workspace_service, "get_workspace_owner_id", lambda _workspace_id: owner.id)
 
     async def _case():
         async with quart_app.test_request_context("/"):
             user = apps_module._load_user_from_api_token_record(token_record, apps_module.AUTH_API)
-            assert user is actor
+            assert user is owner
             assert apps_module.g.api_token_workspace_id == "team-1"
+            assert apps_module.g.api_token_principal_type == "workspace"
 
-        monkeypatch.setattr(workspace_service, "list_visible_workspace_ids", lambda _user_id: [])
+        monkeypatch.setattr(workspace_service, "get_workspace_owner_id", lambda _workspace_id: next_owner.id)
+        async with quart_app.test_request_context("/"):
+            assert apps_module._load_user_from_api_token_record(token_record, apps_module.AUTH_API) is next_owner
+
+        monkeypatch.setattr(workspace_service, "get_workspace_owner_id", lambda _workspace_id: None)
         async with quart_app.test_request_context("/"):
             assert apps_module._load_user_from_api_token_record(token_record, apps_module.AUTH_API) is None
 

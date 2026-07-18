@@ -138,22 +138,26 @@ def _load_user_from_session():
 
 
 def _load_user_from_api_token_record(token_record, auth_type):
+    """Load a workspace-bound API principal through its current owner.
+
+    The owner supplies the user-shaped execution context expected by existing
+    APIs; token validity never depends on the user who originally issued it.
+    """
     workspace_id = token_record.tenant_id
-    token_value = str(getattr(token_record, "token", "") or "")
-    actor_id = token_value.rsplit("|", 1)[1] if "|" in token_value else workspace_id
+    from api.db.services.workspace_service import WorkspaceAccessService
+
+    actor_id = WorkspaceAccessService.get_workspace_owner_id(workspace_id)
+    if not actor_id:
+        logging.warning("API token workspace has no valid owner: workspace_id=%s", workspace_id)
+        return None
 
     users = UserService.query(id=actor_id, status=StatusEnum.VALID.value)
     if not users:
         return None
 
-    from api.db.services.workspace_service import WorkspaceAccessService
-
-    if workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(actor_id):
-        logging.warning("API token actor no longer has access to workspace_id=%s", workspace_id)
-        return None
-
     g.auth_type = auth_type
     g.api_token_workspace_id = workspace_id
+    g.api_token_principal_type = "workspace"
     g.user = users[0]
     return users[0]
 
@@ -241,9 +245,6 @@ def _load_user(auth_types=None):
             if objs:
                 user = _load_user_from_api_token_record(objs[0], AUTH_API)
                 if user:
-                    if not user.access_token or not user.access_token.strip():
-                        logging.warning(f"User {user.email} has empty access_token in database")
-                        return None
                     return user
                 logging.warning(f"load_user: No valid actor found for workspace_id={objs[0].tenant_id} from APIToken")
             else:

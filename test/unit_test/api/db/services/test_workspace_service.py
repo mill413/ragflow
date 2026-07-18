@@ -67,6 +67,8 @@ def test_workspace_type_distinguishes_personal_team_and_missing(workspace_depend
     assert WorkspaceAccessService.get_workspace_type("user-1") == WorkspaceType.PERSONAL
     assert WorkspaceAccessService.get_workspace_type("team-1") == WorkspaceType.TEAM
     assert WorkspaceAccessService.get_workspace_type("missing") is None
+    assert WorkspaceAccessService.get_workspace_owner_id("user-1") == "user-1"
+    assert WorkspaceAccessService.get_workspace_owner_id("team-1") == "owner-1"
 
 
 def test_invitation_is_not_an_active_membership(workspace_dependencies):

@@ -252,4 +252,4 @@ def test_api_token_is_created_for_explicit_workspace(monkeypatch):
 
     assert result["code"] == 0
     assert saved["tenant_id"] == "team-1"
-    assert saved["token"].endswith("|user-1")
+    assert "|" not in saved["token"]
