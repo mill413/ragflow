@@ -60,15 +60,13 @@ export function AgentCard({ data, showAgentRenameModal }: DatasetCardProps) {
         navigateToAgent(data?.id, data.canvas_category as AgentCategory)
       }
       icon={
-        <div className="flex items-center gap-1">
-          {data.canvas_category === AgentCategory.DataflowCanvas && (
-            <Button variant={'ghost'} size={'sm'}>
-              <Route />
-            </Button>
-          )}
-          <WorkspaceBadge {...data} />
-        </div>
+        data.canvas_category === AgentCategory.DataflowCanvas ? (
+          <Button variant={'ghost'} size={'sm'}>
+            <Route />
+          </Button>
+        ) : undefined
       }
+      sharedBadge={<WorkspaceBadge {...data} />}
       extra={<AgentTags tags={data.tags} />}
       showReleaseTime
     />

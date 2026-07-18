@@ -30,7 +30,7 @@ export function MemoryCard({ data, showMemoryRenameModal }: IProps) {
           </MemoryDropdown>
         ) : undefined
       }
-      icon={<WorkspaceBadge {...data} />}
+      sharedBadge={<WorkspaceBadge {...data} />}
       onClick={navigateToMemory(data?.id)}
     />
   );

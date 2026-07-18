@@ -28,7 +28,7 @@ export function ChatCard({ data, showChatRenameModal }: IProps) {
           </ChatDropdown>
         ) : undefined
       }
-      icon={<WorkspaceBadge {...data} />}
+      sharedBadge={<WorkspaceBadge {...data} />}
       onClick={navigateToChat(data?.id)}
     />
   );

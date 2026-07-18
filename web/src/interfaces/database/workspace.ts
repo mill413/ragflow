@@ -19,5 +19,6 @@ export interface IWorkspace {
 export interface IWorkspaceResource {
   workspace_type?: 'personal' | 'team';
   workspace_name?: string;
+  creator_name?: string;
   capabilities?: IWorkspaceCapabilities;
 }

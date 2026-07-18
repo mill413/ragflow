@@ -25,7 +25,7 @@ export function SearchCard({ data, showSearchRenameModal }: IProps) {
           </SearchDropdown>
         ) : undefined
       }
-      icon={<WorkspaceBadge {...data} />}
+      sharedBadge={<WorkspaceBadge {...data} />}
       onClick={navigateToSearch(data?.id)}
     />
   );
