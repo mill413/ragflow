@@ -268,8 +268,7 @@ declare namespace AdminService {
     workspace_id: string;
     workspace_name: string;
     workspace_type: 'personal' | 'team';
-    datasets_total: number;
-    documents_total: number;
+    files_total: number;
     storage_bytes: number;
   };
 
@@ -280,11 +279,15 @@ declare namespace AdminService {
     datasets_total: number;
     documents_total: number;
     storage_bytes: number;
+    files_total: number;
+    files_storage_bytes: number;
     failed_documents: number;
     processing_documents: number;
     pending_tasks: number;
     chats_total: number;
+    searches_total: number;
     agents_total: number;
+    memories_total: number;
     storage_distribution: MonitoringStorageItem[];
   };
 

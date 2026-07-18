@@ -31,6 +31,7 @@ from api.db import (
     KNOWLEDGEBASE_FOLDER_NAME,
     SKILLS_FOLDER_NAME,
     CanvasCategory,
+    FileType,
     TenantPermission,
     UserTenantRole,
     WorkspaceType,
@@ -1418,11 +1419,23 @@ class MonitoringMgr:
         documents = Document.select().where(Document.status == valid)
         documents_total = documents.count()
         storage_bytes = documents.select(fn.COALESCE(fn.SUM(Document.size), 0)).scalar() or 0
+        files = (
+            File.select()
+            .join(Tenant, on=(File.tenant_id == Tenant.id))
+            .where(
+                (File.type != FileType.FOLDER.value)
+                & (Tenant.status == valid)
+            )
+        )
+        files_total = files.count()
+        files_storage_bytes = files.select(fn.COALESCE(fn.SUM(File.size), 0)).scalar() or 0
         failed_documents = documents.where(Document.progress < 0).count()
         processing_documents = documents.where((Document.progress >= 0) & (Document.progress < 1)).count()
         pending_tasks = Task.select().where((Task.progress >= 0) & (Task.progress < 1)).count()
         chats_total = Dialog.select().where(Dialog.status == valid).count()
+        searches_total = Search.select().where(Search.status == valid).count()
         agents_total = UserCanvas.select().where(UserCanvas.canvas_category == CanvasCategory.Agent.value).count()
+        memories_total = Memory.select().count()
 
         return {
             "users_total": users_total,
@@ -1431,45 +1444,34 @@ class MonitoringMgr:
             "datasets_total": datasets_total,
             "documents_total": documents_total,
             "storage_bytes": int(storage_bytes),
+            "files_total": files_total,
+            "files_storage_bytes": int(files_storage_bytes),
             "failed_documents": failed_documents,
             "processing_documents": processing_documents,
             "pending_tasks": pending_tasks,
             "chats_total": chats_total,
+            "searches_total": searches_total,
             "agents_total": agents_total,
+            "memories_total": memories_total,
             "storage_distribution": MonitoringMgr.get_storage_distribution(),
         }
 
     @staticmethod
-    def get_storage_distribution(limit=8):
+    def get_storage_distribution():
         valid = StatusEnum.VALID.value
-        dataset_counts = {
-            row["workspace_id"]: row["datasets_total"]
-            for row in (
-                Knowledgebase.select(
-                    Knowledgebase.tenant_id.alias("workspace_id"),
-                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
-                )
-                .where(Knowledgebase.status == valid)
-                .group_by(Knowledgebase.tenant_id)
-                .dicts()
-            )
-        }
         rows = list(
-            Document.select(
-                Knowledgebase.tenant_id.alias("workspace_id"),
-                fn.COUNT(Document.id).alias("documents_total"),
-                fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+            File.select(
+                File.tenant_id.alias("workspace_id"),
+                fn.COUNT(File.id).alias("files_total"),
+                fn.COALESCE(fn.SUM(File.size), 0).alias("storage_bytes"),
             )
-            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
-            .where((Document.status == valid) & (Knowledgebase.status == valid))
-            .group_by(Knowledgebase.tenant_id)
-            .order_by(fn.SUM(Document.size).desc())
-            .limit(limit)
+            .join(Tenant, on=(File.tenant_id == Tenant.id))
+            .where((File.type != FileType.FOLDER.value) & (Tenant.status == valid))
+            .group_by(File.tenant_id)
+            .order_by(fn.SUM(File.size).desc(), File.tenant_id.asc())
             .dicts()
         )
         ResourceMgr._attach_ownership(rows)
-        for row in rows:
-            row["datasets_total"] = dataset_counts.get(row["workspace_id"], 0)
         return rows
 
 
