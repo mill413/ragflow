@@ -571,99 +571,101 @@ function AdminUserManagement() {
       0,
     ) ?? 0;
 
+  const tableToolbar = (
+    <div className="flex flex-wrap items-center gap-4">
+      <AdminTableMultiFilters
+        filters={[
+          ...(IS_ENTERPRISE
+            ? [
+                {
+                  id: 'role',
+                  label: t('admin.role'),
+                  options: (roleList ?? []).map(({ role_name }) => ({
+                    value: role_name,
+                    label: role_name,
+                  })),
+                  value:
+                    (table.getColumn('role')?.getFilterValue() as string[]) ??
+                    [],
+                  onChange: (value: string[]) =>
+                    table.getColumn('role')?.setFilterValue(value),
+                },
+              ]
+            : []),
+          {
+            id: 'department_path',
+            label: t('admin.department'),
+            options: createFilterOptions(
+              usersList ?? [],
+              (user) => user.department_path,
+            ),
+            value:
+              (table
+                .getColumn('department_path')
+                ?.getFilterValue() as string[]) ?? [],
+            onChange: (value) =>
+              table.getColumn('department_path')?.setFilterValue(value),
+          },
+          {
+            id: 'is_active',
+            label: t('admin.status'),
+            options: [
+              { value: '1', label: t('admin.active') },
+              { value: '0', label: t('admin.inactive') },
+            ],
+            value:
+              (table.getColumn('is_active')?.getFilterValue() as string[]) ??
+              [],
+            onChange: (value) =>
+              table.getColumn('is_active')?.setFilterValue(value),
+          },
+          {
+            id: 'is_superuser',
+            label: t('admin.userType'),
+            options: [
+              { value: 'normal', label: t('admin.normalUser') },
+              { value: 'superuser', label: t('admin.superuser') },
+            ],
+            value:
+              (table.getColumn('is_superuser')?.getFilterValue() as string[]) ??
+              [],
+            onChange: (value) =>
+              table.getColumn('is_superuser')?.setFilterValue(value),
+          },
+        ]}
+        resetLabel={t('admin.reset')}
+        onReset={() => table.resetColumnFilters()}
+      />
+
+      <div className="relative w-56">
+        <LucideSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-gray-400" />
+        <Input
+          className="h-10 border-border-button bg-bg-input pl-10"
+          placeholder={t('header.search')}
+          value={table.getState().globalFilter}
+          onChange={(event) => table.setGlobalFilter(event.target.value)}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <>
       <Card className="!shadow-none relative h-full bg-transparent overflow-hidden">
         <Spotlight />
 
-        <ScrollArea className="size-full">
-          <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-5">
-            <div>
-              <CardTitle>{t('admin.userManagement')}</CardTitle>
-              <div className="mt-2 text-sm text-text-secondary">
-                {t('admin.userMonitoring.description')}
+        <ScrollArea
+          className="size-full"
+          viewportClassName="[&>div]:!block [&>div]:!w-full [&>div]:!min-w-0 [&>div]:!max-w-full"
+        >
+          <CardHeader className="space-y-5">
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <CardTitle>{t('admin.userManagement')}</CardTitle>
+                <div className="mt-2 text-sm text-text-secondary">
+                  {t('admin.userMonitoring.description')}
+                </div>
               </div>
-            </div>
-
-            <div className="ml-auto flex flex-wrap justify-end gap-4">
-              <AdminTableMultiFilters
-                filters={[
-                  ...(IS_ENTERPRISE
-                    ? [
-                        {
-                          id: 'role',
-                          label: t('admin.role'),
-                          options: (roleList ?? []).map(({ role_name }) => ({
-                            value: role_name,
-                            label: role_name,
-                          })),
-                          value:
-                            (table
-                              .getColumn('role')
-                              ?.getFilterValue() as string[]) ?? [],
-                          onChange: (value: string[]) =>
-                            table.getColumn('role')?.setFilterValue(value),
-                        },
-                      ]
-                    : []),
-                  {
-                    id: 'department_path',
-                    label: t('admin.department'),
-                    options: createFilterOptions(
-                      usersList ?? [],
-                      (user) => user.department_path,
-                    ),
-                    value:
-                      (table
-                        .getColumn('department_path')
-                        ?.getFilterValue() as string[]) ?? [],
-                    onChange: (value) =>
-                      table.getColumn('department_path')?.setFilterValue(value),
-                  },
-                  {
-                    id: 'is_active',
-                    label: t('admin.status'),
-                    options: [
-                      { value: '1', label: t('admin.active') },
-                      { value: '0', label: t('admin.inactive') },
-                    ],
-                    value:
-                      (table
-                        .getColumn('is_active')
-                        ?.getFilterValue() as string[]) ?? [],
-                    onChange: (value) =>
-                      table.getColumn('is_active')?.setFilterValue(value),
-                  },
-                  {
-                    id: 'is_superuser',
-                    label: t('admin.userType'),
-                    options: [
-                      { value: 'normal', label: t('admin.normalUser') },
-                      { value: 'superuser', label: t('admin.superuser') },
-                    ],
-                    value:
-                      (table
-                        .getColumn('is_superuser')
-                        ?.getFilterValue() as string[]) ?? [],
-                    onChange: (value) =>
-                      table.getColumn('is_superuser')?.setFilterValue(value),
-                  },
-                ]}
-                resetLabel={t('admin.reset')}
-                onReset={() => table.resetColumnFilters()}
-              />
-
-              <div className="relative w-56">
-                <LucideSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-
-                <Input
-                  className="pl-10 h-10 bg-bg-input border-border-button"
-                  placeholder={t('header.search')}
-                  value={table.getState().globalFilter}
-                  onChange={(e) => table.setGlobalFilter(e.target.value)}
-                />
-              </div>
-
               <Button
                 className="h-10 px-4"
                 onClick={() => setCreateUserModalOpen(true)}
@@ -673,7 +675,7 @@ function AdminUserManagement() {
               </Button>
             </div>
 
-            <div className="col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 [
                   t('admin.userMonitoring.totalUsersLabel'),
@@ -709,70 +711,74 @@ function AdminUserManagement() {
                 );
               })}
             </div>
+
+            {tableToolbar}
           </CardHeader>
 
           <CardContent>
-            <Table className="min-w-[1660px]">
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead
-                        key={header.id}
-                        className={cn(
-                          'whitespace-nowrap px-3',
-                          USER_TABLE_COLUMN_CLASSES[header.column.id],
-                        )}
-                      >
-                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                          <Button
-                            variant="ghost"
-                            className="-ml-3 whitespace-nowrap"
-                            onClick={header.column.getToggleSortingHandler()}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                            {getSortIcon(header.column.getIsSorted())}
-                          </Button>
-                        ) : (
-                          flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )
-                        )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id} className="group/row">
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell
-                          key={cell.id}
+            <div className="w-full min-w-0 max-w-full overflow-x-auto">
+              <Table className="min-w-[1660px]">
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead
+                          key={header.id}
                           className={cn(
                             'whitespace-nowrap px-3',
-                            USER_TABLE_COLUMN_CLASSES[cell.column.id],
+                            USER_TABLE_COLUMN_CLASSES[header.column.id],
                           )}
                         >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
+                          {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                            <Button
+                              variant="ghost"
+                              className="-ml-3 whitespace-nowrap"
+                              onClick={header.column.getToggleSortingHandler()}
+                            >
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                              {getSortIcon(header.column.getIsSorted())}
+                            </Button>
+                          ) : (
+                            flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )
                           )}
-                        </TableCell>
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                ) : (
-                  <TableEmpty key="empty" columnsLength={columnDefs.length} />
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableHeader>
+
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id} className="group/row">
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell
+                            key={cell.id}
+                            className={cn(
+                              'whitespace-nowrap px-3',
+                              USER_TABLE_COLUMN_CLASSES[cell.column.id],
+                            )}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableEmpty key="empty" columnsLength={columnDefs.length} />
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
 
           <CardFooter className="flex items-center justify-end">
