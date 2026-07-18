@@ -3201,15 +3201,40 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
 
       resourceManagementPage: {
         title: '资源管理',
-        description: '查看并管理所有个人和团队工作空间中的业务资源。',
-        search: '搜索资源名称或 ID',
-        total: '资源总数',
         knowledge: '知识库管理',
         chat: '聊天管理',
         searchApp: '搜索管理',
         agent: '智能体管理',
         memory: '记忆管理',
         file: '文件管理',
+        descriptions: {
+          dataset:
+            '集中管理各工作空间的知识库，查看文件数量、分块规模、存储占用和解析异常。',
+          chat: '查看和管理各工作空间的聊天应用，掌握关联知识库与会话使用情况。',
+          search:
+            '查看和管理各工作空间的搜索应用，核对其引用的知识库与指定文件。',
+          agent:
+            '查看和管理各工作空间的智能体，掌握智能体类型、发布状态和会话数量。',
+          memory:
+            '查看和管理各工作空间的记忆资源，核对记忆类型、存储方式和容量。',
+          file: '查看和管理各工作空间的文件，追踪文件类型、来源、大小和创建者。',
+        },
+        searchPlaceholders: {
+          dataset: '搜索知识库名称或 ID',
+          chat: '搜索聊天名称或 ID',
+          search: '搜索应用名称或 ID',
+          agent: '搜索智能体名称或 ID',
+          memory: '搜索记忆名称或 ID',
+          file: '搜索文件名称或 ID',
+        },
+        totals: {
+          dataset: '知识库总数',
+          chat: '聊天总数',
+          search: '搜索应用总数',
+          agent: '智能体总数',
+          memory: '记忆总数',
+          file: '文件总数',
+        },
         failures: '解析失败',
         failureDescription: '查看知识库中解析失败的文件及具体失败原因。',
         sessions: '会话数',

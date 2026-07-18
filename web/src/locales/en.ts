@@ -3493,16 +3493,40 @@ Important structured information may include: names, dates, locations, events, k
 
       resourceManagementPage: {
         title: 'Resource management',
-        description:
-          'View and manage business resources across all personal and team workspaces.',
-        search: 'Search by resource name or ID',
-        total: 'Total resources',
         knowledge: 'Dataset management',
         chat: 'Chat management',
         searchApp: 'Search management',
         agent: 'Agent management',
         memory: 'Memory management',
         file: 'File management',
+        descriptions: {
+          dataset:
+            'Manage datasets across workspaces and review file counts, chunks, storage usage, and parsing failures.',
+          chat: 'Manage chat applications across workspaces and review their linked datasets and session usage.',
+          search:
+            'Manage search applications across workspaces and review their linked datasets and selected files.',
+          agent:
+            'Manage agents across workspaces and review agent types, release status, and session counts.',
+          memory:
+            'Manage memory resources across workspaces and review memory types, storage methods, and capacity.',
+          file: 'Manage files across workspaces and track file types, sources, sizes, and creators.',
+        },
+        searchPlaceholders: {
+          dataset: 'Search dataset name or ID',
+          chat: 'Search chat name or ID',
+          search: 'Search search application name or ID',
+          agent: 'Search agent name or ID',
+          memory: 'Search memory name or ID',
+          file: 'Search file name or ID',
+        },
+        totals: {
+          dataset: 'Total datasets',
+          chat: 'Total chats',
+          search: 'Total search applications',
+          agent: 'Total agents',
+          memory: 'Total memories',
+          file: 'Total files',
+        },
         failures: 'Parse failures',
         failureDescription:
           'View files that failed to parse in datasets and their failure reasons.',

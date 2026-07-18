@@ -375,6 +375,11 @@ export default function AdminResources() {
     }
   })();
 
+  const currentView = RESOURCE_VIEWS.find(({ type }) => type === view);
+  if (!view || !currentView) {
+    return <Navigate to={Routes.AdminKnowledgeManagement} replace />;
+  }
+
   const metrics =
     resourceType === 'dataset'
       ? [
@@ -401,19 +406,13 @@ export default function AdminResources() {
         ]
       : [
           {
-            label: t('admin.resourceManagementPage.total'),
+            label: t(`admin.resourceManagementPage.totals.${view}`),
             value: resourceData?.total ?? 0,
-            icon:
-              RESOURCE_VIEWS.find(({ type }) => type === view)?.icon ?? Library,
+            icon: currentView.icon,
           },
         ];
   const total = resourceData?.total;
   const isFetching = resourcesFetching;
-  const currentView = RESOURCE_VIEWS.find(({ type }) => type === view);
-
-  if (!view || !currentView) {
-    return <Navigate to={Routes.AdminKnowledgeManagement} replace />;
-  }
 
   return (
     <TooltipProvider>
@@ -427,7 +426,9 @@ export default function AdminResources() {
                   {t(`admin.resourceManagementPage.${currentView.label}`)}
                 </CardTitle>
                 <div className="mt-2 text-sm text-text-secondary">
-                  {t('admin.resourceManagementPage.description')}
+                  {t(
+                    `admin.resourceManagementPage.descriptions.${currentView.type}`,
+                  )}
                 </div>
               </div>
               <div className="relative w-72 shrink-0">
@@ -440,7 +441,9 @@ export default function AdminResources() {
                     setPage(1);
                     setFailurePage(1);
                   }}
-                  placeholder={t('admin.resourceManagementPage.search')}
+                  placeholder={t(
+                    `admin.resourceManagementPage.searchPlaceholders.${currentView.type}`,
+                  )}
                 />
               </div>
             </div>
