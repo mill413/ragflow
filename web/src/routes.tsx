@@ -76,6 +76,13 @@ export enum Routes {
   AdminTeamManagement = `${Admin}/teams`,
   AdminDepartments = `${Admin}/departments`,
   AdminResourceManagement = `${Admin}/resources`,
+  AdminKnowledgeManagement = `${AdminResourceManagement}/datasets`,
+  AdminChatManagement = `${AdminResourceManagement}/chats`,
+  AdminSearchManagement = `${AdminResourceManagement}/searches`,
+  AdminAgentManagement = `${AdminResourceManagement}/agents`,
+  AdminMemoryManagement = `${AdminResourceManagement}/memories`,
+  AdminFileManagement = `${AdminResourceManagement}/files`,
+  AdminParseFailureManagement = `${AdminResourceManagement}/failures`,
   AdminModelManagement = `${Admin}/models`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
@@ -416,6 +423,12 @@ const routeConfigOptions = [
               },
               {
                 path: Routes.AdminResourceManagement,
+                element: (
+                  <Navigate to={Routes.AdminKnowledgeManagement} replace />
+                ),
+              },
+              {
+                path: `${Routes.AdminResourceManagement}/:resourceView`,
                 Component: () => import('@/pages/admin/resources'),
               },
               {

@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 
@@ -6,9 +6,15 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import {
   LucideBoxes,
+  LucideBot,
+  LucideBrain,
   LucideBuilding2,
+  LucideFile,
+  LucideFileSearch,
   LucideLogOut,
   LucideBrainCircuit,
+  LucideLibrary,
+  LucideMessageSquare,
   LucidePanelLeftClose,
   LucidePanelLeftOpen,
   LucideServerCrash,
@@ -17,6 +23,7 @@ import {
   LucideUserStar,
   LucideUsersRound,
   LucideZap,
+  LucideTriangleAlert,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -32,6 +39,13 @@ import { CurrentUserInfoContext } from './root-layout';
 
 const ADMIN_SIDEBAR_COLLAPSED_KEY = 'admin-sidebar-collapsed';
 
+type AdminNavigationItem = {
+  path: string;
+  name: string;
+  icon: ReactNode;
+  children?: AdminNavigationItem[];
+};
+
 const AdminNavigationLayout = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -46,7 +60,7 @@ const AdminNavigationLayout = () => {
     queryFn: async () => (await getSystemVersion())?.data?.data?.version,
   });
 
-  const navItems = useMemo(
+  const navItems = useMemo<AdminNavigationItem[]>(
     () => [
       {
         path: Routes.AdminServices,
@@ -72,6 +86,43 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminResourceManagement,
         name: t('admin.resourceManagement'),
         icon: <LucideBoxes className="size-[1em]" />,
+        children: [
+          {
+            path: Routes.AdminKnowledgeManagement,
+            name: t('admin.resourceManagementPage.knowledge'),
+            icon: <LucideLibrary className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminChatManagement,
+            name: t('admin.resourceManagementPage.chat'),
+            icon: <LucideMessageSquare className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminSearchManagement,
+            name: t('admin.resourceManagementPage.searchApp'),
+            icon: <LucideFileSearch className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminAgentManagement,
+            name: t('admin.resourceManagementPage.agent'),
+            icon: <LucideBot className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminMemoryManagement,
+            name: t('admin.resourceManagementPage.memory'),
+            icon: <LucideBrain className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminFileManagement,
+            name: t('admin.resourceManagementPage.file'),
+            icon: <LucideFile className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminParseFailureManagement,
+            name: t('admin.resourceManagementPage.failures'),
+            icon: <LucideTriangleAlert className="size-[1em]" />,
+          },
+        ],
       },
       {
         path: Routes.AdminModelManagement,
@@ -173,12 +224,13 @@ const AdminNavigationLayout = () => {
           </Button>
         </div>
 
-        <nav>
-          <ul className="space-y-4">
+        <nav className="min-h-0 flex-1 overflow-y-auto">
+          <ul className="space-y-2">
             {navItems.map((it) => (
               <li key={it.path}>
                 <NavLink
                   to={it.path}
+                  end={!it.children}
                   className={({ isActive }) =>
                     cn(
                       'px-4 py-3 rounded-lg',
@@ -200,6 +252,29 @@ const AdminNavigationLayout = () => {
                     <span className="ml-3 whitespace-nowrap">{it.name}</span>
                   )}
                 </NavLink>
+                {it.children && !sidebarCollapsed && (
+                  <ul className="mt-1 space-y-1 border-l border-border-button ml-6 pl-3">
+                    {it.children.map((child) => (
+                      <li key={child.path}>
+                        <NavLink
+                          to={child.path}
+                          className={({ isActive }) =>
+                            cn(
+                              'flex w-full items-center rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors',
+                              'hover:bg-bg-card hover:text-text-primary focus-visible:bg-bg-card focus-visible:text-text-primary',
+                              isActive && 'bg-bg-card text-text-primary',
+                            )
+                          }
+                        >
+                          {child.icon}
+                          <span className="ml-3 whitespace-nowrap">
+                            {child.name}
+                          </span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

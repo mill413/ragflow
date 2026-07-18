@@ -3,10 +3,12 @@ import {
   type ReactNode,
   type SetStateAction,
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Navigate, useParams } from 'react-router';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -49,7 +51,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Tooltip,
   TooltipContent,
@@ -64,6 +65,7 @@ import {
   listManagedResources,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
+import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
 
 type ResourceView = AdminService.ManagedResourceType | 'failures';
@@ -88,6 +90,16 @@ const RESOURCE_VIEWS: Array<{
   { type: 'failures', label: 'failures', icon: AlertTriangle },
 ];
 
+const RESOURCE_VIEW_ROUTES: Record<string, ResourceView> = {
+  datasets: 'dataset',
+  chats: 'chat',
+  searches: 'search',
+  agents: 'agent',
+  memories: 'memory',
+  files: 'file',
+  failures: 'failures',
+};
+
 function sortRows<T>(rows: T[], sort: SortState): T[] {
   return [...rows].sort((left, right) => {
     const leftValue = (left as Record<string, unknown>)[sort.key];
@@ -103,8 +115,9 @@ function sortRows<T>(rows: T[], sort: SortState): T[] {
 
 export default function AdminResources() {
   const { t } = useTranslation();
+  const { resourceView } = useParams<{ resourceView: string }>();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<ResourceView>('dataset');
+  const view = RESOURCE_VIEW_ROUTES[resourceView ?? ''];
   const [keywords, setKeywords] = useState('');
   const deferredKeywords = useDeferredValue(keywords);
   const [page, setPage] = useState(1);
@@ -119,6 +132,10 @@ export default function AdminResources() {
   });
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
   const resourceType = view === 'failures' ? undefined : view;
+
+  useEffect(() => {
+    setPage(1);
+  }, [view]);
 
   const { data: summary } = useQuery({
     queryKey: ['admin/monitoring'],
@@ -389,6 +406,11 @@ export default function AdminResources() {
         ];
   const total = view === 'failures' ? failureData?.total : resourceData?.total;
   const isFetching = view === 'failures' ? failuresFetching : resourcesFetching;
+  const currentView = RESOURCE_VIEWS.find(({ type }) => type === view);
+
+  if (!view || !currentView) {
+    return <Navigate to={Routes.AdminKnowledgeManagement} replace />;
+  }
 
   return (
     <TooltipProvider>
@@ -398,7 +420,9 @@ export default function AdminResources() {
           <CardHeader className="space-y-5">
             <div className="flex items-center justify-between gap-6">
               <div>
-                <CardTitle>{t('admin.resourceManagementPage.title')}</CardTitle>
+                <CardTitle>
+                  {t(`admin.resourceManagementPage.${currentView.label}`)}
+                </CardTitle>
                 <div className="mt-2 text-sm text-text-secondary">
                   {t('admin.resourceManagementPage.description')}
                 </div>
@@ -441,27 +465,6 @@ export default function AdminResources() {
                 </div>
               ))}
             </div>
-
-            <Tabs
-              value={view}
-              onValueChange={(value) => {
-                setView(value as ResourceView);
-                setPage(1);
-              }}
-            >
-              <TabsList className="h-auto flex-wrap justify-start bg-transparent gap-2 p-0">
-                {RESOURCE_VIEWS.map(({ type, label, icon: Icon }) => (
-                  <TabsTrigger
-                    key={type}
-                    value={type}
-                    className="gap-2 border-0.5 border-border-button data-[state=active]:bg-bg-card"
-                  >
-                    <Icon className="size-4" />
-                    {t(`admin.resourceManagementPage.${label}`)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
           </CardHeader>
 
           <CardContent className="space-y-4">
