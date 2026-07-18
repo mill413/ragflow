@@ -200,6 +200,9 @@ class Graph:
     def get_tenant_id(self):
         return self._tenant_id
 
+    def get_canvas_id(self):
+        return getattr(self, "_id", None)
+
     def get_value_with_variable(self, value: str) -> Any:
         # Reference the canonical pre-compiled regex from ComponentBase so
         # the source-pattern and the runtime-pattern can never drift apart.

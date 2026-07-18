@@ -62,9 +62,18 @@ const fileManagerService = registerServer<keyof typeof methods>(
   request,
 );
 
-export const downloadAgentFile = (data: { docId: string; ext: string }) => {
+export const downloadAgentFile = (data: {
+  docId: string;
+  ext: string;
+  workspaceId?: string;
+  agentId?: string;
+}) => {
   return request.get(getAttachmentFileDownload(data.docId), {
-    params: { ext: data.ext },
+    params: {
+      ext: data.ext,
+      workspace_id: data.workspaceId,
+      agent_id: data.agentId,
+    },
     responseType: 'blob',
   });
 };

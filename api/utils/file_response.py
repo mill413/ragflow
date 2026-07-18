@@ -137,8 +137,19 @@ def apply_download_file_response_headers(
     return response
 
 
-def agent_attachment_preview_path(attachment_id: str, *, ext: str | None = None, mime_type: str | None = None) -> str:
+def agent_attachment_preview_path(
+    attachment_id: str,
+    *,
+    workspace_id: str | None = None,
+    agent_id: str | None = None,
+    ext: str | None = None,
+    mime_type: str | None = None,
+) -> str:
     query: dict[str, str] = {}
+    if workspace_id:
+        query["workspace_id"] = workspace_id
+    if agent_id:
+        query["agent_id"] = agent_id
     if ext:
         query["ext"] = ext
     if mime_type:

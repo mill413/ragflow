@@ -7,6 +7,8 @@ export interface IDocumentDownloadInfo {
   filename: string;
   mime_type: string;
   size?: number;
+  workspace_id?: string;
+  agent_id?: string;
 }
 
 export interface PromptConfig {

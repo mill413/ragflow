@@ -354,7 +354,16 @@ class ExcelProcessor(ComponentBase, ABC):
             settings.STORAGE_IMPL.put(self._canvas._tenant_id, doc_id, binary_content)
 
             # Set attachment output
-            self.set_output("attachment", {"doc_id": doc_id, "format": self._param.output_format, "file_name": filename})
+            self.set_output(
+                "attachment",
+                {
+                    "doc_id": doc_id,
+                    "format": self._param.output_format,
+                    "file_name": filename,
+                    "workspace_id": self._canvas.get_tenant_id(),
+                    "agent_id": self._canvas.get_canvas_id(),
+                },
+            )
 
             total_rows = sum(len(df) for df in dfs.values())
             self.set_output("summary", f"Generated {filename} with {len(dfs)} sheet(s), {total_rows} total rows")

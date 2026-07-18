@@ -37,6 +37,7 @@ from quart import Response, jsonify, request, make_response
 
 from api.apps import AUTH_JWT, AUTH_API, AUTH_BETA, current_user, login_required
 from api.apps.services.canvas_replica_service import CanvasReplicaService
+from api.apps.workspace_access import workspace_required
 from api.db import CanvasCategory, TenantPermission, WorkspaceType
 from api.db.db_models import APIToken, Task
 from api.db.services.api_service import API4ConversationService
@@ -281,6 +282,38 @@ def _normalize_agent_session(conv):
     return conv
 
 
+def _bind_agent_attachments_to_workspace(data: dict, workspace_id: str, agent_id: str) -> dict:
+    for field in ("message", "messages"):
+        messages = data.get(field)
+        if not isinstance(messages, list):
+            continue
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            attachment = message.get("attachment")
+            if isinstance(attachment, dict) and attachment.get("doc_id"):
+                attachment.setdefault("workspace_id", workspace_id)
+                attachment.setdefault("agent_id", agent_id)
+            downloads = message.get("downloads")
+            if not isinstance(downloads, list):
+                continue
+            for download in downloads:
+                if not isinstance(download, dict) or not download.get("doc_id"):
+                    continue
+                download.setdefault("workspace_id", workspace_id)
+                download.setdefault("agent_id", agent_id)
+                preview_url = download.get("preview_url")
+                if isinstance(preview_url, str) and preview_url:
+                    if "workspace_id=" not in preview_url:
+                        separator = "&" if "?" in preview_url else "?"
+                        preview_url = f"{preview_url}{separator}workspace_id={workspace_id}"
+                    if "agent_id=" not in preview_url:
+                        separator = "&" if "?" in preview_url else "?"
+                        preview_url = f"{preview_url}{separator}agent_id={agent_id}"
+                    download["preview_url"] = preview_url
+    return data
+
+
 def _agent_session_owner_filter(agent):
     workspace_id = str(agent.user_id)
     if WorkspaceAccessService.is_superuser(current_user.id) or WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
@@ -290,6 +323,7 @@ def _agent_session_owner_filter(agent):
 
 def _build_agent_session_response(session, agent):
     data = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    _bind_agent_attachments_to_workspace(data, str(agent.user_id), str(agent.id))
     data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, data)
     return _normalize_agent_session(data)
 
@@ -597,6 +631,7 @@ def get_agent_session(agent_id, session_id, tenant_id):
     if not agent_exists or not exists or not WorkspaceAccessService.can_read_agent_session(current_user.id, agent, conv):
         return get_data_error_result(message="Session not found!")
     data = conv.to_dict()
+    _bind_agent_attachments_to_workspace(data, str(agent.user_id), str(agent.id))
     data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, conv)
     return get_json_result(data=data)
 
@@ -2616,8 +2651,31 @@ def _attachment_request_metadata():
     return content_type, resolved_ext, filename
 
 
+async def _can_read_agent_attachment(workspace_id: str) -> bool:
+    requested_workspace_id = request.args.get("workspace_id")
+    if not requested_workspace_id:
+        return True
+    agent_id = request.args.get("agent_id")
+    if not agent_id:
+        return False
+    exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    return bool(
+        exists
+        and str(agent.user_id) == str(workspace_id)
+        and await thread_pool_exec(
+            WorkspaceAccessService.can_read_shared_resource,
+            current_user.id,
+            agent,
+            workspace_field="user_id",
+            permission_field="permission",
+        )
+    )
+
+
 async def _stream_agent_attachment(tenant_id, attachment_id, *, inline: bool):
     attachment_id = attachment_id or request.view_args.get("attachment_id")
+    if not await _can_read_agent_attachment(tenant_id):
+        return get_error_data_result(message="Permission denied", code=RetCode.FORBIDDEN)
     content_type, ext, filename = _attachment_request_metadata()
     data = await thread_pool_exec(settings.STORAGE_IMPL.get, tenant_id, attachment_id)
     if not data:
@@ -2633,8 +2691,9 @@ async def _stream_agent_attachment(tenant_id, attachment_id, *, inline: bool):
 @manager.route("/agents/attachments/<attachment_id>/preview", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@workspace_required()
 async def preview_attachment(tenant_id=None, attachment_id=None):
-    """Stream an agent-generated attachment for inline preview in MCP clients."""
+    """Stream an attachment from an authorized personal or team workspace."""
     try:
         return await _stream_agent_attachment(tenant_id, attachment_id, inline=True)
     except Exception as e:
@@ -2644,8 +2703,9 @@ async def preview_attachment(tenant_id=None, attachment_id=None):
 @manager.route("/agents/attachments/<attachment_id>/download", methods=["GET"])  # noqa: F821
 @login_required(auth_types=[AUTH_JWT, AUTH_API, AUTH_BETA])
 @add_tenant_id_to_kwargs
+@workspace_required()
 async def download_attachment(tenant_id=None, attachment_id=None):
-    """Stream an agent-generated attachment as a download."""
+    """Download an attachment from an authorized personal or team workspace."""
     try:
         if request.args.get("disposition", "").lower() == "inline":
             return await _stream_agent_attachment(tenant_id, attachment_id, inline=True)

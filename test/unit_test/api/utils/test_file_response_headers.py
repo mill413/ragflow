@@ -62,3 +62,23 @@ def test_agent_attachment_preview_path_encodes_svg_mime_type():
     query = urlencode({"ext": "svg", "mime_type": "image/svg+xml"})
     assert path == f"/api/v1/agents/attachments/doc-1/preview?{query}"
     assert "%2B" in path or "svg%2Bxml" in path
+
+
+@pytest.mark.p2
+def test_agent_attachment_preview_path_includes_workspace():
+    path = module.agent_attachment_preview_path(
+        "doc-1",
+        workspace_id="team-1",
+        agent_id="agent-1",
+        ext="pdf",
+        mime_type="application/pdf",
+    )
+    query = urlencode(
+        {
+            "workspace_id": "team-1",
+            "agent_id": "agent-1",
+            "ext": "pdf",
+            "mime_type": "application/pdf",
+        }
+    )
+    assert path == f"/api/v1/agents/attachments/doc-1/preview?{query}"
