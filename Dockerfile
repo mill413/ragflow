@@ -231,9 +231,17 @@ COPY docs docs
 RUN --mount=type=cache,id=ragflow_npm,target=/root/.npm,sharing=locked \
     cd web && NODE_OPTIONS="--max-old-space-size=8192" VITE_BUILD_SOURCEMAP=false VITE_MINIFY=esbuild npm run build
 
+ARG BUILD_TIMESTAMP
+ARG GIT_COMMIT
 RUN --mount=type=bind,source=.git,target=/ragflow/.git \
-    version_info=$(git describe --tags --match=v* --first-parent --always) && \
-    echo "$version_info" > /ragflow/VERSION
+    ragflow_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1) && \
+    build_timestamp=${BUILD_TIMESTAMP:-$(date +%s)} && \
+    git_commit=${GIT_COMMIT:-$(git rev-parse --short=9 HEAD)} && \
+    git_commit=$(printf '%s' "$git_commit" | cut -c1-9) && \
+    test -n "$ragflow_version" && \
+    test -n "$git_commit" && \
+    case "$build_timestamp" in *[!0-9]*|'') exit 1 ;; esac && \
+    printf '%s-%s-%s\n' "$ragflow_version" "$build_timestamp" "$git_commit" > /ragflow/VERSION
 
 # production stage
 FROM base AS production
