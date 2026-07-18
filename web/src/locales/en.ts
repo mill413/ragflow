@@ -3670,7 +3670,7 @@ Important structured information may include: names, dates, locations, events, k
       department: 'Department',
       noDepartment: 'No department',
       departmentDescription:
-        'Manage the internal department hierarchy and user assignments without changing the RAGFlow database schema.',
+        'Manage the organizational hierarchy and user assignments, including department structure and membership changes.',
       searchDepartment: 'Search departments',
       query: 'Search',
       save: 'Save',

@@ -3440,7 +3440,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       department: '部门',
       noDepartment: '无部门',
       departmentDescription:
-        '管理内部组织部门和用户归属，不修改 RAGFlow 数据库表结构。',
+        '管理组织部门层级与用户归属，支持维护部门结构并调整用户所属部门。',
       searchDepartment: '搜索部门',
       query: '查询',
       save: '保存',
