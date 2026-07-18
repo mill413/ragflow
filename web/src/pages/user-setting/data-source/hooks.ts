@@ -8,11 +8,13 @@ import dataSourceService, {
   deleteDataSource,
   featchDataSourceDetail,
   getDataSourceLogs,
+  listDataSources,
 } from '@/services/data-source-service';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { DataSourceKey, useDataSourceInfo } from './constant';
 import {
   IDataSorceInfo,
@@ -21,12 +23,16 @@ import {
   IDataSourceLog,
 } from './interface';
 
-export const useListDataSource = () => {
+export const useListDataSource = (targetWorkspaceId?: string) => {
+  const { workspaceFilterId } = useWorkspace();
+  const workspaceId = targetWorkspaceId ?? workspaceFilterId;
   const { dataSourceInfo } = useDataSourceInfo();
   const { data: list, isFetching } = useQuery<IDataSource[]>({
-    queryKey: ['data-source'],
+    queryKey: ['data-source', workspaceId],
     queryFn: async () => {
-      const { data } = await dataSourceService.dataSourceList();
+      const { data } = await listDataSources({
+        workspace_id: workspaceId,
+      });
       return data.data;
     },
   });
@@ -72,6 +78,7 @@ export const useListDataSource = () => {
 };
 
 export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
+  const { workspaceId } = useWorkspace();
   const [addSource, setAddSource] = useState<IDataSorceInfo | undefined>(
     undefined,
   );
@@ -98,7 +105,10 @@ export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
             ...data,
             reschedule: true,
           })
-        : await dataSourceService.dataSourceSet(data);
+        : await dataSourceService.dataSourceSet({
+            ...data,
+            workspace_id: workspaceId,
+          });
       if (res.code === 0) {
         if (isEdit && res.data?.id) {
           queryClient.setQueryData(
@@ -115,7 +125,7 @@ export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
       }
       setAddLoading(false);
     },
-    [hideAddingModal, isEdit, queryClient],
+    [hideAddingModal, isEdit, queryClient, workspaceId],
   );
 
   return {

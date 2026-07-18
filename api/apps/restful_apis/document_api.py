@@ -45,6 +45,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService, cancel_all_task_of
 from api.utils.api_utils import (
@@ -268,6 +269,12 @@ async def update_document(tenant_id, dataset_id, document_id):
         old_parser_config = dict(doc.parser_config or {})
         req["parser_config"].update(update_doc_req.parser_config.ext)
         parser_config_template_group_touched = _normalize_parser_config_compilation_template_group_ids(req["parser_config"])
+        group_ids = WorkspaceAccessService.extract_reference_ids(
+            req["parser_config"],
+            {"compilation_template_group_id", "compilation_template_group_ids"},
+        )
+        if not WorkspaceAccessService.can_reference_compilation_template_groups(current_user.id, kb.tenant_id, group_ids):
+            return get_error_data_result(message="Compilation templates and datasets must belong to the same workspace.")
         parser_config_template_group_changed = parser_config_template_group_touched and _compilation_template_group_id_changed(old_parser_config, req["parser_config"])
         DocumentService.update_parser_config(doc.id, req["parser_config"])
 

@@ -44,6 +44,7 @@ export type IUpdateCompilationTemplateRequestBody =
   Partial<ICreateCompilationTemplateRequestBody>;
 
 export interface ICreateCompilationTemplateGroupRequestBody {
+  workspace_id?: string;
   name: string;
   description?: string;
   avatar?: string;

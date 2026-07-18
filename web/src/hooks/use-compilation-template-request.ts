@@ -22,6 +22,7 @@ import compilationTemplateService, {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from 'ahooks';
 import { useCallback, useMemo } from 'react';
+import { useWorkspace } from './use-workspace';
 
 import {
   useGetPaginationWithRouter,
@@ -46,8 +47,11 @@ export const CompilationTemplateKeys = {
     ] as const,
   detail: (id?: string) =>
     [CompilationTemplateApiAction.FetchCompilationTemplate, id] as const,
-  builtins: () =>
-    [CompilationTemplateApiAction.FetchBuiltinCompilationTemplates] as const,
+  builtins: (workspaceId?: string) =>
+    [
+      CompilationTemplateApiAction.FetchBuiltinCompilationTemplates,
+      { workspaceId },
+    ] as const,
   all: () => [CompilationTemplateApiAction.FetchCompilationTemplates] as const,
   wikiPresets: () => [CompilationTemplateApiAction.FetchWikiPresets] as const,
 };
@@ -122,13 +126,15 @@ export const useFetchCompilationTemplate = (id?: string) => {
 };
 
 export const useFetchBuiltinCompilationTemplates = () => {
+  const { workspaceFilterId } = useWorkspace();
   const { data, isFetching: loading } = useQuery<ICompilationTemplateBuiltin[]>(
     {
-      queryKey: CompilationTemplateKeys.builtins(),
+      queryKey: CompilationTemplateKeys.builtins(workspaceFilterId),
       initialData: [],
       gcTime: 0,
       queryFn: async () => {
-        const { data } = await listBuiltinCompilationTemplates();
+        const { data } =
+          await listBuiltinCompilationTemplates(workspaceFilterId);
         return (data?.data ?? []) as ICompilationTemplateBuiltin[];
       },
     },

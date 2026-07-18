@@ -131,6 +131,22 @@ class ConnectorService(CommonService):
         return list(cls.model.select(*fields).where(cls.model.tenant_id == tenant_id).dicts())
 
     @classmethod
+    def list_by_tenant_ids(cls, tenant_ids: List[str]):
+        if not tenant_ids:
+            return []
+        fields = [cls.model.id, cls.model.tenant_id, cls.model.name, cls.model.source, cls.model.status]
+        return list(cls.model.select(*fields).where(cls.model.tenant_id.in_(tenant_ids)).order_by(cls.model.update_time.desc()))
+
+    @classmethod
+    @DB.connection_context()
+    def delete_connector(cls, connector_id: str) -> None:
+        cls.cancel_tasks(connector_id)
+        with DB.atomic():
+            SyncLogs.delete().where(SyncLogs.connector_id == connector_id).execute()
+            Connector2Kb.delete().where(Connector2Kb.connector_id == connector_id).execute()
+            Connector.delete().where(Connector.id == connector_id).execute()
+
+    @classmethod
     def rebuild(cls, kb_id: str, connector_id: str, tenant_id: str):
         from api.db.services.file_service import FileService
 
@@ -481,6 +497,15 @@ class Connector2KbService(CommonService):
 
     @classmethod
     def link_connectors(cls, kb_id: str, connectors: list[dict], tenant_id: str):
+        connector_ids = [conn.get("id") for conn in connectors if isinstance(conn, dict) and conn.get("id")]
+        if connector_ids:
+            matched_count = Connector.select().where(
+                Connector.id.in_(connector_ids),
+                Connector.tenant_id == tenant_id,
+            ).count()
+            if matched_count != len(set(connector_ids)):
+                return "Connectors and datasets must belong to the same workspace."
+
         arr = cls.query(kb_id=kb_id)
         old_conn_ids = [a.connector_id for a in arr]
         connector_ids = []

@@ -23,7 +23,13 @@ export function useBulkOperateMCP(mcpList: IMcpServer[]) {
 
   const handleSelectAll = useCallback(
     (checked: boolean) => {
-      setSelectedList(() => (checked ? mcpList.map((item) => item.id) : []));
+      setSelectedList(() =>
+        checked
+          ? mcpList
+              .filter((item) => item.capabilities?.delete)
+              .map((item) => item.id)
+          : [],
+      );
     },
     [mcpList],
   );

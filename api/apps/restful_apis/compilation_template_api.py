@@ -14,12 +14,14 @@
 #  limitations under the License.
 #
 
-from quart import Response
+from quart import Response, request
 
 from api.apps import current_user, login_required
 from api.apps.restful_apis.utils.compilation_template_validation import validate_template_payload
 from api.db.services.compilation_template_service import CompilationTemplateService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import get_json_result, server_error_response
+from common.constants import RetCode
 
 
 _validate_template_payload = validate_template_payload
@@ -33,6 +35,9 @@ def list_builtin_templates() -> Response:
     no builtin groups exist.
     """
     try:
+        workspace_id = request.args.get("workspace_id") or current_user.id
+        if workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(current_user.id):
+            return get_json_result(code=RetCode.FORBIDDEN, message="Permission denied for this workspace.")
         templates = CompilationTemplateService.list_builtins()
         if not templates:
             CompilationTemplateService.seed_builtins_from_files()
@@ -48,7 +53,7 @@ def list_builtin_templates() -> Response:
                 }
                 for template in CompilationTemplateService.load_builtins_from_files()
             ]
-        templates = CompilationTemplateService.fill_default_llm_for_templates(templates, current_user.id)
+        templates = CompilationTemplateService.fill_default_llm_for_templates(templates, workspace_id)
         return get_json_result(data=templates)
     except Exception as exc:
         return server_error_response(exc)

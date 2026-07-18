@@ -14,6 +14,8 @@ import { useTranslation } from 'react-i18next';
 
 import { ProfileSettingWrapperCard } from '../components/user-setting-header';
 import { TemplateCard } from './template-card';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 
 export default function CompilationTemplates() {
   const { t } = useTranslation();
@@ -28,6 +30,11 @@ export default function CompilationTemplates() {
 
   const { deleteGroup } = useDeleteCompilationTemplateGroup();
   const { navigateToCompilationTemplate } = useNavigatePage();
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction();
 
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
@@ -37,8 +44,8 @@ export default function CompilationTemplates() {
   );
 
   const handleAdd = useCallback(() => {
-    navigateToCompilationTemplate('create')();
-  }, [navigateToCompilationTemplate]);
+    runInWritableWorkspace(navigateToCompilationTemplate('create'));
+  }, [navigateToCompilationTemplate, runInWritableWorkspace]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -69,7 +76,15 @@ export default function CompilationTemplates() {
               placeholder={t('common.search')}
             />
 
-            <Button onClick={handleAdd}>
+            <Button
+              onClick={handleAdd}
+              disabled={!canRunInWritableWorkspace}
+              title={
+                !canRunInWritableWorkspace
+                  ? t('common.readOnlySaveTip')
+                  : undefined
+              }
+            >
               <Plus />
               {t('setting.addTemplateGroup')}
             </Button>
@@ -104,6 +119,7 @@ export default function CompilationTemplates() {
             onChange={handlePageChange}
           />
         </div>
+        <WorkspaceTargetDialog {...workspaceDialogProps} />
       </div>
     </ProfileSettingWrapperCard>
   );

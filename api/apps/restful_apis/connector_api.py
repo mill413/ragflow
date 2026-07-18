@@ -19,9 +19,10 @@ import logging
 from quart import request
 
 from api.apps import current_user, login_required
-from api.apps.workspace_access import personal_workspace_required
 from api.db import InputType
 from api.db.services.connector_service import ConnectorService, SyncLogsService
+from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json
 from api.utils.pagination_utils import validate_rest_api_page_size
 from common.constants import RetCode, SUPPORTED_DATA_SOURCES, TaskStatus
@@ -47,12 +48,27 @@ def _connector_auth_error(connector_id: str, user_id: str):
     return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
 
+def _connector_response(connector) -> dict:
+    data = connector.to_dict() if hasattr(connector, "to_dict") else dict(connector)
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
+    data["capabilities"] = WorkspaceAccessService.get_workspace_resource_capabilities(current_user.id, data)
+    return data
+
+
+def _visible_workspace_ids() -> list[str]:
+    visible_ids = WorkspaceAccessService.list_visible_workspace_ids(current_user.id)
+    workspace_id = request.args.get("workspace_id")
+    if workspace_id:
+        return [workspace_id] if workspace_id in visible_ids else []
+    return visible_ids
+
+
 @manager.route("/connectors/<connector_id>", methods=["PATCH"])  # noqa: F821
 @login_required
-@personal_workspace_required
 async def update_connector(connector_id):
     """Update an accessible connector's polling configuration."""
-    if not ConnectorService.accessible(connector_id, current_user.id):
+    exists, connector = ConnectorService.get_by_id(connector_id)
+    if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, connector):
         return _connector_auth_error(connector_id, current_user.id)
 
     req = await get_request_json()
@@ -85,23 +101,26 @@ async def update_connector(connector_id):
     if conn is None:
         return get_data_error_result(message="Can't find this Connector!")
 
-    return get_json_result(data=conn.to_dict())
+    return get_json_result(data=_connector_response(conn))
 
 
 @manager.route("/connectors", methods=["POST"])  # noqa: F821
 @login_required
-@personal_workspace_required
 async def create_connector():
-    """Create a connector owned by the current tenant."""
+    """Create a connector in a writable personal or team workspace."""
     req = await get_request_json()
     if not req or not _is_supported_source(req.get("source", "")):
         return get_json_result(code=RetCode.ARGUMENT_ERROR, message="Unsupported data source.")
+
+    workspace_id = req.pop("workspace_id", current_user.id)
+    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
     if req:
         req["id"] = get_uuid()
         conn = {
             "id": req["id"],
-            "tenant_id": current_user.id,
+            "tenant_id": workspace_id,
             "name": req["name"],
             "source": req["source"],
             "input_type": InputType.POLL,
@@ -116,43 +135,37 @@ async def create_connector():
     await asyncio.sleep(1)
     e, conn = ConnectorService.get_by_id(req["id"])
 
-    return get_json_result(data=conn.to_dict())
+    return get_json_result(data=_connector_response(conn))
 
 
 @manager.route("/connectors", methods=["GET"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def list_connector():
-    """List connectors owned by the current tenant."""
-    return get_json_result(
-        data=[
-            connector
-            for connector in ConnectorService.list(current_user.id)
-            if _is_supported_source(connector["source"])
-        ]
-    )
+    """List connectors in all visible workspaces or one selected workspace."""
+    connectors = ConnectorService.list_by_tenant_ids(_visible_workspace_ids())
+    return get_json_result(data=[_connector_response(connector) for connector in connectors if _is_supported_source(connector.source)])
 
 
 @manager.route("/connectors/<connector_id>", methods=["GET"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def get_connector(connector_id):
     """Return connector details when the current user can access it."""
-    if not ConnectorService.accessible(connector_id, current_user.id):
+    exists, connector = ConnectorService.get_by_id(connector_id)
+    if not exists or not WorkspaceAccessService.can_read_workspace_resource(current_user.id, connector):
         return _connector_auth_error(connector_id, current_user.id)
 
     conn = _get_supported_connector(connector_id)
     if conn is None:
         return get_data_error_result(message="Can't find this Connector!")
-    return get_json_result(data=conn.to_dict())
+    return get_json_result(data=_connector_response(conn))
 
 
 @manager.route("/connectors/<connector_id>/logs", methods=["GET"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def list_logs(connector_id):
     """List sync logs for a connector the current user can access."""
-    if not ConnectorService.accessible(connector_id, current_user.id):
+    exists, connector = ConnectorService.get_by_id(connector_id)
+    if not exists or not WorkspaceAccessService.can_read_workspace_resource(current_user.id, connector):
         return _connector_auth_error(connector_id, current_user.id)
     if _get_supported_connector(connector_id) is None:
         return get_data_error_result(message="Can't find this Connector!")
@@ -168,10 +181,10 @@ def list_logs(connector_id):
 
 @manager.route("/connectors/<connector_id>/rebuild", methods=["POST"])  # noqa: F821
 @login_required
-@personal_workspace_required
 async def rebuild(connector_id):
     """Schedule a rebuild for an accessible connector and knowledge base."""
-    if not ConnectorService.accessible(connector_id, current_user.id):
+    exists, connector = ConnectorService.get_by_id(connector_id)
+    if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, connector):
         return _connector_auth_error(connector_id, current_user.id)
     if _get_supported_connector(connector_id) is None:
         return get_data_error_result(message="Can't find this Connector!")
@@ -180,7 +193,15 @@ async def rebuild(connector_id):
     if "kb_id" not in req:
         return get_json_result(code=RetCode.ARGUMENT_ERROR, message="required argument is missing: kb_id")
 
-    err = ConnectorService.rebuild(req["kb_id"], connector_id, current_user.id)
+    knowledgebase = KnowledgebaseService.get_or_none(id=req["kb_id"])
+    if (
+        knowledgebase is None
+        or knowledgebase.tenant_id != connector.tenant_id
+        or not WorkspaceAccessService.can_update_knowledgebase(current_user.id, knowledgebase)
+    ):
+        return get_json_result(data=False, message="The connector and dataset must belong to the same writable workspace.", code=RetCode.AUTHENTICATION_ERROR)
+
+    err = ConnectorService.rebuild(req["kb_id"], connector_id, connector.tenant_id)
     if err:
         return get_json_result(data=False, message=err, code=RetCode.SERVER_ERROR)
     return get_json_result(data=True)
@@ -188,16 +209,15 @@ async def rebuild(connector_id):
 
 @manager.route("/connectors/<connector_id>", methods=["DELETE"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def rm_connector(connector_id):
     """Delete an accessible connector after canceling its sync tasks."""
-    if not ConnectorService.accessible(connector_id, current_user.id):
+    exists, connector = ConnectorService.get_by_id(connector_id)
+    if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, connector):
         return _connector_auth_error(connector_id, current_user.id)
 
     conn = _get_supported_connector(connector_id)
     if conn is None:
         return get_data_error_result(message="Can't find this Connector!")
 
-    ConnectorService.cancel_tasks(connector_id)
-    ConnectorService.delete_by_id(connector_id)
+    ConnectorService.delete_connector(connector_id)
     return get_json_result(data=True)

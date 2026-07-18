@@ -625,7 +625,7 @@ async def get_document_structure_graph(tenant_id, dataset_id, document_id):
     template_meta: dict[str, dict] = {}
     template_meta_by_kind: dict[str, list[dict]] = {}
     for group_id in group_ids:
-        group = CompilationTemplateGroupService.get_saved(group_id, tenant_id)
+        group = CompilationTemplateGroupService.get_saved(group_id, dataset_tenant_id)
         if not group:
             continue
         for template in group.get("templates") or []:

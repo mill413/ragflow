@@ -27,6 +27,8 @@ import { McpCard } from './mcp-card';
 import { useBulkOperateMCP } from './use-bulk-operate-mcp';
 import { useEditMcp } from './use-edit-mcp';
 import { useImportMcp } from './use-import-mcp';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 
 export default function McpServer() {
   const { data, setPagination, searchString, handleInputChange, pagination } =
@@ -50,6 +52,19 @@ export default function McpServer() {
   } = useImportMcp();
 
   const [isSelectionMode, setSelectionMode] = useState(false);
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction();
+  const showCreateDialog = useCallback(
+    () => runInWritableWorkspace(showEditModal('')),
+    [runInWritableWorkspace, showEditModal],
+  );
+  const showImportDialog = useCallback(
+    () => runInWritableWorkspace(showImportModal),
+    [runInWritableWorkspace, showImportModal],
+  );
 
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
@@ -91,11 +106,28 @@ export default function McpServer() {
               )}
               {t(`mcp.${isSelectionMode ? 'exitBulkManage' : 'bulkManage'}`)}
             </Button>
-            <Button variant="outline" onClick={showImportModal}>
+            <Button
+              variant="outline"
+              onClick={showImportDialog}
+              disabled={!canRunInWritableWorkspace}
+              title={
+                !canRunInWritableWorkspace
+                  ? t('common.readOnlySaveTip')
+                  : undefined
+              }
+            >
               <Download className="size-3.5" />
               {t('mcp.import')}
             </Button>
-            <Button onClick={showEditModal('')}>
+            <Button
+              onClick={showCreateDialog}
+              disabled={!canRunInWritableWorkspace}
+              title={
+                !canRunInWritableWorkspace
+                  ? t('common.readOnlySaveTip')
+                  : undefined
+              }
+            >
               <Plus /> {t('mcp.addMCP')}
             </Button>
           </div>
@@ -165,12 +197,12 @@ export default function McpServer() {
         ) : (
           <div
             className="flex items-center justify-between border border-dashed border-border-button rounded-md p-10 cursor-pointer w-[590px]"
-            onClick={showEditModal('')}
+            onClick={showCreateDialog}
           >
             <div className="text-text-secondary text-sm">
               {t('empty.noMCP')}
             </div>
-            <Button variant="outline">
+            <Button variant="outline" disabled={!canRunInWritableWorkspace}>
               <Plus />
               {t('empty.addNow')}
             </Button>
@@ -193,6 +225,7 @@ export default function McpServer() {
           loading={importLoading}
         ></ImportMcpDialog>
       )}
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
     </ProfileSettingWrapperCard>
   );
 }

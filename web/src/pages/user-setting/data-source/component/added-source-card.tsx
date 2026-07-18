@@ -6,6 +6,7 @@ import { useDataSourceInfo } from '../constant';
 import { useDeleteDataSource } from '../hooks';
 import { IDataSorceInfo, IDataSourceBase } from '../interface';
 import { delSourceModal } from './delete-source-modal';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 
 export type IAddedSourceCardProps = IDataSorceInfo & {
   list: IDataSourceBase[];
@@ -33,17 +34,24 @@ export const AddedSourceCard = (props: IAddedSourceCardProps) => {
             key={item.id}
             className="flex flex-row items-center justify-between rounded-md bg-bg-card px-[10px] py-4"
           >
-            <div className="text-sm text-text-primary ">{item.name}</div>
+            <div className="min-w-0 flex items-center gap-2">
+              <div className="text-sm text-text-primary truncate">
+                {item.name}
+              </div>
+              <WorkspaceBadge {...item} />
+            </div>
             <div className="text-sm text-text-secondary  flex gap-2">
-              <Button
-                variant={'ghost'}
-                className="rounded-lg px-2 py-1 bg-transparent hover:bg-bg-card"
-                onClick={() => {
-                  toDetail(item.id);
-                }}
-              >
-                <Settings size={14} />
-              </Button>
+              {item.capabilities?.delete && (
+                <Button
+                  variant={'ghost'}
+                  className="rounded-lg px-2 py-1 bg-transparent hover:bg-bg-card"
+                  onClick={() => {
+                    toDetail(item.id);
+                  }}
+                >
+                  <Settings size={14} />
+                </Button>
+              )}
               {/* <ConfirmDeleteDialog onOk={() => handleDelete(item)}> */}
               <Button
                 variant={'ghost'}

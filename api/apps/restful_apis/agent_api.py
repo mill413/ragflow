@@ -877,6 +877,23 @@ async def create_agent(tenant_id):
             message="Agents can only reference datasets from the same workspace.",
             code=RetCode.OPERATING_ERROR,
         )
+    mcp_ids = WorkspaceAccessService.extract_reference_ids(req["dsl"], {"mcp_id"})
+    if not WorkspaceAccessService.can_reference_mcp_servers(tenant_id, workspace_id, mcp_ids):
+        return get_json_result(
+            data=False,
+            message="Agents can only reference MCP servers from the same workspace.",
+            code=RetCode.OPERATING_ERROR,
+        )
+    compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
+        req["dsl"],
+        {"compilation_template_group_id", "compilation_template_group_ids"},
+    )
+    if not WorkspaceAccessService.can_reference_compilation_template_groups(tenant_id, workspace_id, compilation_group_ids):
+        return get_json_result(
+            data=False,
+            message="Agents can only reference compilation templates from the same workspace.",
+            code=RetCode.OPERATING_ERROR,
+        )
 
     if req.get("title") is None:
         return get_json_result(
@@ -1137,6 +1154,23 @@ async def update_agent(agent_id, tenant_id):
             return get_json_result(
                 data=False,
                 message="Agents can only reference datasets from the same workspace.",
+                code=RetCode.OPERATING_ERROR,
+            )
+        mcp_ids = WorkspaceAccessService.extract_reference_ids(req["dsl"], {"mcp_id"})
+        if not WorkspaceAccessService.can_reference_mcp_servers(tenant_id, workspace_id, mcp_ids):
+            return get_json_result(
+                data=False,
+                message="Agents can only reference MCP servers from the same workspace.",
+                code=RetCode.OPERATING_ERROR,
+            )
+        compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
+            req["dsl"],
+            {"compilation_template_group_id", "compilation_template_group_ids"},
+        )
+        if not WorkspaceAccessService.can_reference_compilation_template_groups(tenant_id, workspace_id, compilation_group_ids):
+            return get_json_result(
+                data=False,
+                message="Agents can only reference compilation templates from the same workspace.",
                 code=RetCode.OPERATING_ERROR,
             )
     if req.get("title") is not None:

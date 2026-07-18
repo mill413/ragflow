@@ -15,6 +15,7 @@ import { lowerFirst } from 'lodash';
 import { LucidePlus } from 'lucide-react';
 import { PropsWithChildren, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useOwnerTenantId } from '@/pages/agent/context';
 import { useGetNodeTools, useUpdateAgentNodeTools } from './use-update-tools';
 
 const Menus = [
@@ -109,7 +110,7 @@ function useHandleSelectChange({ onChange, value }: ToolCommandProps) {
 }
 
 // eslint-disable-next-line
-export function ToolCommand({ value, onChange }: ToolCommandProps) {
+export function ToolCommand(_props: ToolCommandProps) {
   const { t } = useTranslation();
 
   const currentValue = useGetNodeTools();
@@ -141,7 +142,8 @@ export function ToolCommand({ value, onChange }: ToolCommandProps) {
 }
 
 export function MCPCommand({ onChange, value }: ToolCommandProps) {
-  const { data } = useListMcpServer();
+  const ownerTenantId = useOwnerTenantId();
+  const { data } = useListMcpServer(ownerTenantId);
   const { toggleOption, currentValue } = useHandleSelectChange({
     onChange,
     value,

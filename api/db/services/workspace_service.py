@@ -23,6 +23,9 @@ from quart import g, has_request_context
 from api.db import KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME, TenantPermission, UserTenantRole, WorkspaceType
 from api.db.db_models import (
     APIToken,
+    CompilationTemplate,
+    CompilationTemplateGroup,
+    Connector,
     DB,
     Dialog,
     File,
@@ -31,6 +34,7 @@ from api.db.db_models import (
     FileCommitItem,
     Knowledgebase,
     Memory,
+    MCPServer,
     Search,
     Tenant,
     TenantLangfuse,
@@ -212,6 +216,30 @@ class WorkspaceAccessService:
         return False
 
     @classmethod
+    def can_read_workspace_resource(cls, user_id: str, resource: Mapping[str, Any] | Any, *, workspace_field: str = "tenant_id") -> bool:
+        tenant_id = cls._value(resource, workspace_field)
+        return bool(tenant_id and tenant_id in cls.list_visible_workspace_ids(user_id))
+
+    @classmethod
+    def can_manage_workspace_resource(cls, user_id: str, resource: Mapping[str, Any] | Any, *, workspace_field: str = "tenant_id") -> bool:
+        tenant_id = cls._value(resource, workspace_field)
+        if not cls.can_read_workspace_resource(user_id, resource, workspace_field=workspace_field):
+            return False
+        if cls.is_superuser(user_id):
+            return True
+        if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        return cls.can_manage_workspace(user_id, tenant_id)
+
+    @classmethod
+    def get_workspace_resource_capabilities(cls, user_id: str, resource: Mapping[str, Any] | Any, *, workspace_field: str = "tenant_id") -> dict[str, bool]:
+        return {
+            "read": cls.can_read_workspace_resource(user_id, resource, workspace_field=workspace_field),
+            "update": cls.can_manage_workspace_resource(user_id, resource, workspace_field=workspace_field),
+            "delete": cls.can_manage_workspace_resource(user_id, resource, workspace_field=workspace_field),
+        }
+
+    @classmethod
     def can_read_shared_resource(
         cls,
         user_id: str,
@@ -350,6 +378,34 @@ class WorkspaceAccessService:
         return True
 
     @classmethod
+    def can_reference_connectors(cls, user_id: str, workspace_id: str, connector_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for connector_id in set(connector_ids or []):
+            connector = Connector.get_or_none(id=connector_id)
+            if not connector or connector.tenant_id != workspace_id or not cls.can_read_workspace_resource(user_id, connector):
+                return False
+        return True
+
+    @classmethod
+    def can_reference_mcp_servers(cls, user_id: str, workspace_id: str, mcp_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for mcp_id in set(mcp_ids or []):
+            server = MCPServer.get_or_none(id=mcp_id)
+            if not server or server.tenant_id != workspace_id or not cls.can_read_workspace_resource(user_id, server):
+                return False
+        return True
+
+    @classmethod
+    def can_reference_compilation_template_groups(cls, user_id: str, workspace_id: str, group_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for group_id in set(group_ids or []):
+            group = CompilationTemplateGroup.get_or_none(
+                id=group_id,
+                tenant_id=workspace_id,
+                status=StatusEnum.VALID.value,
+            )
+            if not group or not cls.can_read_workspace_resource(user_id, group):
+                return False
+        return True
+
+    @classmethod
     def can_read_conversation(
         cls,
         user_id: str,
@@ -454,6 +510,27 @@ class WorkspaceAccessService:
 
         visit(value)
         return knowledgebase_ids
+
+    @classmethod
+    def extract_reference_ids(cls, value: Any, keys: set[str]) -> set[str]:
+        reference_ids: set[str] = set()
+
+        def visit(item: Any) -> None:
+            if isinstance(item, Mapping):
+                for key, nested in item.items():
+                    if key in keys:
+                        if isinstance(nested, str) and nested:
+                            reference_ids.add(nested)
+                        elif isinstance(nested, (list, tuple, set)):
+                            reference_ids.update(identifier for identifier in nested if isinstance(identifier, str) and identifier)
+                    else:
+                        visit(nested)
+            elif isinstance(item, (list, tuple, set)):
+                for nested in item:
+                    visit(nested)
+
+        visit(value)
+        return reference_ids
 
     @classmethod
     def can_delete_knowledgebase(cls, user_id: str, knowledgebase: Mapping[str, Any] | Any) -> bool:
@@ -711,6 +788,12 @@ class TeamService:
                 Search.select().where((Search.tenant_id == tenant_id) & (Search.status == StatusEnum.VALID.value)),
                 UserCanvas.select().where(UserCanvas.user_id == tenant_id),
                 Memory.select().where(Memory.tenant_id == tenant_id),
+                Connector.select().where(Connector.tenant_id == tenant_id),
+                MCPServer.select().where(MCPServer.tenant_id == tenant_id),
+                CompilationTemplateGroup.select().where(
+                    (CompilationTemplateGroup.tenant_id == tenant_id)
+                    & (CompilationTemplateGroup.status == StatusEnum.VALID.value)
+                ),
                 team_files,
             )
             if any(query.exists() for query in resource_queries):
@@ -753,5 +836,7 @@ class TeamService:
                 TenantModel.delete().where(TenantModel.provider_id.in_(provider_ids)).execute()
                 TenantModelInstance.delete().where(TenantModelInstance.provider_id.in_(provider_ids)).execute()
                 TenantModelProvider.delete().where(TenantModelProvider.tenant_id == tenant_id).execute()
+                CompilationTemplate.delete().where(CompilationTemplate.tenant_id == tenant_id).execute()
+                CompilationTemplateGroup.delete().where(CompilationTemplateGroup.tenant_id == tenant_id).execute()
                 UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
                 Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()

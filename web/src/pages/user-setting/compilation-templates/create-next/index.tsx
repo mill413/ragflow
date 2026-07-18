@@ -28,6 +28,7 @@ export default function CreateNextCompilationTemplate() {
   const { form, kindOptions, builtins, onSubmit, isCreate, isLoading } =
     useCreateNextCompilationTemplateGroup();
   const { data: group } = useFetchCompilationTemplateGroup();
+  const isReadOnly = !isCreate && group?.capabilities?.update === false;
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -93,57 +94,63 @@ export default function CreateNextCompilationTemplate() {
 
       <Form {...form}>
         <form className="flex-1 min-h-0 flex">
-          {activeStep === 2 ? (
-            <ResizablePanelGroup direction="horizontal" className="flex-1">
-              <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
-                <TemplateSidebar
-                  form={form}
-                  fields={fields}
-                  append={append}
-                  remove={remove}
-                  kindOptions={kindOptions}
-                  selectedTemplateIndex={selectedTemplateIndex}
-                  onSelectTemplate={setSelectedTemplateIndex}
-                />
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel className="min-h-0 flex flex-col">
-                <TemplateConfiguration
-                  form={form}
-                  builtins={builtins}
-                  kindOptions={kindOptions}
-                  selectedTemplateIndex={selectedTemplateIndex}
-                  onNext={handleNext}
-                  onBack={handleBack}
-                  isArtifacts={isArtifacts}
-                  isLoading={isLoading}
-                />
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          ) : (
-            <div className="flex-1 min-h-0 flex flex-col">
-              {activeStep === 1 && (
-                <>
-                  <BasicInfoStep />
-                  <footer className="shrink-0 px-5 py-4 border-t border-border-button flex items-center justify-end">
-                    <Button type="button" onClick={handleNext}>
-                      {t('common.next')}
-                    </Button>
-                  </footer>
-                </>
-              )}
+          <fieldset
+            disabled={isReadOnly}
+            title={isReadOnly ? t('common.readOnlySaveTip') : undefined}
+            className="contents"
+          >
+            {activeStep === 2 ? (
+              <ResizablePanelGroup direction="horizontal" className="flex-1">
+                <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                  <TemplateSidebar
+                    form={form}
+                    fields={fields}
+                    append={append}
+                    remove={remove}
+                    kindOptions={kindOptions}
+                    selectedTemplateIndex={selectedTemplateIndex}
+                    onSelectTemplate={setSelectedTemplateIndex}
+                  />
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel className="min-h-0 flex flex-col">
+                  <TemplateConfiguration
+                    form={form}
+                    builtins={builtins}
+                    kindOptions={kindOptions}
+                    selectedTemplateIndex={selectedTemplateIndex}
+                    onNext={handleNext}
+                    onBack={handleBack}
+                    isArtifacts={isArtifacts}
+                    isLoading={isLoading}
+                  />
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : (
+              <div className="flex-1 min-h-0 flex flex-col">
+                {activeStep === 1 && (
+                  <>
+                    <BasicInfoStep />
+                    <footer className="shrink-0 px-5 py-4 border-t border-border-button flex items-center justify-end">
+                      <Button type="button" onClick={handleNext}>
+                        {t('common.next')}
+                      </Button>
+                    </footer>
+                  </>
+                )}
 
-              {activeStep === 3 && isArtifacts && (
-                <BlueprintsStep
-                  form={form}
-                  selectedTemplateIndex={selectedTemplateIndex}
-                  onBack={() => setActiveStep(2)}
-                  onSave={form.handleSubmit(onSubmit)}
-                  isLoading={isLoading}
-                />
-              )}
-            </div>
-          )}
+                {activeStep === 3 && isArtifacts && (
+                  <BlueprintsStep
+                    form={form}
+                    selectedTemplateIndex={selectedTemplateIndex}
+                    onBack={() => setActiveStep(2)}
+                    onSave={form.handleSubmit(onSubmit)}
+                    isLoading={isLoading}
+                  />
+                )}
+              </div>
+            )}
+          </fieldset>
         </form>
       </Form>
     </section>

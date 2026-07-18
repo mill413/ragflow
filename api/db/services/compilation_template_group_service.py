@@ -89,6 +89,7 @@ class CompilationTemplateGroupService(CommonService):
 
         return {
             "id": group.id,
+            "tenant_id": group.tenant_id,
             "name": group.name,
             "description": group.description or "",
             "scope": group.scope,
@@ -139,6 +140,42 @@ class CompilationTemplateGroupService(CommonService):
             children_by_group.setdefault(child.group_id, []).append(child)
 
         return [cls._group_to_dict(g, children_by_group.get(g.id, [])) for g in groups]
+
+    @classmethod
+    @DB.connection_context()
+    def list_saved_by_tenant_ids(
+        cls,
+        tenant_ids: list[str],
+        keywords: str = "",
+        scope: str = "",
+        orderby: str = "create_time",
+        desc: bool = True,
+    ) -> list[dict]:
+        cls.ensure_table()
+        if not tenant_ids:
+            return []
+        query = cls.model.select().where(
+            cls.model.tenant_id.in_(tenant_ids),
+            cls.model.status == StatusEnum.VALID.value,
+        )
+        if keywords:
+            query = query.where(cls.model.name.contains(keywords))
+        if scope:
+            query = query.where(cls.model.scope == scope)
+        if not hasattr(cls.model, orderby):
+            orderby = "create_time"
+        order_field = getattr(cls.model, orderby)
+        groups = list(query.order_by(order_field.desc() if desc else order_field.asc()))
+        if not groups:
+            return []
+        group_ids = [group.id for group in groups]
+        children_by_group: dict[str, list[CompilationTemplate]] = {group_id: [] for group_id in group_ids}
+        for child in CompilationTemplate.select().where(
+            CompilationTemplate.group_id.in_(group_ids),
+            CompilationTemplate.status == StatusEnum.VALID.value,
+        ).order_by(CompilationTemplate.create_time.asc()):
+            children_by_group.setdefault(child.group_id, []).append(child)
+        return [cls._group_to_dict(group, children_by_group.get(group.id, [])) for group in groups]
 
     @classmethod
     @DB.connection_context()
@@ -251,6 +288,7 @@ class CompilationTemplateGroupService(CommonService):
         scope = _derive_scope(templates)
         group_id = get_uuid()
         with DB.atomic():
+            cls._purge_stale_invalid_groups(tenant_id, name)
             CompilationTemplateGroup.create(
                 id=group_id,
                 tenant_id=tenant_id,
@@ -390,6 +428,7 @@ class CompilationTemplateGroupService(CommonService):
         if not existing:
             return False
         with DB.atomic():
+            cls._purge_stale_invalid_groups(tenant_id, existing.name, exclude_id=group_id)
             cls.model.update(status=StatusEnum.INVALID.value).where(cls.model.id == group_id).execute()
             CompilationTemplate.update(status=StatusEnum.INVALID.value).where(
                 CompilationTemplate.group_id == group_id,
@@ -449,6 +488,21 @@ class CompilationTemplateGroupService(CommonService):
             ~CompilationTemplate.is_builtin,
             CompilationTemplate.status == StatusEnum.INVALID.value,
         ).execute()
+
+    @classmethod
+    def _purge_stale_invalid_groups(cls, tenant_id: str, name: str, exclude_id: str = "") -> None:
+        query = CompilationTemplateGroup.select(CompilationTemplateGroup.id).where(
+            CompilationTemplateGroup.tenant_id == tenant_id,
+            CompilationTemplateGroup.name == name,
+            CompilationTemplateGroup.status == StatusEnum.INVALID.value,
+        )
+        if exclude_id:
+            query = query.where(CompilationTemplateGroup.id != exclude_id)
+        stale_ids = [group.id for group in query]
+        if not stale_ids:
+            return
+        CompilationTemplate.delete().where(CompilationTemplate.group_id.in_(stale_ids)).execute()
+        CompilationTemplateGroup.delete().where(CompilationTemplateGroup.id.in_(stale_ids)).execute()
 
     # ------------------------------------------------------------------
     # Lookup helpers used by the orchestrator

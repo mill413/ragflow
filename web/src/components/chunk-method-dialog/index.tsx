@@ -303,7 +303,9 @@ export function ChunkMethodDialog({
               {parseType === ParseType.BuiltIn && <ChunkMethodItem />}
 
               {parseType === ParseType.BuiltIn && (
-                <CompilationTemplateFormField></CompilationTemplateFormField>
+                <CompilationTemplateFormField
+                  workspaceId={knowledgeDetails.tenant_id}
+                ></CompilationTemplateFormField>
               )}
 
               {showPages && parseType === ParseType.BuiltIn && (

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 type CompilationTemplateFormFieldProps = {
   horizontal?: boolean;
   name?: string;
+  workspaceId?: string;
 };
 
 const ScopeTranslationKeyMap: Record<string, string> = {
@@ -20,6 +21,7 @@ const ScopeTranslationKeyMap: Record<string, string> = {
 type CompilationTemplateMultiSelectProps = {
   value?: string[];
   onChange(value: string[]): void;
+  workspaceId?: string;
 };
 
 /**
@@ -35,9 +37,10 @@ type CompilationTemplateMultiSelectProps = {
 function CompilationTemplateMultiSelect({
   value: rawValue = [],
   onChange,
+  workspaceId,
 }: CompilationTemplateMultiSelectProps) {
   const { t } = useTranslation();
-  const { groups } = useFetchAllCompilationTemplateGroups();
+  const { groups } = useFetchAllCompilationTemplateGroups(workspaceId);
 
   const value = useMemo(() => {
     // Normalize legacy single-string values into an array during the migration.
@@ -96,6 +99,7 @@ function CompilationTemplateMultiSelect({
 export function CompilationTemplateFormField({
   horizontal,
   name = 'parser_config.compilation_template_group_id',
+  workspaceId,
 }: CompilationTemplateFormFieldProps) {
   const { t } = useTranslation();
 
@@ -110,6 +114,7 @@ export function CompilationTemplateFormField({
         <CompilationTemplateMultiSelect
           value={field.value ?? []}
           onChange={field.onChange}
+          workspaceId={workspaceId}
         />
       )}
     </RAGFlowFormItem>

@@ -9,6 +9,7 @@ export interface ITestMcpRequestBody {
 }
 
 export interface IImportMcpServersRequestBody {
+  workspace_id?: string;
   mcpServers: Record<
     string,
     Pick<IExportedMcpServer, 'type' | 'url' | 'authorization_token'>

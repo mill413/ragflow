@@ -17,12 +17,12 @@
 from quart import Response, request
 
 from api.apps import current_user, login_required
-from api.apps.workspace_access import personal_workspace_required
 from api.apps.restful_apis.utils.compilation_template_validation import validate_template_payload
 from api.db.services.compilation_template_group_service import (
     CompilationTemplateGroupService,
     GroupValidationError,
 )
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import (
     get_data_error_result,
     get_json_result,
@@ -35,6 +35,21 @@ from api.utils.pagination_utils import validate_rest_api_page_size
 
 _GROUP_NAME_MAX = 128
 _GROUP_DESCRIPTION_MAX = 1024
+
+
+def _group_response(group: dict) -> dict:
+    data = dict(group)
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
+    data["capabilities"] = WorkspaceAccessService.get_workspace_resource_capabilities(current_user.id, data)
+    return data
+
+
+def _visible_workspace_ids() -> list[str]:
+    visible_ids = WorkspaceAccessService.list_visible_workspace_ids(current_user.id)
+    workspace_id = request.args.get("workspace_id")
+    if workspace_id:
+        return [workspace_id] if workspace_id in visible_ids else []
+    return visible_ids
 
 
 def _validate_group_payload(req: dict, require_all: bool = True) -> str:
@@ -69,7 +84,6 @@ def _validate_group_payload(req: dict, require_all: bool = True) -> str:
 
 @manager.route("/compilation_template_groups", methods=["GET"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def list_groups() -> Response:
     keywords = request.args.get("keywords", "")
     scope = request.args.get("scope", "")
@@ -79,50 +93,52 @@ def list_groups() -> Response:
     desc = request.args.get("desc", "true").lower() != "false"
 
     try:
-        groups = CompilationTemplateGroupService.list_saved(current_user.id, keywords, scope, orderby, desc)
+        groups = CompilationTemplateGroupService.list_saved_by_tenant_ids(_visible_workspace_ids(), keywords, scope, orderby, desc)
         total = len(groups)
         if page_number and items_per_page:
             groups = groups[(page_number - 1) * items_per_page : page_number * items_per_page]
-        return get_json_result(data={"groups": groups, "total": total})
+        return get_json_result(data={"groups": [_group_response(group) for group in groups], "total": total})
     except Exception as exc:
         return server_error_response(exc)
 
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["GET"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def detail(group_id: str) -> Response:
     try:
-        group = CompilationTemplateGroupService.get_saved(group_id, current_user.id)
-        if group is None:
+        exists, stored_group = CompilationTemplateGroupService.get_by_id(group_id)
+        if not exists or not WorkspaceAccessService.can_read_workspace_resource(current_user.id, stored_group):
             return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
-        return get_json_result(data=group)
+        group = CompilationTemplateGroupService.get_saved(group_id, stored_group.tenant_id)
+        return get_json_result(data=_group_response(group))
     except Exception as exc:
         return server_error_response(exc)
 
 
 @manager.route("/compilation_template_groups", methods=["POST"])  # noqa: F821
 @login_required
-@personal_workspace_required
 @validate_request("name", "templates")
 async def create() -> Response:
     req = await get_request_json()
+    workspace_id = req.pop("workspace_id", current_user.id)
+    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        return get_data_error_result(message="No authorization.")
     error = _validate_group_payload(req)
     if error:
         return get_data_error_result(message=error)
 
     name = req["name"].strip()
-    if CompilationTemplateGroupService.name_exists(current_user.id, name):
+    if CompilationTemplateGroupService.name_exists(workspace_id, name):
         return get_data_error_result(message="Duplicated compilation template group name.")
 
     try:
         saved = CompilationTemplateGroupService.create_group(
-            tenant_id=current_user.id,
+            tenant_id=workspace_id,
             name=name,
             description=req.get("description", ""),
             templates=req["templates"],
         )
-        return get_json_result(data=saved)
+        return get_json_result(data=_group_response(saved))
     except GroupValidationError as exc:
         return get_data_error_result(message=str(exc))
     except Exception as exc:
@@ -131,34 +147,34 @@ async def create() -> Response:
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["PUT"])  # noqa: F821
 @login_required
-@personal_workspace_required
 async def update(group_id: str) -> Response:
     req = await get_request_json()
     error = _validate_group_payload(req, require_all=False)
     if error:
         return get_data_error_result(message=error)
 
-    existing = CompilationTemplateGroupService.get_saved(group_id, current_user.id)
-    if existing is None:
+    exists, stored_group = CompilationTemplateGroupService.get_by_id(group_id)
+    if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, stored_group):
         return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
+    workspace_id = stored_group.tenant_id
 
     name = req.get("name")
     if isinstance(name, str):
         name = name.strip()
-        if CompilationTemplateGroupService.name_exists(current_user.id, name, group_id):
+        if CompilationTemplateGroupService.name_exists(workspace_id, name, group_id):
             return get_data_error_result(message="Duplicated compilation template group name.")
 
     try:
         updated = CompilationTemplateGroupService.update_group(
             group_id=group_id,
-            tenant_id=current_user.id,
+            tenant_id=workspace_id,
             name=name if isinstance(name, str) else None,
             description=req.get("description") if "description" in req else None,
             templates=req.get("templates") if "templates" in req else None,
         )
         if updated is None:
             return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
-        return get_json_result(data=updated)
+        return get_json_result(data=_group_response(updated))
     except GroupValidationError as exc:
         return get_data_error_result(message=str(exc))
     except Exception as exc:
@@ -167,10 +183,12 @@ async def update(group_id: str) -> Response:
 
 @manager.route("/compilation_template_groups/<group_id>", methods=["DELETE"])  # noqa: F821
 @login_required
-@personal_workspace_required
 def delete(group_id: str) -> Response:
     try:
-        ok = CompilationTemplateGroupService.delete_group(group_id, current_user.id)
+        exists, stored_group = CompilationTemplateGroupService.get_by_id(group_id)
+        if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, stored_group):
+            return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
+        ok = CompilationTemplateGroupService.delete_group(group_id, stored_group.tenant_id)
         if not ok:
             return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
         return get_json_result(data=True)

@@ -1,7 +1,10 @@
-export interface IMcpServer {
+import { IWorkspaceResource } from './workspace';
+
+export interface IMcpServer extends IWorkspaceResource {
   create_date: string;
   description: null;
   id: string;
+  tenant_id: string;
   name: string;
   server_type: string;
   update_date: string;

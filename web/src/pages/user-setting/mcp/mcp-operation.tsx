@@ -25,29 +25,37 @@ export function McpOperation({
   return (
     <div className="hidden gap-1  group-hover:flex text-text-secondary">
       {/* <RAGFlowTooltip tooltip={t('mcp.export')}> */}
-      <Upload
-        className="size-5 cursor-pointer p-1 rounded-sm hover:text-text-primary hover:bg-bg-card"
-        onClick={handleExportMcpJson([mcp.id])}
-      />
+      {mcp.capabilities?.update && (
+        <Upload
+          className="size-5 cursor-pointer p-1 rounded-sm hover:text-text-primary hover:bg-bg-card"
+          onClick={handleExportMcpJson([mcp.id])}
+        />
+      )}
       {/* </RAGFlowTooltip>
       <RAGFlowTooltip tooltip={t('common.edit')}> */}
-      <PenLine
-        className="size-5 cursor-pointer p-1 rounded-sm hover:text-text-primary hover:bg-bg-card"
-        onClick={showEditModal(mcp.id)}
-      />
+      {mcp.capabilities?.update && (
+        <PenLine
+          className="size-5 cursor-pointer p-1 rounded-sm hover:text-text-primary hover:bg-bg-card"
+          onClick={showEditModal(mcp.id)}
+        />
+      )}
       {/* </RAGFlowTooltip>
       <RAGFlowTooltip tooltip={t('common.delete')}> */}
-      <ConfirmDeleteDialog
-        onOk={handleDelete}
-        title={t('common.delete') + ' ' + t('mcp.mcpServer')}
-        content={{
-          node: (
-            <ConfirmDeleteDialogNode name={mcp.name}></ConfirmDeleteDialogNode>
-          ),
-        }}
-      >
-        <Trash2 className="size-5 cursor-pointer p-1 rounded-sm hover:text-state-error hover:bg-state-error-5" />
-      </ConfirmDeleteDialog>
+      {mcp.capabilities?.delete && (
+        <ConfirmDeleteDialog
+          onOk={handleDelete}
+          title={t('common.delete') + ' ' + t('mcp.mcpServer')}
+          content={{
+            node: (
+              <ConfirmDeleteDialogNode
+                name={mcp.name}
+              ></ConfirmDeleteDialogNode>
+            ),
+          }}
+        >
+          <Trash2 className="size-5 cursor-pointer p-1 rounded-sm hover:text-state-error hover:bg-state-error-5" />
+        </ConfirmDeleteDialog>
+      )}
       {/* </RAGFlowTooltip> */}
     </div>
   );

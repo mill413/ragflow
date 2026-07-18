@@ -274,6 +274,70 @@ def test_knowledgebase_references_must_stay_in_workspace(workspace_dependencies,
     assert not WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["missing"])
 
 
+def test_workspace_resources_are_readable_by_members_and_writable_by_managers(workspace_dependencies, monkeypatch):
+    monkeypatch.setattr(
+        WorkspaceAccessService,
+        "list_visible_workspace_ids",
+        classmethod(lambda cls, user_id: ["team-1"] if user_id in {"member-1", "admin-1", "system-admin"} else []),
+    )
+    resource = {"tenant_id": "team-1"}
+
+    assert WorkspaceAccessService.get_workspace_resource_capabilities("member-1", resource) == {
+        "read": True,
+        "update": False,
+        "delete": False,
+    }
+    assert WorkspaceAccessService.get_workspace_resource_capabilities("admin-1", resource) == {
+        "read": True,
+        "update": True,
+        "delete": True,
+    }
+    assert WorkspaceAccessService.get_workspace_resource_capabilities("system-admin", resource) == {
+        "read": True,
+        "update": True,
+        "delete": True,
+    }
+
+
+def test_connector_mcp_and_compilation_references_must_stay_in_workspace(workspace_dependencies, monkeypatch):
+    connectors = {
+        "team-connector": SimpleNamespace(id="team-connector", tenant_id="team-1"),
+        "personal-connector": SimpleNamespace(id="personal-connector", tenant_id="user-1"),
+    }
+    mcp_servers = {
+        "team-mcp": SimpleNamespace(id="team-mcp", tenant_id="team-1"),
+        "personal-mcp": SimpleNamespace(id="personal-mcp", tenant_id="user-1"),
+    }
+    groups = {
+        "team-group": SimpleNamespace(id="team-group", tenant_id="team-1", status=StatusEnum.VALID.value),
+        "personal-group": SimpleNamespace(id="personal-group", tenant_id="user-1", status=StatusEnum.VALID.value),
+    }
+    monkeypatch.setattr(WorkspaceAccessService, "list_visible_workspace_ids", classmethod(lambda cls, user_id: ["team-1"]))
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.Connector.get_or_none",
+        lambda *_args, **kwargs: connectors.get(kwargs.get("id")),
+    )
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.MCPServer.get_or_none",
+        lambda *_args, **kwargs: mcp_servers.get(kwargs.get("id")),
+    )
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.CompilationTemplateGroup.get_or_none",
+        lambda *_args, **kwargs: groups.get(kwargs.get("id")),
+    )
+
+    assert WorkspaceAccessService.extract_reference_ids(
+        {"mcp": [{"mcp_id": "team-mcp"}], "compilation_template_group_ids": ["team-group"]},
+        {"mcp_id", "compilation_template_group_ids"},
+    ) == {"team-mcp", "team-group"}
+    assert WorkspaceAccessService.can_reference_connectors("member-1", "team-1", ["team-connector"])
+    assert not WorkspaceAccessService.can_reference_connectors("member-1", "team-1", ["personal-connector"])
+    assert WorkspaceAccessService.can_reference_mcp_servers("member-1", "team-1", ["team-mcp"])
+    assert not WorkspaceAccessService.can_reference_mcp_servers("member-1", "team-1", ["personal-mcp"])
+    assert WorkspaceAccessService.can_reference_compilation_template_groups("member-1", "team-1", ["team-group"])
+    assert not WorkspaceAccessService.can_reference_compilation_template_groups("member-1", "team-1", ["personal-group"])
+
+
 def test_team_conversations_are_shared_and_managed_by_team_administrators(workspace_dependencies):
     team_chat = {"id": "chat-1", "tenant_id": "team-1", "status": StatusEnum.VALID.value}
     member_conversation = {"id": "conv-1", "dialog_id": "chat-1", "user_id": "member-1"}

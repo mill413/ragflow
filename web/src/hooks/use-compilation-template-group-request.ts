@@ -17,6 +17,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from 'ahooks';
 import { useCallback, useMemo } from 'react';
 import { useParams } from 'react-router';
+import { useWorkspace } from './use-workspace';
 
 import {
   useGetPaginationWithRouter,
@@ -32,21 +33,30 @@ export const enum CompilationTemplateGroupApiAction {
 }
 
 export const CompilationTemplateGroupKeys = {
-  list: (keywords?: string, page?: number, pageSize?: number) =>
+  list: (
+    keywords?: string,
+    page?: number,
+    pageSize?: number,
+    workspaceId?: string,
+  ) =>
     [
       CompilationTemplateGroupApiAction.FetchCompilationTemplateGroups,
-      { keywords, page, pageSize },
+      { keywords, page, pageSize, workspaceId },
     ] as const,
   detail: (id?: string) =>
     [
       CompilationTemplateGroupApiAction.FetchCompilationTemplateGroup,
       id,
     ] as const,
-  all: () =>
-    [CompilationTemplateGroupApiAction.FetchCompilationTemplateGroups] as const,
+  all: (workspaceId?: string) =>
+    [
+      CompilationTemplateGroupApiAction.FetchCompilationTemplateGroups,
+      { workspaceId },
+    ] as const,
 };
 
 export const useFetchCompilationTemplateGroupsByPage = () => {
+  const { workspaceFilterId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -59,6 +69,7 @@ export const useFetchCompilationTemplateGroupsByPage = () => {
       debouncedSearchString,
       pagination.current,
       pagination.pageSize,
+      workspaceFilterId,
     ),
     initialData: {
       groups: [],
@@ -72,6 +83,7 @@ export const useFetchCompilationTemplateGroupsByPage = () => {
             keywords: debouncedSearchString,
             page: pagination.current,
             page_size: pagination.pageSize,
+            workspace_id: workspaceFilterId,
           },
         },
         true,
@@ -121,6 +133,7 @@ export const useFetchCompilationTemplateGroup = () => {
 };
 
 export const useCreateCompilationTemplateGroup = () => {
+  const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
 
   const {
@@ -132,7 +145,10 @@ export const useCreateCompilationTemplateGroup = () => {
       CompilationTemplateGroupApiAction.CreateCompilationTemplateGroup,
     ],
     mutationFn: async (params: ICreateCompilationTemplateGroupRequestBody) => {
-      const { data } = await createCompilationTemplateGroup(params);
+      const { data } = await createCompilationTemplateGroup({
+        ...params,
+        workspace_id: workspaceId,
+      });
       return data;
     },
     onSuccess: () => {
@@ -240,15 +256,24 @@ export const useDeleteCompilationTemplateGroup = () => {
   return { data, loading, deleteGroup };
 };
 
-export const useFetchAllCompilationTemplateGroups = () => {
+export const useFetchAllCompilationTemplateGroups = (
+  targetWorkspaceId?: string,
+) => {
+  const { workspaceFilterId } = useWorkspace();
+  const workspaceId = targetWorkspaceId ?? workspaceFilterId;
   const { data, isFetching: loading } = useQuery<ICompilationTemplateGroup[]>({
-    queryKey: CompilationTemplateGroupKeys.all(),
+    queryKey: CompilationTemplateGroupKeys.all(workspaceId),
     initialData: [],
     gcTime: 0,
     queryFn: async () => {
       const { data } = await compilationTemplateGroupService.listGroups(
         {
-          params: { keywords: '', page: 1, page_size: 100 },
+          params: {
+            keywords: '',
+            page: 1,
+            page_size: 100,
+            workspace_id: workspaceId,
+          },
         },
         true,
       );

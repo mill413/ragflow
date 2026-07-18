@@ -25,7 +25,10 @@ export function NaiveConfiguration() {
   return (
     <MainContainer>
       <ConfigurationFormContainer>
-        <CompilationTemplateFormField horizontal></CompilationTemplateFormField>
+        <CompilationTemplateFormField
+          horizontal
+          workspaceId={ownerTenantId}
+        ></CompilationTemplateFormField>
         <LayoutRecognizeFormField
           testId="ds-settings-parser-pdf-parser-select"
           ownerTenantId={ownerTenantId}

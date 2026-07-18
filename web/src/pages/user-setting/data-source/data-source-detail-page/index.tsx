@@ -189,6 +189,7 @@ const SourceDetailPage = () => {
       const newFields = fields.map((field) => {
         return {
           ...field,
+          disabled: field.disabled || detail.capabilities?.update === false,
           horizontal: true,
           onChange: undefined,
         };
@@ -244,7 +245,16 @@ const SourceDetailPage = () => {
             <Button
               type="button"
               onClick={handlePrimaryAction}
-              disabled={addLoading || statusUpdateLoading}
+              disabled={
+                addLoading ||
+                statusUpdateLoading ||
+                detail?.capabilities?.update === false
+              }
+              title={
+                detail?.capabilities?.update === false
+                  ? t('common.readOnlySaveTip')
+                  : undefined
+              }
               loading={
                 (addLoading && actionMode === 'save') ||
                 (statusUpdateLoading && actionMode !== 'save')

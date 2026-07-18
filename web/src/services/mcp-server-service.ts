@@ -23,5 +23,7 @@ const mcpServerService = {
 
 export default mcpServerService;
 
-export const listMcpServers = (params?: IPaginationRequestBody, body?: any) =>
-  request.get(api.listMcpServer, { params: { ...params, ...(body || {}) } });
+export const listMcpServers = (
+  params?: IPaginationRequestBody & { workspace_id?: string },
+  body?: any,
+) => request.get(api.listMcpServer, { params: { ...params, ...(body || {}) } });

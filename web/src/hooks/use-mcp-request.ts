@@ -20,6 +20,7 @@ import {
   useGetPaginationWithRouter,
   useHandleSearchChange,
 } from './logic-hooks';
+import { useWorkspace } from './use-workspace';
 
 export const enum McpApiAction {
   ListMcpServer = 'listMcpServer',
@@ -34,7 +35,9 @@ export const enum McpApiAction {
   TestMcpServer = 'testMcpServer',
 }
 
-export const useListMcpServer = () => {
+export const useListMcpServer = (targetWorkspaceId?: string) => {
+  const { workspaceFilterId } = useWorkspace();
+  const workspaceId = targetWorkspaceId ?? workspaceFilterId;
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -45,6 +48,7 @@ export const useListMcpServer = () => {
       {
         debouncedSearchString,
         ...pagination,
+        workspaceId,
       },
     ],
     initialData: { total: 0, mcp_servers: [] },
@@ -54,6 +58,7 @@ export const useListMcpServer = () => {
         keywords: debouncedSearchString,
         page_size: pagination.pageSize,
         page: pagination.current,
+        workspace_id: workspaceId,
       });
       return data?.data;
     },
@@ -85,6 +90,7 @@ export const useGetMcpServer = (id: string) => {
 };
 
 export const useCreateMcpServer = () => {
+  const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   const {
     data,
@@ -93,7 +99,10 @@ export const useCreateMcpServer = () => {
   } = useMutation({
     mutationKey: [McpApiAction.CreateMcpServer],
     mutationFn: async (params: Record<string, any>) => {
-      const { data = {} } = await mcpServerService.create(params);
+      const { data = {} } = await mcpServerService.create({
+        ...params,
+        workspace_id: workspaceId,
+      });
       if (data.code === 0) {
         message.success(i18n.t(`message.created`));
 
@@ -161,6 +170,7 @@ export const useDeleteMcpServer = () => {
 };
 
 export const useImportMcpServer = () => {
+  const { workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
   const {
     data,
@@ -169,7 +179,10 @@ export const useImportMcpServer = () => {
   } = useMutation({
     mutationKey: [McpApiAction.ImportMcpServer],
     mutationFn: async (params: IImportMcpServersRequestBody) => {
-      const { data = {} } = await mcpServerService.import(params);
+      const { data = {} } = await mcpServerService.import({
+        ...params,
+        workspace_id: workspaceId,
+      });
       if (data.code === 0) {
         message.success(i18n.t(`message.operated`));
 
@@ -219,6 +232,7 @@ export const useExportMcpServer = () => {
 };
 
 export const useTestMcpServer = () => {
+  const { workspaceId } = useWorkspace();
   const {
     data,
     isPending: loading,
@@ -226,7 +240,10 @@ export const useTestMcpServer = () => {
   } = useMutation<ResponseType<IMCPTool[]>, Error, ITestMcpRequestBody>({
     mutationKey: [McpApiAction.TestMcpServer],
     mutationFn: async (params) => {
-      const { data } = await mcpServerService.test(params);
+      const { data } = await mcpServerService.test({
+        ...params,
+        workspace_id: workspaceId,
+      });
 
       return data;
     },

@@ -336,6 +336,9 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
     if "connectors" in req:
         connectors = req["connectors"]
         del req["connectors"]
+        connector_ids = [connector.get("id") for connector in connectors if isinstance(connector, dict) and connector.get("id")]
+        if len(connector_ids) != len(connectors) or not WorkspaceAccessService.can_reference_connectors(user_id, kb.tenant_id, connector_ids):
+            return False, "Connectors and datasets must belong to the same workspace."
 
     if req.get("parser_config"):
         # Flatten parent_child config into children_delimiter for the execution layer
@@ -352,6 +355,12 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
         req_ext_fields = parser_config.pop("ext", {})
         parser_config.update(req_ext_fields)
         req["parser_config"] = deep_merge(kb.parser_config, parser_config)
+        group_ids = WorkspaceAccessService.extract_reference_ids(
+            req["parser_config"],
+            {"compilation_template_group_id", "compilation_template_group_ids"},
+        )
+        if not WorkspaceAccessService.can_reference_compilation_template_groups(user_id, kb.tenant_id, group_ids):
+            return False, "Compilation templates and datasets must belong to the same workspace."
 
     if (chunk_method := req.get("parser_id")) and chunk_method != kb.parser_id:
         if not req.get("parser_config"):

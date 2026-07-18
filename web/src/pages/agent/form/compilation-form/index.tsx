@@ -41,7 +41,10 @@ const CompilationForm = ({ node }: INextOperatorForm) => {
         <LargeModelFormField
           ownerTenantId={ownerTenantId}
         ></LargeModelFormField>
-        <CompilationTemplateFormField name="compilation_template_group_ids"></CompilationTemplateFormField>
+        <CompilationTemplateFormField
+          name="compilation_template_group_ids"
+          workspaceId={ownerTenantId}
+        ></CompilationTemplateFormField>
         <Output list={outputList}></Output>
       </FormWrapper>
     </Form>

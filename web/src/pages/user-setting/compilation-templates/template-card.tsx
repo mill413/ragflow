@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 
 import { formatKindLabel } from '@/utils/compilation-template-util';
 import { TemplateDropdown } from './template-dropdown';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 
 type TemplateCardProps = {
   data: ICompilationTemplateGroup;
@@ -51,9 +52,11 @@ export function TemplateCard({ data, onClick, onDelete }: TemplateCardProps) {
               <ScopeIcon scope={data.scope} />
             </div>
 
-            <TemplateDropdown data={data} onDelete={onDelete}>
-              <MoreButton />
-            </TemplateDropdown>
+            {data.capabilities?.delete && (
+              <TemplateDropdown data={data} onDelete={onDelete}>
+                <MoreButton />
+              </TemplateDropdown>
+            )}
           </section>
 
           <p className="text-sm text-text-secondary line-clamp-1">
@@ -66,6 +69,9 @@ export function TemplateCard({ data, onClick, onDelete }: TemplateCardProps) {
                 {formatKindLabel(kind)}
               </Badge>
             ))}
+          </div>
+          <div className="mt-auto flex justify-end pt-2">
+            <WorkspaceBadge {...data} />
           </div>
         </div>
       </CardContent>
