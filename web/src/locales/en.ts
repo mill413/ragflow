@@ -3546,6 +3546,11 @@ Important structured information may include: names, dates, locations, events, k
         fileType: 'File type',
         sourceType: 'Source',
         creator: 'Creator',
+        resourceInformation: 'Resource information',
+        resourceId: 'Resource ID',
+        resourceType: 'Resource type',
+        datasetId: 'Dataset ID',
+        parentId: 'Parent folder ID',
         deleteResource: 'Delete resource',
         deleteConfirmation:
           'Delete “{{name}}”? Related data owned by this resource will also be removed. This cannot be undone.',

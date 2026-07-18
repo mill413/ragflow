@@ -57,6 +57,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { formatBytes } from '@/lib/utils';
 import {
   deleteManagedResource,
@@ -77,6 +84,15 @@ type ResourceColumn = {
   label: string;
   render: (resource: AdminService.ManagedResourceItem) => ReactNode;
 };
+type SelectedResourceDetail =
+  | {
+      kind: 'resource';
+      resource: AdminService.ManagedResourceItem;
+    }
+  | {
+      kind: 'failure';
+      document: AdminService.FailedDocumentItem;
+    };
 
 const RESOURCE_VIEWS: Array<{
   type: ResourceView;
@@ -134,6 +150,8 @@ export default function AdminResources() {
     direction: 'desc',
   });
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
+  const [selectedDetail, setSelectedDetail] =
+    useState<SelectedResourceDetail>();
   const resourceType = view;
 
   useEffect(() => {
@@ -386,6 +404,115 @@ export default function AdminResources() {
     }
   })();
 
+  const detailName =
+    selectedDetail?.kind === 'resource'
+      ? selectedDetail.resource.name
+      : selectedDetail?.document.name;
+  const detailId =
+    selectedDetail?.kind === 'resource'
+      ? selectedDetail.resource.id
+      : selectedDetail?.document.id;
+  const detailItems: Array<{ label: string; value: ReactNode }> = (() => {
+    if (!selectedDetail) return [];
+
+    if (selectedDetail.kind === 'failure') {
+      const document = selectedDetail.document;
+      return [
+        {
+          label: t('admin.resourceManagementPage.resourceType'),
+          value: t('admin.resourceType.file'),
+        },
+        {
+          label: t('admin.workspaceOwner'),
+          value: `${t(
+            document.workspace_type === 'team'
+              ? 'admin.teamWorkspace'
+              : 'admin.personalWorkspace',
+          )}-${document.workspace_name}`,
+        },
+        {
+          label: t('admin.knowledgeMonitoring.dataset'),
+          value: document.dataset_name,
+        },
+        {
+          label: t('admin.resourceManagementPage.datasetId'),
+          value: document.dataset_id,
+        },
+        {
+          label: t('admin.knowledgeMonitoring.fileSize'),
+          value: formatBytes(document.size ?? 0, { decimals: 1 }),
+        },
+        {
+          label: t('admin.knowledgeMonitoring.failureReason'),
+          value: document.failure_reason || '-',
+        },
+        {
+          label: t('admin.createTime'),
+          value: formatDate(document.create_date) || '-',
+        },
+      ];
+    }
+
+    const resource = selectedDetail.resource;
+    const items: Array<{ label: string; value: ReactNode }> = [
+      {
+        label: t('admin.resourceManagementPage.resourceType'),
+        value: t(`admin.resourceType.${resource.resource_type}`),
+      },
+      {
+        label: t('admin.workspaceOwner'),
+        value: `${t(
+          resource.workspace_type === 'team'
+            ? 'admin.teamWorkspace'
+            : 'admin.personalWorkspace',
+        )}-${resource.workspace_name}`,
+      },
+      {
+        label: t('admin.creator'),
+        value: resource.creator_name || '-',
+      },
+      {
+        label: t('admin.permission'),
+        value: t(
+          resource.permission === 'team'
+            ? 'admin.teamWorkspace'
+            : 'admin.personalWorkspace',
+        ),
+      },
+      ...resourceColumns
+        .filter((column) => column.key !== 'creator_name')
+        .map((column) => ({
+          label: column.label,
+          value: column.render(resource),
+        })),
+    ];
+
+    if (resource.resource_type === 'dataset') {
+      items.push({
+        label: t('admin.tokenNum'),
+        value: resource.token_num ?? 0,
+      });
+    }
+    if (resource.resource_type === 'file' && resource.parent_id) {
+      items.push({
+        label: t('admin.resourceManagementPage.parentId'),
+        value: resource.parent_id,
+      });
+    }
+
+    items.push(
+      {
+        label: t('admin.createTime'),
+        value: formatDate(resource.create_date) || '-',
+      },
+      {
+        label: t('admin.lastUpdateTime'),
+        value: formatDate(resource.update_date) || '-',
+      },
+    );
+    return items;
+  })();
+
   const currentView = RESOURCE_VIEWS.find(({ type }) => type === view);
   if (!view || !currentView) {
     return <Navigate to={Routes.AdminKnowledgeManagement} replace />;
@@ -567,7 +694,13 @@ export default function AdminResources() {
                 <TableBody className={isFetching ? 'opacity-60' : undefined}>
                   {sortedResources.length ? (
                     sortedResources.map((resource) => (
-                      <TableRow key={resource.id}>
+                      <TableRow
+                        key={resource.id}
+                        className="group/row cursor-pointer"
+                        onClick={() =>
+                          setSelectedDetail({ kind: 'resource', resource })
+                        }
+                      >
                         <TableCell>
                           <div className="font-medium">
                             {resource.name || t('admin.unnamedResource')}
@@ -597,7 +730,10 @@ export default function AdminResources() {
                         <TableCell>
                           {formatDate(resource.update_date) || '-'}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell
+                          className="text-center"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex">
@@ -720,7 +856,13 @@ export default function AdminResources() {
                     >
                       {sortedFailures.length ? (
                         sortedFailures.map((document) => (
-                          <TableRow key={document.id}>
+                          <TableRow
+                            key={document.id}
+                            className="cursor-pointer"
+                            onClick={() =>
+                              setSelectedDetail({ kind: 'failure', document })
+                            }
+                          >
                             <TableCell>
                               <div className="font-medium">{document.name}</div>
                               <div className="max-w-48 truncate text-xs text-text-secondary">
@@ -812,6 +954,43 @@ export default function AdminResources() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <Sheet
+          open={Boolean(selectedDetail)}
+          onOpenChange={(open) => !open && setSelectedDetail(undefined)}
+        >
+          <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+            <SheetHeader className="border-b border-border-button px-6 py-5">
+              <SheetTitle>
+                {detailName || t('admin.unnamedResource')}
+              </SheetTitle>
+              <SheetDescription className="font-mono text-xs">
+                {t('admin.resourceManagementPage.resourceId')}：
+                {detailId || '-'}
+              </SheetDescription>
+            </SheetHeader>
+            <ScrollArea className="h-[calc(100vh-97px)] px-6">
+              <section className="py-5">
+                <div className="mb-3 text-sm font-medium">
+                  {t('admin.resourceManagementPage.resourceInformation')}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {detailItems.map(({ label, value }, index) => (
+                    <div
+                      key={`${label}-${index}`}
+                      className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
+                    >
+                      <div className="text-xs text-text-secondary">{label}</div>
+                      <div className="mt-2 break-words text-sm font-medium text-text-primary">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
       </Card>
     </TooltipProvider>
   );
