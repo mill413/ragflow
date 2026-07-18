@@ -241,7 +241,7 @@ RUN --mount=type=bind,source=.git,target=/ragflow/.git \
     test -n "$ragflow_version" && \
     test -n "$git_commit" && \
     case "$build_timestamp" in *[!0-9]*|'') exit 1 ;; esac && \
-    printf '%s-%s-%s\n' "$ragflow_version" "$build_timestamp" "$git_commit" > /ragflow/VERSION
+    printf '%s.%s.%s\n' "$ragflow_version" "$build_timestamp" "$git_commit" > /ragflow/VERSION
 
 # production stage
 FROM base AS production
