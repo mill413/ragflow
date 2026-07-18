@@ -674,6 +674,8 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       mineruParseMethod: 'Parse method',
       mineruParseMethodTip:
         'Method for parsing PDF: auto (automatic detection), txt (text extraction), ocr (optical character recognition)',
+      mineruLanguage: 'Recognition language',
+      mineruLanguageTip: 'Preferred language for OCR recognition in MinerU.',
       mineruFormulaEnable: 'Formula recognition',
       mineruFormulaEnableTip:
         'Enable formula recognition. Note: This may not work correctly for Cyrillic documents.',

@@ -605,6 +605,9 @@ export default {
         '种子是伪随机算法的起点，它确保在不同运行中产生相同的输出，从而保证可重复性。',
       datasetDescription: '你的知识库描述。',
       overlappedPercentTip: '相邻两个块之间的重叠百分比',
+      globalIndexModelTip:
+        '用于生成知识图谱、RAPTOR、自动元数据、自动关键词和自动问题。模型性能会影响生成质量。',
+      globalIndexModel: '索引模型',
       settings: '设置',
       autoMetadataTip:
         '自动生成元数据。适用于解析新文件。现有文件需要重新解析才能更新（chunk将保留）。请注意，配置中指定的索引模型将消耗额外的 Token。',
@@ -616,6 +619,8 @@ export default {
       mineruParseMethod: '解析方法',
       mineruParseMethodTip:
         'PDF 解析方法：auto（自动检测）、txt（文本提取）、ocr（光学字符识别）',
+      mineruLanguage: '识别语言',
+      mineruLanguageTip: 'MinerU 进行 OCR 识别时优先使用的语言。',
       mineruFormulaEnable: '公式识别',
       mineruFormulaEnableTip:
         '启用公式识别。注意：对于西里尔文档可能无法正常工作。',
@@ -633,6 +638,7 @@ export default {
       paddleocrAlgorithmTip: '用于 PaddleOCR 解析的算法',
       paddleocrSelectAlgorithm: '选择算法',
       paddleocrModelNamePlaceholder: '例如：paddleocr-环境-1',
+      overlappedPercent: '重叠比例（%）',
       generationScopeTip: '选择 RAPTOR 的生成范围：整个知识库或单个文件。',
       generationScope: '生成范围',
       scopeSingleFile: '单文件',
@@ -645,6 +651,7 @@ export default {
       dataSource: '数据源',
       linkSourceSetTip: '管理与此知识库的数据源链接',
       linkDataSource: '链接数据源',
+      tocExtraction: '页面索引',
       tocExtractionTip:
         '对于已有的chunk生成层级结构的目录信息（每个文件一个目录）。在查询时，激活`Page Index`后，系统会用大模型去判断用户问题和哪些目录项相关，从而找到相关的chunk。',
       deleteGenerateModalContent: `
@@ -697,8 +704,40 @@ export default {
       upload: '上传',
       english: '英文',
       chinese: '中文',
+      portugueseBr: '葡萄牙语（巴西）',
       embeddingModelPlaceholder: '请选择嵌入模型',
       chunkMethodPlaceholder: '请选择分块方法',
+      tableColumnMode: '列处理模式',
+      tableColumnModeAuto: '自动',
+      tableColumnModeManual: '手动',
+      tableColumnModeAutoDescription:
+        '所有列都会写入文本块内容，并同时保存为元数据（RAGFlow 默认方式）。',
+      tableColumnRoles: '列用途',
+      tableColumnRolesTip:
+        '选择各列用于文本块索引、仅作为可筛选的元数据，或同时用于两者。设置仅对新解析生效；已有文档需要重新解析。',
+      tableColumnRoleIndexing: '参与索引',
+      tableColumnRoleMetadata: '仅元数据',
+      tableColumnRoleBoth: '两者',
+      tableColumnRolesEmpty: '请先上传并解析 CSV 或 Excel 文件，再配置列用途。',
+      tableColumnRolesReparseTip:
+        '已有文档需要重新解析后，新的列用途才会生效。',
+      parserLabel: {
+        naive: '通用',
+        general: '通用',
+        qa: '问答',
+        resume: '简历',
+        manual: '手册',
+        table: '表格',
+        paper: '论文',
+        book: '书籍',
+        laws: '法律',
+        presentation: '演示文稿',
+        picture: '图片',
+        one: '单个文本块',
+        audio: '音频',
+        email: '邮件',
+        tag: '标签',
+      },
       save: '保存',
       me: '只有我',
       team: '团队',
@@ -838,6 +877,7 @@ export default {
       entityTypes: '实体类型',
       compilationTemplate: '编译模板',
       scopeFile: '文件',
+      vietnamese: '越南语',
       pageRank: '页面排名',
       pageRankTip: `知识库检索时，你可以为特定知识库设置较高的 PageRank 分数，该知识库中匹配文本块的混合相似度得分会自动叠加 PageRank 分数，从而提升排序权重。详见 https://ragflow.io/docs/dev/set_page_rank。`,
       tagName: '标签',
@@ -876,6 +916,8 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       community: '社区报告生成',
       communityTip:
         '区块被聚集成层次化的社区，实体和关系通过更高抽象层次将每个部分连接起来。然后，我们使用 LLM 生成每个社区的摘要，称为社区报告。更多信息：https://www.microsoft.com/en-us/research/blog/graphrag-improving-global-search-via-dynamic-community-selection/',
+      theDocumentBeingParsedCannotBeDeleted: '正在解析的文档不能被删除',
+      lastWeek: '较上周',
       top: '前n条',
     },
     chunk: {
