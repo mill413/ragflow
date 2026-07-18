@@ -128,10 +128,12 @@ declare namespace AdminService {
     | 'chat'
     | 'agent'
     | 'search'
-    | 'memory';
+    | 'memory'
+    | 'file';
 
   export type ManagedResourceItem = {
     id: string;
+    resource_type: ManagedResourceType;
     name: string;
     workspace_id: string;
     workspace_name: string;
@@ -147,6 +149,19 @@ declare namespace AdminService {
     storage_bytes?: number;
     failed_documents?: number;
     processing_documents?: number;
+    dataset_count?: number;
+    document_count?: number;
+    session_count?: number;
+    release?: boolean;
+    canvas_type?: string;
+    memory_type?: number;
+    storage_type?: string;
+    memory_size?: number;
+    size?: number;
+    parent_id?: string;
+    file_type?: string;
+    source_type?: string;
+    deletable: boolean;
   };
 
   export type ManagedResourceList = {

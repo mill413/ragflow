@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 
+import asyncio
 import logging
 from typing import Any
 
@@ -27,6 +28,7 @@ from responses import success_response, error_response
 from services import UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
+from common.exceptions import ResourceInUseException
 from common.versions import get_ragflow_version
 from api.utils.api_utils import generate_confirmation_token
 from common.log_utils import get_log_levels, set_log_level
@@ -464,6 +466,38 @@ def list_failed_documents():
         return error_response(str(e), 400)
     except Exception as e:
         logging.exception("Failed to list failed documents")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_resource(resource_type, resource_id):
+    try:
+        return success_response(
+            asyncio.run(
+                ResourceMgr.delete_resource(
+                    resource_type,
+                    resource_id,
+                    current_user.id,
+                    request.headers.get("Authorization", ""),
+                )
+            )
+        )
+    except ResourceInUseException as e:
+        reference_names = ", ".join(
+            f'{reference["resource_type"]}: {reference["resource_name"] or reference["resource_id"]}'
+            for reference in e.references
+        )
+        return error_response(
+            f"Resource is referenced and cannot be deleted. Referenced by: {reference_names}",
+            409,
+            {"reason": "resource_in_use", "targets": e.targets, "references": e.references},
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to delete admin resource")
         return error_response(str(e), 500)
 
 

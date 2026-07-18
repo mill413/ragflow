@@ -432,6 +432,8 @@ export default {
   adminTeamMember: (teamId: string, userId: string) =>
     `${restAPIv1}/admin/teams/${teamId}/members/${userId}`,
   adminListManagedResources: `${restAPIv1}/admin/resources`,
+  adminManagedResource: (resourceType: string, resourceId: string) =>
+    `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
 
   adminListServices: `${restAPIv1}/admin/services`,

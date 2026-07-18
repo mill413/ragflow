@@ -115,6 +115,7 @@ const {
   adminDepartments,
   adminDepartment,
   adminListManagedResources,
+  adminManagedResource,
   adminListFailedDocuments,
 
   adminListServices,
@@ -293,6 +294,13 @@ export const listFailedDocuments = (params: {
   request.get<ResponseData<AdminService.FailedDocumentList>>(
     adminListFailedDocuments,
     { params },
+  );
+export const deleteManagedResource = (
+  resourceType: AdminService.ManagedResourceType,
+  resourceId: string,
+) =>
+  request.delete<ResponseData<{ resource_type: string; resource_id: string }>>(
+    adminManagedResource(resourceType, resourceId),
   );
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });

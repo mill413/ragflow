@@ -27,7 +27,14 @@ from typing import Any
 from peewee import Case, fn
 
 from common.constants import ActiveEnum, StatusEnum
-from api.db import CanvasCategory, TenantPermission, UserTenantRole, WorkspaceType
+from api.db import (
+    KNOWLEDGEBASE_FOLDER_NAME,
+    SKILLS_FOLDER_NAME,
+    CanvasCategory,
+    TenantPermission,
+    UserTenantRole,
+    WorkspaceType,
+)
 from api.db.services import UserService, generate_access_token
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
@@ -36,7 +43,23 @@ from api.db.services.workspace_service import TeamService, WorkspaceAccessServic
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken, DB, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
+from api.db.db_models import (
+    API4Conversation,
+    APIToken,
+    Conversation,
+    DB,
+    Dialog,
+    Document,
+    File,
+    Knowledgebase,
+    Memory,
+    Search,
+    Task,
+    Tenant,
+    User,
+    UserCanvas,
+    UserTenant,
+)
 from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
@@ -749,7 +772,7 @@ class UserServiceMgr:
 
 
 class ResourceMgr:
-    """Read-only global resource inventory for the admin console."""
+    """Global resource inventory and lifecycle operations for administrators."""
 
     RESOURCE_SPECS = {
         "dataset": {
@@ -783,6 +806,12 @@ class ResourceMgr:
             "workspace_field": Memory.tenant_id,
             "permission_field": Memory.permissions,
         },
+        "file": {
+            "model": File,
+            "name_field": File.name,
+            "workspace_field": File.tenant_id,
+            "creator_field": File.created_by,
+        },
     }
 
     @classmethod
@@ -810,6 +839,16 @@ class ResourceMgr:
             fields.append(creator_field.alias("creator_id"))
         if resource_type == "dataset":
             fields.extend([Knowledgebase.doc_num, Knowledgebase.chunk_num, Knowledgebase.token_num])
+        elif resource_type == "chat":
+            fields.append(Dialog.kb_ids)
+        elif resource_type == "agent":
+            fields.extend([UserCanvas.release, UserCanvas.canvas_type])
+        elif resource_type == "search":
+            fields.append(Search.search_config)
+        elif resource_type == "memory":
+            fields.extend([Memory.memory_type, Memory.storage_type, Memory.memory_size])
+        elif resource_type == "file":
+            fields.extend([File.parent_id, File.size, File.type.alias("file_type"), File.source_type])
 
         query = model.select(*fields)
         if hasattr(model, "status"):
@@ -825,11 +864,29 @@ class ResourceMgr:
         cls._attach_ownership(rows)
         if resource_type == "dataset":
             cls._attach_dataset_metrics(rows)
+        elif resource_type == "chat":
+            cls._attach_chat_metrics(rows)
+        elif resource_type == "agent":
+            cls._attach_agent_metrics(rows)
+        elif resource_type == "search":
+            for row in rows:
+                config = row.pop("search_config", {}) or {}
+                row["dataset_count"] = len(set(config.get("kb_ids") or config.get("dataset_ids") or []))
+                row["document_count"] = len(set(config.get("doc_ids") or config.get("document_ids") or []))
         for row in rows:
+            row["resource_type"] = resource_type
             if not row.get("permission"):
                 row["permission"] = (
                     TenantPermission.ME.value if row["workspace_type"] == "personal" else TenantPermission.TEAM.value
                 )
+            row["deletable"] = not (
+                resource_type == "file"
+                and (
+                    row.get("parent_id") == row["id"]
+                    or row.get("name") in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                    or row.get("source_type") in {"knowledgebase", "skill_space"}
+                )
+            )
 
         return {"resources": rows, "total": total}
 
@@ -860,6 +917,110 @@ class ResourceMgr:
             row["storage_bytes"] = int(metric.get("storage_bytes", 0) or 0)
             row["failed_documents"] = int(metric.get("failed_documents", 0) or 0)
             row["processing_documents"] = int(metric.get("processing_documents", 0) or 0)
+
+    @staticmethod
+    def _attach_chat_metrics(rows):
+        if not rows:
+            return
+        counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                Conversation.select(
+                    Conversation.dialog_id,
+                    fn.COUNT(Conversation.id).alias("session_count"),
+                )
+                .where(Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(Conversation.dialog_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            row["session_count"] = counts.get(row["id"], 0)
+            row["dataset_count"] = len(set(row.pop("kb_ids", []) or []))
+
+    @staticmethod
+    def _attach_agent_metrics(rows):
+        if not rows:
+            return
+        counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                API4Conversation.select(
+                    API4Conversation.dialog_id,
+                    fn.COUNT(API4Conversation.id).alias("session_count"),
+                )
+                .where(API4Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(API4Conversation.dialog_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            row["session_count"] = counts.get(row["id"], 0)
+
+    @classmethod
+    async def delete_resource(
+        cls,
+        resource_type: str,
+        resource_id: str,
+        actor_id: str,
+        authorization: str = "",
+    ) -> dict[str, Any]:
+        spec = cls.RESOURCE_SPECS.get(resource_type)
+        if not spec:
+            raise AdminException(f"Unsupported resource type: {resource_type}")
+
+        model = spec["model"]
+        query = model.select().where(model.id == resource_id)
+        if hasattr(model, "status"):
+            query = query.where(model.status == StatusEnum.VALID.value)
+        if spec.get("extra_filter") is not None:
+            query = query.where(spec["extra_filter"])
+        resource = query.first()
+        if not resource:
+            raise AdminException("Resource not found", 404)
+
+        if resource_type == "dataset":
+            from api.apps.services import dataset_api_service
+
+            success, result = await dataset_api_service.delete_datasets(actor_id, [resource_id])
+        elif resource_type == "chat":
+            success = bool(Dialog.update(status=StatusEnum.INVALID.value).where(Dialog.id == resource_id).execute())
+            result = True if success else "Failed to delete chat"
+        elif resource_type == "search":
+            from api.db.services.search_service import SearchService
+
+            success = bool(SearchService.delete_by_id(resource_id))
+            result = True if success else "Failed to delete search"
+        elif resource_type == "agent":
+            success = bool(UserCanvasService.delete_with_dependencies(resource_id))
+            result = True if success else "Failed to delete agent"
+        elif resource_type == "memory":
+            from api.apps.services import memory_api_service
+
+            success = bool(await memory_api_service.delete_memory(resource_id))
+            result = True if success else "Failed to delete memory"
+        else:
+            if (
+                resource.parent_id == resource.id
+                or resource.name in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                or resource.source_type in {"knowledgebase", "skill_space"}
+            ):
+                raise AdminException(
+                    "This file is managed by its source resource and cannot be deleted separately.",
+                    409,
+                )
+            from api.apps.services import file_api_service
+
+            success, result = await file_api_service.delete_files(
+                actor_id,
+                [resource_id],
+                authorization,
+                resource.tenant_id,
+            )
+
+        if not success:
+            raise AdminException(str(result), 409)
+        return {"resource_type": resource_type, "resource_id": resource_id, "result": result}
 
     @staticmethod
     def list_failed_documents(page, page_size, keywords=""):
