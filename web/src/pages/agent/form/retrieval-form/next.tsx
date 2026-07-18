@@ -68,6 +68,7 @@ export type RetrievalFormSchemaType = z.infer<typeof FormSchema>;
 
 export function MemoryDatasetForm() {
   const { t } = useTranslation();
+  const ownerTenantId = useOwnerTenantId();
   const form = useFormContext();
   const retrievalFrom = useWatch({
     control: form.control,
@@ -90,7 +91,10 @@ export function MemoryDatasetForm() {
           <UserIdFormField></UserIdFormField>
         </>
       ) : (
-        <KnowledgeBaseFormField showVariable></KnowledgeBaseFormField>
+        <KnowledgeBaseFormField
+          showVariable
+          workspaceId={ownerTenantId}
+        ></KnowledgeBaseFormField>
       )}
     </>
   );
@@ -178,7 +182,9 @@ function RetrievalForm({ node }: INextOperatorForm) {
             <TopNFormField></TopNFormField>
             {hideKnowledgeGraphField || (
               <>
-                <RerankFormFields ownerTenantId={ownerTenantId}></RerankFormFields>
+                <RerankFormFields
+                  ownerTenantId={ownerTenantId}
+                ></RerankFormFields>
                 <MetadataFilter canReference></MetadataFilter>
               </>
             )}

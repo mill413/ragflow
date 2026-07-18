@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 from quart import Quart, g
 
+from api.apps.workspace_access import workspace_required
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
 from common.constants import StatusEnum
@@ -127,6 +128,18 @@ def test_superuser_can_read_and_manage_every_workspace_resource(workspace_depend
     assert WorkspaceAccessService.can_read_shared_resource("system-admin", team_resource)
     assert WorkspaceAccessService.can_manage_shared_resource("system-admin", personal_resource)
     assert WorkspaceAccessService.can_manage_shared_resource("system-admin", team_resource)
+
+
+@pytest.mark.asyncio
+async def test_superuser_can_write_another_users_personal_workspace(workspace_dependencies):
+    app = Quart(__name__)
+
+    @workspace_required(write=True)
+    async def update_personal_workspace(tenant_id):
+        return tenant_id
+
+    async with app.test_request_context("/?workspace_id=user-1"):
+        assert await update_personal_workspace(tenant_id="system-admin") == "user-1"
 
 
 @pytest.mark.asyncio

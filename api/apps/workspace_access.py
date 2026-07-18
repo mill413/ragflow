@@ -59,7 +59,9 @@ def workspace_required(*, write: bool = False):
             can_read = target_id in WorkspaceAccessService.list_visible_workspace_ids(actor_id)
             if write:
                 if workspace_type == WorkspaceType.PERSONAL:
-                    allowed = target_id == actor_id and WorkspaceAccessService.is_member(actor_id, target_id)
+                    allowed = WorkspaceAccessService.is_superuser(actor_id) or (
+                        target_id == actor_id and WorkspaceAccessService.is_member(actor_id, target_id)
+                    )
                 else:
                     allowed = WorkspaceAccessService.can_manage_workspace(actor_id, target_id)
             else:

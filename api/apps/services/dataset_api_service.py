@@ -449,6 +449,9 @@ def list_datasets(tenant_id: str, args: dict):
         personal_user_id = ""
     elif ext_fields.get("owner_ids", []):
         tenant_ids = ext_fields["owner_ids"]
+        visible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(tenant_id))
+        if not set(tenant_ids).issubset(visible_workspace_ids):
+            return False, "No authorization."
     else:
         tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
         tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]

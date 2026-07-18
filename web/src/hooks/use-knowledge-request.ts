@@ -792,6 +792,7 @@ export const useClearWiki = () => {
 export const useFetchKnowledgeList = (
   shouldFilterListWithoutDocument: boolean = false,
   keywords = '',
+  workspaceId?: string,
 ): {
   list: IDataset[];
   loading: boolean;
@@ -801,15 +802,17 @@ export const useFetchKnowledgeList = (
       KnowledgeApiAction.FetchKnowledgeList,
       shouldFilterListWithoutDocument,
       keywords,
+      workspaceId,
     ],
     initialData: [],
     gcTime: 0, // https://tanstack.com/query/latest/docs/framework/react/guides/caching?from=reactQueryV3
     queryFn: async () => {
       const { data } = await listDataset(
-        keywords
+        keywords || workspaceId
           ? {
               ext: {
-                keywords,
+                keywords: keywords || undefined,
+                owner_ids: workspaceId ? [workspaceId] : undefined,
               },
             }
           : undefined,

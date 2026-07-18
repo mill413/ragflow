@@ -192,7 +192,9 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
               >
                 <ScrollArea viewportClassName="[&>div]:!block">
                   <section className="p-5 space-y-6 overflow-auto flex-1 min-h-0">
-                    <ChatBasicSetting></ChatBasicSetting>
+                    <ChatBasicSetting
+                      workspaceId={data.tenant_id}
+                    ></ChatBasicSetting>
                     <ChatPromptEngine></ChatPromptEngine>
                   </section>
                 </ScrollArea>

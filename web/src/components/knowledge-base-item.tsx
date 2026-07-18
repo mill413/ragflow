@@ -23,7 +23,10 @@ function DatasetLabel({ text }: { text: string }) {
   );
 }
 
-export function useDisableDifferenceEmbeddingDataset(name: string) {
+export function useDisableDifferenceEmbeddingDataset(
+  name: string,
+  workspaceId?: string,
+) {
   const form = useFormContext();
   const datasetId = useWatch({ name, control: form.control });
   const [searchString, setSearchString] = useState('');
@@ -31,6 +34,7 @@ export function useDisableDifferenceEmbeddingDataset(name: string) {
   const { list: datasetListOrigin, loading } = useFetchKnowledgeList(
     true,
     debouncedSearchString,
+    workspaceId,
   );
   const datasetCacheRef = useRef(new Map<string, IDataset>());
 
@@ -103,15 +107,17 @@ export function KnowledgeBaseFormField({
   showVariable = false,
   name = 'dataset_ids',
   required = false,
+  workspaceId,
 }: {
   showVariable?: boolean;
   name?: string;
   required?: boolean;
+  workspaceId?: string;
 }) {
   const { t } = useTranslation();
 
   const { datasetOptions, handleSearchChange, loading, searchString } =
-    useDisableDifferenceEmbeddingDataset(name);
+    useDisableDifferenceEmbeddingDataset(name, workspaceId);
 
   const nextOptions = buildQueryVariableOptionsByShowVariable(showVariable)();
 

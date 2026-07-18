@@ -20,11 +20,13 @@ interface ChatBasicSettingProps {
   prefix?: string;
   option?: Record<string, any>;
   hideName?: boolean;
+  workspaceId?: string;
 }
 
 export default function ChatBasicSetting({
   prefix = '',
   hideName = false,
+  workspaceId,
 }: ChatBasicSettingProps) {
   const { t } = useTranslate('chat');
   const form = useFormContext();
@@ -71,6 +73,7 @@ export default function ChatBasicSetting({
       />
       <KnowledgeBaseFormField
         name={prefixName(prefix, 'dataset_ids')}
+        workspaceId={workspaceId}
       ></KnowledgeBaseFormField>
     </div>
   );

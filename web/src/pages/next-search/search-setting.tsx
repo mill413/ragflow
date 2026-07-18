@@ -357,6 +357,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
             <KnowledgeBaseFormField
               name="search_config.kb_ids"
               required
+              workspaceId={data.tenant_id}
             ></KnowledgeBaseFormField>
             <MetadataFilter prefix="search_config."></MetadataFilter>
             <FormField
