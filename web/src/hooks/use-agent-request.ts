@@ -43,6 +43,7 @@ import {
   useGetPaginationWithRouter,
   useHandleSearchChange,
 } from './logic-hooks';
+import { useWorkspace } from './use-workspace';
 
 export const enum AgentApiAction {
   FetchAgentListByPage = 'fetchAgentListByPage',
@@ -130,6 +131,7 @@ const buildAgentListParams = ({
 };
 
 export const useFetchAgentListByPage = () => {
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -137,7 +139,6 @@ export const useFetchAgentListByPage = () => {
   const canvasCategory = Array.isArray(filterValue.canvasCategory)
     ? filterValue.canvasCategory
     : [];
-  const owner = filterValue.owner;
   const tags = Array.isArray(filterValue.tags) ? filterValue.tags : undefined;
 
   const requestParams = buildAgentListParams({
@@ -145,7 +146,7 @@ export const useFetchAgentListByPage = () => {
     pageSize: pagination.pageSize,
     keywords: debouncedSearchString,
     canvasCategory: canvasCategory.length === 1 ? canvasCategory[0] : undefined,
-    ownerIds: Array.isArray(owner) ? owner : undefined,
+    ownerIds: workspaceFilterId ? [workspaceFilterId] : undefined,
     tags,
   });
 
@@ -159,6 +160,7 @@ export const useFetchAgentListByPage = () => {
         debouncedSearchString,
         ...pagination,
         filterValue,
+        workspaceId,
       },
     ],
     placeholderData: (previousData) => {
@@ -167,6 +169,7 @@ export const useFetchAgentListByPage = () => {
       }
       return previousData;
     },
+    enabled: Boolean(workspaceId),
     gcTime: 0,
     queryFn: async () => {
       const { data } = await agentService.listAgents(
@@ -442,6 +445,7 @@ export const useResetAgent = () => {
 export const useSetAgent = (showMessage: boolean = true) => {
   const { id } = useParams();
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
   const {
     data,
     isPending: loading,
@@ -465,10 +469,12 @@ export const useSetAgent = (showMessage: boolean = true) => {
             dsl: params.dsl,
             avatar: params.avatar,
             description: params.description,
-            permission: params.permission,
             release: params.release,
           })
-        : await agentService.createAgent(params);
+        : await agentService.createAgent({
+            ...params,
+            workspace_id: workspaceId,
+          });
       if (data.code === 0) {
         if (showMessage) {
           message.success(
@@ -845,22 +851,22 @@ export const useFetchPrompt = () => {
   return { data, loading, refetch };
 };
 
-export const useFetchAgentList = ({
-  canvas_category,
-}: IPipeLineListRequest) => {
+export const useFetchAgentList = (
+  params: IPipeLineListRequest,
+  enabled = true,
+) => {
   const { data, isFetching: loading } = useQuery<{
     canvas: IFlow[];
     total: number;
   }>({
-    queryKey: [AgentApiAction.FetchAgentList],
+    queryKey: [AgentApiAction.FetchAgentList, params],
     initialData: { canvas: [], total: 0 },
+    enabled,
     gcTime: 0,
     queryFn: async () => {
-      const { data } = await fetchPipeLineList({
-        canvas_category,
-      });
+      const { data } = await fetchPipeLineList(params);
 
-      return data?.data ?? [];
+      return data?.data ?? { canvas: [], total: 0 };
     },
   });
 

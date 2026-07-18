@@ -1,6 +1,12 @@
-import { IconFontFill } from '@/components/icon-font';
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,8 +25,10 @@ import {
   LucideChevronDown,
   LucideCircleHelp,
   LucideLanguages,
+  LucideUsersRound,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 import { BellButton } from './bell-button';
 import { DesktopNavbar, MobileNavbar } from './global-navbar';
@@ -29,12 +37,15 @@ import ThemeButton from './theme-button';
 import { useHeaderNavLayout } from './use-header-nav-layout';
 
 import { supportedLanguages } from '@/locales/config';
+import { useWorkspace } from '@/hooks/use-workspace';
+import { useListTeamInvitations } from '@/hooks/use-user-setting-request';
 
 export function Header({
   className,
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const { pathname } = useLocation();
+  const { t } = useTranslation();
   const changeLanguage = useChangeLanguage();
 
   const {
@@ -42,9 +53,17 @@ export function Header({
   } = useFetchUserInfo();
 
   const { data: tenantData } = useListTenant();
+  const { data: teamInvitations } = useListTeamInvitations();
+  const {
+    workspaceId,
+    options: workspaceOptions,
+    setWorkspaceId,
+  } = useWorkspace();
   const hasNotification = useMemo(
-    () => tenantData?.some((x) => x.role === TenantRole.Invite),
-    [tenantData],
+    () =>
+      teamInvitations.length > 0 ||
+      tenantData?.some((x) => x.role === TenantRole.Invite),
+    [teamInvitations, tenantData],
   );
 
   const currentLanguage = supportedLanguages.find((x) => x.code === language);
@@ -100,28 +119,25 @@ export function Header({
           )}
           data-testid="auth-status"
         >
-          {!isCompact && (
-            <>
-              <a
-                className="inline-flex p-2 text-text-secondary hover:text-text-primary focus-visible:text-text-primary"
-                target="_blank"
-                href="https://discord.com/invite/NjYzJD3GM3"
-                rel="noreferrer noopener"
-              >
-                <IconFontFill name="a-DiscordIconSVGVectorIcon" />
-              </a>
-
-              <a
-                className="inline-flex p-2 text-text-secondary hover:text-text-primary focus-visible:text-text-primary"
-                target="_blank"
-                href="https://github.com/infiniflow/ragflow"
-                rel="noreferrer noopener"
-              >
-                <IconFontFill name="GitHub" />
-              </a>
-            </>
-          )}
-
+          <Select value={workspaceId} onValueChange={setWorkspaceId}>
+            <SelectTrigger
+              aria-label={t('setting.workspace')}
+              className={cn(
+                'h-9 border-border-default bg-bg-input text-sm',
+                isCompact ? 'w-36' : 'w-48',
+              )}
+            >
+              <LucideUsersRound className="size-4 shrink-0 text-text-secondary" />
+              <SelectValue placeholder={t('setting.workspace')} />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {workspaceOptions.map((workspace) => (
+                <SelectItem key={workspace.value} value={workspace.value}>
+                  {workspace.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -203,12 +219,6 @@ export function Header({
           ref={expandedRightMeasureRef}
           className="inline-flex shrink-0 items-center justify-end gap-4 text-text-badge"
         >
-          <a className="inline-flex p-2">
-            <IconFontFill name="a-DiscordIconSVGVectorIcon" />
-          </a>
-          <a className="inline-flex p-2">
-            <IconFontFill name="GitHub" />
-          </a>
           <Button variant="ghost" className="size-auto gap-1 px-4">
             {currentLanguage?.displayName}
             <LucideChevronDown className="size-[1em]" />

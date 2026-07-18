@@ -5,6 +5,7 @@ import { formatDate } from '@/utils/date';
 import { lowerFirst } from 'lodash';
 import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useKnowledgeBaseContext } from '../../contexts/knowledge-base-context';
 import { GenerateType, GenerateTypeMap } from './constants';
 import { useUnBindTask } from './hook';
 
@@ -27,6 +28,8 @@ export type IGenerateLogProps = IGenerateLogButtonProps & {
 export function GenerateLogButton(props: IGenerateLogProps) {
   const { t } = useTranslation();
   const { message, finish_at, type, onDelete } = props;
+  const { knowledgeBase } = useKnowledgeBaseContext();
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
 
   const { handleUnbindTask } = useUnBindTask();
 
@@ -97,14 +100,16 @@ export function GenerateLogButton(props: IGenerateLogProps) {
               {message || t('knowledgeDetails.generatedOn')}
               {formatDate(finish_at)}
             </div>
-            <Trash2
-              size={14}
-              className="cursor-pointer"
-              onClick={(e) => {
-                handleDelete();
-                e.stopPropagation();
-              }}
-            />
+            {!readOnly && (
+              <Trash2
+                size={14}
+                className="cursor-pointer"
+                onClick={(e) => {
+                  handleDelete();
+                  e.stopPropagation();
+                }}
+              />
+            )}
           </>
         )}
         {!finish_at && <div>{t('knowledgeDetails.notGenerated')}</div>}

@@ -19,6 +19,50 @@ services:
     environment:
       DOC_BULK_SIZE: "1"
       EMBEDDING_BATCH_SIZE: "1"
+    entrypoint:
+      - /usr/local/bin/ragflow-dev-entrypoint
+    volumes:
+      - ./dev-entrypoint.sh:/usr/local/bin/ragflow-dev-entrypoint:ro
+      - ./nginx/ragflow.dev.conf.python:/etc/nginx/conf.d/ragflow.conf.python:ro
+      - ../admin:/ragflow/admin:ro
+      - ../api:/ragflow/api:ro
+      - ../common:/ragflow/common:ro
+      - ../agent:/ragflow/agent:ro
+      - ../deepdoc:/ragflow/deepdoc:ro
+      - ../mcp:/ragflow/mcp:ro
+      - ../memory:/ragflow/memory:ro
+      - ../rag:/ragflow/rag:ro
+      - ragflow_deepdoc_models:/ragflow/rag/res/deepdoc
+    depends_on:
+      web-dev:
+        condition: service_started
+
+  web-dev:
+    image: ${RAGFLOW_LOCAL_IMAGE:-ragflow-local:dev}
+    entrypoint: []
+    command:
+      - npm
+      - run
+      - dev
+      - --
+      - --host
+      - 0.0.0.0
+    working_dir: /workspace/web
+    volumes:
+      - ../web:/workspace/web
+      - ../docs:/workspace/docs:ro
+    ports:
+      - "18084:9222"
+    environment:
+      API_PROXY_SCHEME: python
+      API_PROXY_URL: http://ragflow-cpu:9380/
+      ADMIN_API_PROXY_URL: http://ragflow-cpu:9381/
+      NODE_OPTIONS: --max-old-space-size=1536
+      PORT: "9222"
+    mem_limit: 2048m
+    cpus: "1.00"
+    networks:
+      - ragflow
 
   mysql:
     mem_limit: 640m
@@ -52,3 +96,6 @@ services:
       - 96mb
       - --maxmemory-policy
       - allkeys-lru
+
+volumes:
+  ragflow_deepdoc_models:

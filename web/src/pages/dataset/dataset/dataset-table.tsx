@@ -45,6 +45,7 @@ export type DatasetTableProps = Pick<
 > &
   Pick<UseRowSelectionType, 'rowSelection' | 'setRowSelection'> & {
     showManageMetadataModal: (config: ShowManageMetadataModalProps) => void;
+    readOnly?: boolean;
   };
 
 export function DatasetTable({
@@ -54,6 +55,7 @@ export function DatasetTable({
   rowSelection,
   setRowSelection,
   showManageMetadataModal,
+  readOnly = false,
 }: DatasetTableProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -94,6 +96,7 @@ export function DatasetTable({
     showRenameModal,
     showManageMetadataModal,
     showLog,
+    readOnly,
   });
 
   const currentPagination = useMemo(() => {

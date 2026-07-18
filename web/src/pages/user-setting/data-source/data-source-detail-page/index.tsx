@@ -16,7 +16,6 @@ import { FieldValues } from 'react-hook-form';
 import {
   DataSourceFormBaseFields,
   DataSourceFormDefaultValues,
-  DataSourceKey,
   getCommonExtraDefaultValues,
   getDataSourceFieldsWithExtras,
   mergeDataSourceFormValues,
@@ -25,7 +24,6 @@ import {
 import {
   useAddDataSource,
   useFetchDataSourceDetail,
-  useTestDataSource,
   useUpdateDataSourceStatus,
 } from '../hooks';
 import { DataSourceLogsTable } from './log-table';
@@ -115,7 +113,6 @@ const SourceDetailPage = () => {
   }, []);
 
   const { addLoading, handleAddOk } = useAddDataSource({ isEdit: true });
-  const { loading: testLoading, handleTest } = useTestDataSource();
 
   const onSubmit = useCallback(() => {
     formRef?.current?.submit();
@@ -192,6 +189,7 @@ const SourceDetailPage = () => {
       const newFields = fields.map((field) => {
         return {
           ...field,
+          disabled: field.disabled || detail.capabilities?.update === false,
           horizontal: true,
           onChange: undefined,
         };
@@ -244,22 +242,19 @@ const SourceDetailPage = () => {
             />
           </div>
           <div className="max-w-[1200px] flex justify-end gap-2">
-            {(detail?.source === DataSourceKey.REST_API ||
-              detail?.source === DataSourceKey.BIGQUERY) && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTest}
-                disabled={testLoading}
-                loading={testLoading}
-              >
-                {t('setting.restApiTestConnection')}
-              </Button>
-            )}
             <Button
               type="button"
               onClick={handlePrimaryAction}
-              disabled={addLoading || statusUpdateLoading}
+              disabled={
+                addLoading ||
+                statusUpdateLoading ||
+                detail?.capabilities?.update === false
+              }
+              title={
+                detail?.capabilities?.update === false
+                  ? t('common.readOnlySaveTip')
+                  : undefined
+              }
               loading={
                 (addLoading && actionMode === 'save') ||
                 (statusUpdateLoading && actionMode !== 'save')

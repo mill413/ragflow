@@ -34,6 +34,7 @@ import { AgentCategory } from '@/constants/agent';
 import { Edge, Node } from '@xyflow/react';
 import { IReference, Message } from './chat';
 import { IDataset } from './dataset';
+import { IWorkspaceResource } from './workspace';
 
 export type DSLComponents = Record<string, IOperator>;
 
@@ -62,7 +63,7 @@ export interface IOperatorNode {
   params: Record<string, unknown>;
 }
 
-export declare interface IFlow {
+export declare interface IFlow extends IWorkspaceResource {
   avatar?: string;
   canvas_type: null;
   create_date: string;
@@ -269,6 +270,11 @@ export interface IAgentLogResponse {
   reference: IReference[];
   name: string;
   version_title: string;
+  capabilities?: {
+    read: boolean;
+    update: boolean;
+    delete: boolean;
+  };
 }
 export interface IAgentLogsResponse {
   total: number;
@@ -298,6 +304,7 @@ export interface IPipeLineListRequest {
   orderby?: string;
   desc?: boolean;
   canvas_category?: AgentCategory;
+  owner_ids?: string;
   ext?: string;
 }
 

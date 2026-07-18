@@ -22,6 +22,7 @@ export type IDataSourceNodeProps = IConnector & {
 };
 
 export interface ILinkDataSourceProps {
+  workspaceId?: string;
   data?: IConnector[];
   handleLinkOrEditSubmit?: (data: IDataSourceBase[] | undefined) => void;
   unbindFunc?: (item: DataSourceItemProps) => void;
@@ -134,6 +135,7 @@ const LinkDataSource = (props: ILinkDataSourceProps) => {
     handleLinkOrEditSubmit: submit,
     unbindFunc,
     handleAutoParse,
+    workspaceId,
   } = props;
   const { t } = useTranslation();
   const { dataSourceInfo } = useDataSourceInfo();
@@ -153,10 +155,9 @@ const LinkDataSource = (props: ILinkDataSourceProps) => {
       });
     }
     return [];
-  }, [data]);
+  }, [data, dataSourceInfo]);
 
-  const openLinkModalFunc = (open: boolean, data?: IDataSourceNodeProps) => {
-    console.log('open', open, data);
+  const openLinkModalFunc = (open: boolean) => {
     setOpenLinkModal(open);
     // if (data) {
     //   setCurrentDataSource(data);
@@ -166,7 +167,6 @@ const LinkDataSource = (props: ILinkDataSourceProps) => {
   };
 
   const handleLinkOrEditSubmit = (data: IDataSourceBase[] | undefined) => {
-    console.log('handleLinkOrEditSubmit', data);
     submit?.(data);
     setOpenLinkModal(false);
   };
@@ -219,6 +219,7 @@ const LinkDataSource = (props: ILinkDataSourceProps) => {
           openLinkModalFunc(open);
         }}
         onSubmit={handleLinkOrEditSubmit}
+        workspaceId={workspaceId}
       />
     </div>
   );

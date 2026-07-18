@@ -32,6 +32,11 @@ class TenantPermission(StrEnum):
     TEAM = "team"
 
 
+class WorkspaceType(StrEnum):
+    PERSONAL = "personal"
+    TEAM = "team"
+
+
 class SerializedType(IntEnum):
     PICKLE = 1
     JSON = 2

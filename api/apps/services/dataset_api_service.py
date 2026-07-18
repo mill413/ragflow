@@ -26,15 +26,19 @@ from api.db.services.document_service import DocumentService, queue_raptor_o_gra
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.tenant_model_service import TenantModelService
-from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db.services.user_service import TenantService, UserService
+from api.db import TenantPermission, WorkspaceType
+from api.db.services.workspace_service import WorkspaceAccessService
 from common.constants import FileSource, StatusEnum
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
 from common.misc_utils import thread_pool_exec
 
 _VALID_INDEX_TYPES = {"graph", "raptor", "mindmap", "artifact", "skill"}
+
 
 _INDEX_TYPE_TO_TASK_TYPE = {
     "graph": "graphrag",
@@ -61,7 +65,26 @@ _INDEX_TYPE_TO_DISPLAY_NAME = {
 }
 
 
-async def create_dataset(tenant_id: str, req: dict):
+def _select_workspace_embedding_model(requested_model_id: str | None, workspace_id: str, workspace_type: WorkspaceType, tenant):
+    default_model_id = getattr(tenant, "tenant_embd_id", None) or getattr(tenant, "embd_id", None)
+    selected_model_id = requested_model_id or default_model_id
+    if not selected_model_id:
+        return None, None
+
+    available, error = verify_embedding_availability(selected_model_id, workspace_id)
+    if available:
+        return selected_model_id, None
+
+    if workspace_type == WorkspaceType.TEAM and default_model_id and default_model_id != selected_model_id:
+        default_available, default_error = verify_embedding_availability(default_model_id, workspace_id)
+        if default_available:
+            return default_model_id, None
+        return None, default_error
+
+    return None, error
+
+
+async def create_dataset(user_id: str, workspace_id: str, req: dict):
     """
     Create a new dataset.
 
@@ -92,21 +115,29 @@ async def create_dataset(tenant_id: str, req: dict):
         req["parser_config"] = parser_cfg
     req.update(ext_fields)
 
-    e, create_dict = KnowledgebaseService.create_with_name(name=req.pop("name", None), tenant_id=tenant_id, parser_id=req.pop("parser_id", None), **req)
+    if not WorkspaceAccessService.can_create_knowledgebase(user_id, workspace_id):
+        return False, "No authorization."
+    workspace_type = WorkspaceAccessService.get_workspace_type(workspace_id)
+    req["permission"] = TenantPermission.ME if workspace_type == WorkspaceType.PERSONAL else TenantPermission.TEAM
+    e, create_dict = KnowledgebaseService.create_with_name(
+        name=req.pop("name", None),
+        tenant_id=workspace_id,
+        created_by=user_id,
+        parser_id=req.pop("parser_id", None),
+        **req,
+    )
 
     if not e:
         return False, create_dict
 
     # Insert embedding model(embd id)
-    ok, t = TenantService.get_by_id(tenant_id)
+    ok, t = TenantService.get_by_id(workspace_id)
     if not ok:
         return False, "Tenant not found"
-    if not create_dict.get("embd_id"):
-        create_dict["embd_id"] = t.embd_id
-    else:
-        ok, err = verify_embedding_availability(create_dict["embd_id"], tenant_id)
-        if not ok:
-            return False, err
+    embedding_model_id, err = _select_workspace_embedding_model(create_dict.get("embd_id"), workspace_id, workspace_type, t)
+    if err:
+        return False, err
+    create_dict["embd_id"] = embedding_model_id or ""
 
     if not KnowledgebaseService.save(**create_dict):
         return False, "Failed to save dataset"
@@ -117,7 +148,7 @@ async def create_dataset(tenant_id: str, req: dict):
     return True, response_data
 
 
-async def delete_datasets(tenant_id: str, ids: list = None, delete_all: bool = False):
+async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = False):
     """
     Delete datasets.
 
@@ -131,23 +162,31 @@ async def delete_datasets(tenant_id: str, ids: list = None, delete_all: bool = F
         if not delete_all:
             return True, {"success_count": 0}
         else:
-            ids = [kb.id for kb in KnowledgebaseService.query(tenant_id=tenant_id)]
+            ids = [kb.id for kb in KnowledgebaseService.query(created_by=user_id, status=StatusEnum.VALID.value)]
 
     error_kb_ids = []
     for kb_id in ids:
-        kb = KnowledgebaseService.get_or_none(id=kb_id, tenant_id=tenant_id)
-        if kb is None:
+        kb = KnowledgebaseService.get_or_none(id=kb_id)
+        if kb is None or not WorkspaceAccessService.can_delete_knowledgebase(user_id, kb):
             error_kb_ids.append(kb_id)
             continue
         kb_id_instance_pairs.append((kb_id, kb))
     if len(error_kb_ids) > 0:
-        return False, f"""User '{tenant_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
+        return False, f"""User '{user_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
+
+    ResourceReferenceService.ensure_not_referenced("dataset", [kb for _, kb in kb_id_instance_pairs])
+    document_ids = [
+        document.id
+        for kb_id, _ in kb_id_instance_pairs
+        for document in DocumentService.query(kb_id=kb_id)
+    ]
+    FileService.ensure_document_files_not_referenced(document_ids)
 
     errors = []
     success_count = 0
     for kb_id, kb in kb_id_instance_pairs:
         for doc in DocumentService.query(kb_id=kb_id):
-            if not DocumentService.remove_document(doc, tenant_id):
+            if not DocumentService.remove_document(doc, kb.tenant_id):
                 errors.append(f"Remove document '{doc.id}' error for dataset '{kb_id}'")
                 continue
             f2d = File2DocumentService.get_by_document_id(doc.id)
@@ -215,6 +254,19 @@ def get_dataset(dataset_id: str, tenant_id: str):
     response_data = remap_dictionary_keys(kb.to_dict())
     response_data["size"] = DocumentService.get_total_size_by_kb_id(dataset_id)
     response_data["connectors"] = list(Connector2KbService.list_connectors(dataset_id))
+    workspace_exists, workspace = TenantService.get_by_id(kb.tenant_id)
+    creator_exists, creator = UserService.get_by_id(kb.created_by)
+    response_data.update(
+        {
+            "nickname": workspace.name if workspace_exists else "",
+            "tenant_avatar": "",
+            "workspace_name": workspace.name if workspace_exists else "",
+            "workspace_type": WorkspaceAccessService.get_workspace_type(kb.tenant_id),
+            "creator_name": creator.nickname if creator_exists else "",
+            "creator_avatar": creator.avatar if creator_exists else "",
+            "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
+        }
+    )
     return True, response_data
 
 
@@ -245,7 +297,7 @@ def get_ingestion_summary(dataset_id: str, tenant_id: str):
     }
 
 
-async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
+async def update_dataset(user_id: str, dataset_id: str, req: dict):
     """
     Update a dataset.
 
@@ -257,9 +309,11 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
     if not req:
         return False, "No properties were modified"
 
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
-        return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_update_knowledgebase(user_id, kb):
+        return False, f"User '{user_id}' lacks permission for dataset '{dataset_id}'"
+    req.pop("workspace_id", None)
+    req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(kb.tenant_id) == WorkspaceType.TEAM else TenantPermission.ME
 
     # Extract ext field for additional parameters
     ext_fields = req.pop("ext", {})
@@ -291,6 +345,9 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
     if "connectors" in req:
         connectors = req["connectors"]
         del req["connectors"]
+        connector_ids = [connector.get("id") for connector in connectors if isinstance(connector, dict) and connector.get("id")]
+        if len(connector_ids) != len(connectors) or not WorkspaceAccessService.can_reference_connectors(user_id, kb.tenant_id, connector_ids):
+            return False, "Connectors and datasets must belong to the same workspace."
 
     if req.get("parser_config"):
         # Flatten parent_child config into children_delimiter for the execution layer
@@ -307,6 +364,12 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
         req_ext_fields = parser_config.pop("ext", {})
         parser_config.update(req_ext_fields)
         req["parser_config"] = deep_merge(kb.parser_config, parser_config)
+        group_ids = WorkspaceAccessService.extract_reference_ids(
+            req["parser_config"],
+            {"compilation_template_group_id", "compilation_template_group_ids"},
+        )
+        if not WorkspaceAccessService.can_reference_compilation_template_groups(user_id, kb.tenant_id, group_ids):
+            return False, "Compilation templates and datasets must belong to the same workspace."
 
     if (chunk_method := req.get("parser_id")) and chunk_method != kb.parser_id:
         if not req.get("parser_config"):
@@ -319,21 +382,21 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
         req["pipeline_id"] = ""
 
     if "name" in req and req["name"].lower() != kb.name.lower():
-        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=tenant_id, status=StatusEnum.VALID.value)
+        exists = KnowledgebaseService.get_or_none(name=req["name"], tenant_id=kb.tenant_id, status=StatusEnum.VALID.value)
         if exists:
             return False, f"Dataset name '{req['name']}' already exists"
 
     if "embd_id" in req:
         if not req["embd_id"]:
             req["embd_id"] = kb.embd_id
-        ok, err = verify_embedding_availability(req["embd_id"], tenant_id)
+        ok, err = verify_embedding_availability(req["embd_id"], kb.tenant_id)
         if not ok:
             return False, err
         ok, _ = TenantModelService.get_by_id(req["embd_id"])
         if ok:
             req["tenant_embd_id"] = req["embd_id"]
         else:
-            req["tenant_embd_id"] = resolve_model_id(tenant_id, LLMType.EMBEDDING, req["embd_id"])
+            req["tenant_embd_id"] = resolve_model_id(kb.tenant_id, LLMType.EMBEDDING, req["embd_id"])
 
     if "pagerank" in req and req["pagerank"] != kb.pagerank:
         if os.environ.get("DOC_ENGINE", "elasticsearch") == "infinity":
@@ -359,7 +422,7 @@ async def update_dataset(tenant_id: str, dataset_id: str, req: dict):
         return False, "Dataset updated failed"
 
     # Link connectors to the dataset
-    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], tenant_id)
+    errors = Connector2KbService.link_connectors(kb.id, [conn for conn in connectors], kb.tenant_id)
     if errors:
         logging.error("Link KB errors: %s", errors)
 
@@ -381,6 +444,8 @@ def list_datasets(tenant_id: str, args: dict):
     page = int(args.get("page", 1))
     page_size = int(args.get("page_size", 30))
     ext_fields = args.get("ext", {})
+    scope = args.get("scope", "all")
+    workspace_id = args.get("workspace_id")
     parser_id = ext_fields.get("parser_id")
     keywords = ext_fields.get("keywords", "")
     orderby = args.get("orderby", "create_time")
@@ -401,18 +466,62 @@ def list_datasets(tenant_id: str, args: dict):
         kbs = KnowledgebaseService.get_kb_by_name(name, tenant_id)
         if not kbs:
             return False, f"User '{tenant_id}' lacks permission for dataset '{name}'"
-    if ext_fields.get("owner_ids", []):
+    personal_user_id = tenant_id
+    if scope == "personal":
+        workspace_id = workspace_id or tenant_id
+        if WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.PERSONAL or workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id):
+            return False, "No authorization."
+        tenant_ids = []
+        personal_user_id = workspace_id
+    elif scope == "team":
+        if not workspace_id or WorkspaceAccessService.get_workspace_type(workspace_id) != WorkspaceType.TEAM:
+            return False, "A valid team workspace_id is required."
+        if workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(tenant_id):
+            return False, "No authorization."
+        tenant_ids = [workspace_id]
+        personal_user_id = ""
+    elif ext_fields.get("owner_ids", []):
         tenant_ids = ext_fields["owner_ids"]
+        visible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(tenant_id))
+        if not set(tenant_ids).issubset(visible_workspace_ids):
+            return False, "No authorization."
     else:
-        tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
-        tenant_ids = [m["tenant_id"] for m in tenants]
-    kbs, total = KnowledgebaseService.get_list(tenant_ids, tenant_id, page, page_size, orderby, desc, kb_id, name, keywords, parser_id)
-    users = UserService.get_by_ids([m["tenant_id"] for m in kbs])
-    user_map = {m.id: m.to_dict() for m in users}
+        tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
+        tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]
+
+    kbs, total = KnowledgebaseService.get_list(
+        tenant_ids,
+        personal_user_id,
+        page,
+        page_size,
+        orderby,
+        desc,
+        kb_id,
+        name,
+        keywords,
+        parser_id,
+        include_private=WorkspaceAccessService.is_superuser(tenant_id),
+    )
+    workspaces = TenantService.get_by_ids([m["tenant_id"] for m in kbs])
+    workspace_map = {m.id: m.to_dict() for m in workspaces}
+    creators = UserService.get_by_ids([m["created_by"] for m in kbs])
+    creator_map = {m.id: m.to_dict() for m in creators}
     response_data_list = []
     for kb in kbs:
-        user_dict = user_map.get(kb["tenant_id"], {})
-        kb.update({"nickname": user_dict.get("nickname", ""), "tenant_avatar": user_dict.get("avatar", "")})
+        workspace = workspace_map.get(kb["tenant_id"], {})
+        creator = creator_map.get(kb["created_by"], {})
+        workspace_type = WorkspaceAccessService.get_workspace_type(kb["tenant_id"])
+        kb.update(
+            {
+                "nickname": workspace.get("name", ""),
+                "tenant_avatar": "",
+                "workspace_name": workspace.get("name", ""),
+                "workspace_type": workspace_type,
+                "creator_name": creator.get("nickname", ""),
+                "creator_avatar": creator.get("avatar", ""),
+                "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
+            }
+        )
         response_data_list.append(remap_dictionary_keys(kb))
     return True, {"data": response_data_list, "total": total}
 
@@ -466,7 +575,7 @@ def delete_knowledge_graph(dataset_id: str, tenant_id: str):
     :param tenant_id: tenant ID
     :return: (success, result) or (success, error_message)
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
     from rag.nlp import search
@@ -498,7 +607,7 @@ def run_index(dataset_id: str, tenant_id: str, index_type: str):
 
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -591,11 +700,10 @@ def list_tags(dataset_id: str, tenant_id: str):
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
         return False, "No authorization."
 
-    tenants = UserTenantService.get_tenants_by_user_id(tenant_id)
-    tags = []
-    for tenant in tenants:
-        tags += settings.retriever.all_tags(tenant["tenant_id"], [dataset_id])
-    return True, tags
+    exists, knowledgebase = KnowledgebaseService.get_by_id(dataset_id)
+    if not exists:
+        return False, "Invalid Dataset ID"
+    return True, settings.retriever.all_tags(knowledgebase.tenant_id, [dataset_id])
 
 
 def aggregate_tags(dataset_ids: list[str], tenant_id: str):
@@ -656,8 +764,8 @@ def get_auto_metadata(dataset_id: str, tenant_id: str):
     :param tenant_id: tenant ID
     :return: (success, result) or (success, error_message)
     """
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_read_knowledgebase(tenant_id, kb):
         return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
     parser_cfg = kb.parser_config or {}
     return True, {"metadata": parser_cfg.get("metadata") or [], "built_in_metadata": parser_cfg.get("built_in_metadata") or []}
@@ -672,8 +780,8 @@ async def update_auto_metadata(dataset_id: str, tenant_id: str, cfg: dict):
     :param cfg: auto-metadata configuration
     :return: (success, result) or (success, error_message)
     """
-    kb = KnowledgebaseService.get_or_none(id=dataset_id, tenant_id=tenant_id)
-    if kb is None:
+    kb = KnowledgebaseService.get_or_none(id=dataset_id)
+    if kb is None or not WorkspaceAccessService.can_update_knowledgebase(tenant_id, kb):
         return False, f"User '{tenant_id}' lacks permission for dataset '{dataset_id}'"
 
     parser_cfg = kb.parser_config or {}
@@ -698,7 +806,7 @@ def delete_tags(dataset_id: str, tenant_id: str, tags: list[str]):
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -829,7 +937,7 @@ def delete_index(dataset_id: str, tenant_id: str, index_type: str, wipe: bool = 
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -886,7 +994,7 @@ def rename_tag(dataset_id: str, tenant_id: str, from_tag: str, to_tag: str):
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -913,7 +1021,6 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
     from api.db.services.doc_metadata_service import DocMetadataService
     from api.db.services.llm_service import LLMBundle
     from api.db.services.search_service import SearchService
-    from api.db.services.user_service import UserTenantService
     from common.constants import LLMType
     from common.metadata_utils import apply_meta_data_filter
     from rag.app.tag import label_question
@@ -938,7 +1045,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
 
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
         logging.warning("search access denied: dataset=%s tenant=%s", dataset_id, tenant_id)
-        return False, "Only owner of dataset authorized for this operation."
+        return False, "No authorization to access this dataset."
 
     e, kb = KnowledgebaseService.get_by_id(dataset_id)
     if not e:
@@ -958,6 +1065,10 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         if not search_detail:
             logging.warning("search config not found: search_id=%s", search_id)
             return False, "Invalid search_id"
+        if not WorkspaceAccessService.can_read_shared_resource(tenant_id, search_detail):
+            return False, "No authorization for search application."
+        if search_detail.get("tenant_id") != kb.tenant_id:
+            return False, "Search application and dataset must belong to the same workspace."
         search_config = search_detail.get("search_config", {})
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
@@ -977,15 +1088,15 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
             if chat_id:
-                chat_model_config = resolve_model_config(tenant_id, LLMType.CHAT, search_config["chat_id"])
+                chat_model_config = resolve_model_config(kb.tenant_id, LLMType.CHAT, search_config["chat_id"])
             else:
-                chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+                chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kb.tenant_id, chat_model_config)
     else:
         meta_data_filter = req.get("meta_data_filter") or {}
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
-            chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+            chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kb.tenant_id, chat_model_config)
 
     if meta_data_filter:
         local_doc_ids = await apply_meta_data_filter(
@@ -998,14 +1109,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
             metas_loader=lambda: DocMetadataService.get_flatted_meta_by_kbs([dataset_id]),
         )
 
-    tenant_ids = []
-    tenants = UserTenantService.query(user_id=tenant_id)
-    for tenant in tenants:
-        if KnowledgebaseService.query(tenant_id=tenant.tenant_id, id=dataset_id):
-            tenant_ids.append(tenant.tenant_id)
-            break
-    else:
-        return False, "Only owner of dataset authorized for this operation."
+    tenant_ids = [kb.tenant_id]
 
     _question = question
     if langs:
@@ -1046,7 +1150,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
 
     if use_kg:
         try:
-            default_chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
+            default_chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
             ck = await settings.kg_retriever.retrieval(_question, tenant_ids, [dataset_id], embd_mdl, LLMBundle(kb.tenant_id, default_chat_model_config))
             if ck["content_with_weight"]:
                 ranks["chunks"].insert(0, ck)
@@ -1296,7 +1400,6 @@ async def search_datasets(tenant_id: str, req: dict):
     from api.db.services.doc_metadata_service import DocMetadataService
     from api.db.services.llm_service import LLMBundle
     from api.db.services.search_service import SearchService
-    from api.db.services.user_service import UserTenantService
     from common.constants import LLMType
     from common.metadata_utils import apply_meta_data_filter
     from rag.app.tag import label_question
@@ -1324,7 +1427,7 @@ async def search_datasets(tenant_id: str, req: dict):
     for kb_id in kb_ids:
         if not KnowledgebaseService.accessible(kb_id, tenant_id):
             logging.warning("search_datasets access denied: dataset=%s tenant=%s", kb_id, tenant_id)
-            return False, f"Only owner of dataset {kb_id} authorized for this operation."
+            return False, f"No authorization to access dataset {kb_id}."
 
     kbs = KnowledgebaseService.get_by_ids(kb_ids)
     if not kbs:
@@ -1347,6 +1450,10 @@ async def search_datasets(tenant_id: str, req: dict):
         if not search_detail:
             logging.warning("search config not found: search_id=%s", search_id)
             return False, "Invalid search_id"
+        if not WorkspaceAccessService.can_read_shared_resource(tenant_id, search_detail):
+            return False, "No authorization for search application."
+        if any(kb.tenant_id != search_detail.get("tenant_id") for kb in kbs):
+            return False, "Search application and datasets must belong to the same workspace."
         search_config = search_detail.get("search_config", {})
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
@@ -1366,15 +1473,15 @@ async def search_datasets(tenant_id: str, req: dict):
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
             if chat_id:
-                chat_model_config = resolve_model_config(tenant_id, LLMType.CHAT, search_config["chat_id"])
+                chat_model_config = resolve_model_config(search_detail["tenant_id"], LLMType.CHAT, search_config["chat_id"])
             else:
-                chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+                chat_model_config = get_tenant_default_model_by_type(search_detail["tenant_id"], LLMType.CHAT)
+            chat_mdl = LLMBundle(search_detail["tenant_id"], chat_model_config)
     else:
         meta_data_filter = req.get("meta_data_filter") or {}
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
-            chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+            chat_model_config = get_tenant_default_model_by_type(kbs[0].tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kbs[0].tenant_id, chat_model_config)
 
     if meta_data_filter:
         logging.debug("Metadata filter applied: %s, question length: %d, chat_mdl=%s", meta_data_filter, len(question), "None" if chat_mdl is None else "configured")
@@ -1388,14 +1495,7 @@ async def search_datasets(tenant_id: str, req: dict):
             metas_loader=lambda: DocMetadataService.get_flatted_meta_by_kbs(kb_ids),
         )
 
-    tenant_ids = []
-    tenants = UserTenantService.query(user_id=tenant_id)
-    for tenant in tenants:
-        if any(KnowledgebaseService.query(tenant_id=tenant.tenant_id, id=kb_id) for kb_id in kb_ids):
-            tenant_ids.append(tenant.tenant_id)
-            break
-    else:
-        return False, "Only owner of datasets authorized for this operation."
+    tenant_ids = list(dict.fromkeys(kb.tenant_id for kb in kbs))
 
     kb = kbs[0]
     _question = question
@@ -1439,7 +1539,7 @@ async def search_datasets(tenant_id: str, req: dict):
 
     if use_kg:
         try:
-            default_chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
+            default_chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
             ck = await settings.kg_retriever.retrieval(_question, tenant_ids, kb_ids, embd_mdl, LLMBundle(kb.tenant_id, default_chat_model_config))
             if ck["content_with_weight"]:
                 ranks["chunks"].insert(0, ck)
@@ -1951,7 +2051,7 @@ async def update_wiki_page(
     ``(True, None)`` when the row is missing, or
     ``(False, message)`` on authorization failure.
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
 
@@ -2524,7 +2624,7 @@ async def clear_wiki(dataset_id: str, tenant_id: str):
     Returns ``(True, {"deleted": {kwd: count_or_True}})`` on success or
     ``(False, str)`` on auth failure.
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
 

@@ -31,6 +31,7 @@ from agent.component import component_class
 from agent.component.base import ComponentBase
 from agent.dsl_migration import normalize_chunker_dsl
 from api.db.joint_services.tenant_model_service import get_tenant_default_model_by_type
+from api.db.services.agent_reference_service import AgentReferenceService
 from api.db.services.file_service import FileService
 from api.db.services.llm_service import LLMBundle
 from api.db.services.task_service import has_canceled
@@ -198,6 +199,9 @@ class Graph:
 
     def get_tenant_id(self):
         return self._tenant_id
+
+    def get_canvas_id(self):
+        return getattr(self, "_id", None)
 
     def get_value_with_variable(self, value: str) -> Any:
         # Reference the canonical pre-compiled regex from ComponentBase so
@@ -905,12 +909,16 @@ class Canvas(Graph):
         if not files:
             return []
 
+        workspace_id = self.get_tenant_id()
+        for file in files:
+            AgentReferenceService.require_upload_descriptor(workspace_id, file)
+
         def image_to_base64(file):
-            return "data:{};base64,{}".format(file["mime_type"], base64.b64encode(FileService.get_blob(file["created_by"], file["id"])).decode("utf-8"))
+            return "data:{};base64,{}".format(file["mime_type"], base64.b64encode(FileService.get_blob(workspace_id, file["id"])).decode("utf-8"))
 
         def parse_file(file):
-            blob = FileService.get_blob(file["created_by"], file["id"])
-            return FileService.parse(file["name"], blob, True, file["created_by"], layout_recognize)
+            blob = FileService.get_blob(workspace_id, file["id"])
+            return FileService.parse(file["name"], blob, True, workspace_id, layout_recognize)
 
         loop = asyncio.get_running_loop()
         tasks = []

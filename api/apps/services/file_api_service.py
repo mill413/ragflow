@@ -17,39 +17,43 @@ import logging
 import os
 import pathlib
 
-from api.common.check_team_permission import check_file_team_permission
+from api.common.check_team_permission import check_file_read_permission, check_file_write_permission
 from api.db import FileType
 from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.utils.file_utils import filename_type
 from common import settings
 from common.constants import FileSource
 from common.misc_utils import get_uuid, thread_pool_exec
 
 
-async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
+async def upload_file(workspace_id: str, actor_id: str, pf_id: str, file_objs: list):
     """
     Upload files to a folder.
 
-    :param tenant_id: tenant ID
+    :param workspace_id: target workspace ID
+    :param actor_id: authenticated user or workspace service principal creating the file
     :param pf_id: parent folder ID
     :param file_objs: list of file objects from request
     :return: (success, result_list) or (success, error_message)
     """
     if not pf_id:
-        root_folder = FileService.get_root_folder(tenant_id)
+        root_folder = FileService.get_root_folder(workspace_id)
         pf_id = root_folder["id"]
 
     e, pf_folder = FileService.get_by_id(pf_id)
     if not e:
         return False, "Can't find this folder!"
+    if pf_folder.tenant_id != workspace_id:
+        return False, "Parent folder does not belong to the selected workspace."
 
     file_res = []
     for file_obj in file_objs:
         MAX_FILE_NUM_PER_USER = int(os.environ.get("MAX_FILE_NUM_PER_USER", 0))
-        if 0 < MAX_FILE_NUM_PER_USER <= await thread_pool_exec(DocumentService.get_doc_count, tenant_id):
+        if 0 < MAX_FILE_NUM_PER_USER <= await thread_pool_exec(DocumentService.get_doc_count, workspace_id):
             return False, "Exceed the maximum file number of a free user!"
 
         if not file_obj.filename:
@@ -66,12 +70,12 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
             e, file = await thread_pool_exec(FileService.get_by_id, file_id_list[len_id_list - 1])
             if not e:
                 return False, "Folder not found!"
-            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 1], file_obj_names, len_id_list, tenant_id, tenant_id)
+            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 1], file_obj_names, len_id_list, workspace_id, actor_id)
         else:
             e, file = await thread_pool_exec(FileService.get_by_id, file_id_list[len_id_list - 2])
             if not e:
                 return False, "Folder not found!"
-            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 2], file_obj_names, len_id_list, tenant_id, tenant_id)
+            last_folder = await thread_pool_exec(FileService.create_folder, file, file_id_list[len_id_list - 2], file_obj_names, len_id_list, workspace_id, actor_id)
 
         filetype = filename_type(file_obj_names[file_len - 1])
         location = file_obj_names[file_len - 1]
@@ -83,8 +87,8 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
         file_data = {
             "id": get_uuid(),
             "parent_id": last_folder.id,
-            "tenant_id": tenant_id,
-            "created_by": tenant_id,
+            "tenant_id": workspace_id,
+            "created_by": actor_id,
             "type": filetype,
             "name": filename,
             "location": location,
@@ -96,22 +100,26 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
     return True, file_res
 
 
-async def create_folder(tenant_id: str, name: str, pf_id: str = None, file_type: str = None):
+async def create_folder(workspace_id: str, actor_id: str, name: str, pf_id: str = None, file_type: str = None):
     """
     Create a new folder or virtual file.
 
-    :param tenant_id: tenant ID
+    :param workspace_id: target workspace ID
+    :param actor_id: authenticated user or workspace service principal creating the folder
     :param name: folder name
     :param pf_id: parent folder ID
     :param file_type: file type (folder or virtual)
     :return: (success, result) or (success, error_message)
     """
     if not pf_id:
-        root_folder = FileService.get_root_folder(tenant_id)
+        root_folder = FileService.get_root_folder(workspace_id)
         pf_id = root_folder["id"]
 
     if not FileService.is_parent_folder_exist(pf_id):
         return False, "Parent Folder Doesn't Exist!"
+    parent_exists, parent_folder = FileService.get_by_id(pf_id)
+    if not parent_exists or parent_folder.tenant_id != workspace_id:
+        return False, "Parent folder does not belong to the selected workspace."
     if FileService.query(name=name, parent_id=pf_id):
         return False, "Duplicated folder name in the same folder."
 
@@ -124,8 +132,8 @@ async def create_folder(tenant_id: str, name: str, pf_id: str = None, file_type:
         {
             "id": get_uuid(),
             "parent_id": pf_id,
-            "tenant_id": tenant_id,
-            "created_by": tenant_id,
+            "tenant_id": workspace_id,
+            "created_by": actor_id,
             "name": name,
             "location": "",
             "size": 0,
@@ -159,6 +167,8 @@ def list_files(tenant_id: str, args: dict):
     e, file = FileService.get_by_id(pf_id)
     if not e:
         return False, "Folder not found!"
+    if file.tenant_id != tenant_id:
+        return False, "No authorization."
 
     files, total = FileService.get_by_pf_id(tenant_id, pf_id, page_number, items_per_page, orderby, desc, keywords)
 
@@ -169,7 +179,7 @@ def list_files(tenant_id: str, args: dict):
     return True, {"total": total, "files": files, "parent_folder": parent_folder.to_json()}
 
 
-def get_parent_folder(file_id: str, user_id: str = None):
+def get_parent_folder(file_id: str, user_id: str = None, tenant_id: str = None):
     """
     Get parent folder of a file with permission check.
 
@@ -177,21 +187,21 @@ def get_parent_folder(file_id: str, user_id: str = None):
     :param user_id: user ID for permission validation
     :return: (success, result) or (success, error_message)
     """
-    from api.common.check_team_permission import check_file_team_permission
-
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Folder not found!"
 
     # Permission check
-    if user_id and not check_file_team_permission(file, user_id):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if user_id and not check_file_read_permission(file, user_id):
         return False, "No authorization."
 
     parent_folder = FileService.get_parent_folder(file_id)
     return True, {"parent_folder": parent_folder.to_json()}
 
 
-def get_all_parent_folders(file_id: str, user_id: str = None):
+def get_all_parent_folders(file_id: str, user_id: str = None, tenant_id: str = None):
     """
     Get all ancestor folders of a file with permission check.
 
@@ -199,21 +209,21 @@ def get_all_parent_folders(file_id: str, user_id: str = None):
     :param user_id: user ID for permission validation
     :return: (success, result) or (success, error_message)
     """
-    from api.common.check_team_permission import check_file_team_permission
-
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Folder not found!"
 
     # Permission check
-    if user_id and not check_file_team_permission(file, user_id):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if user_id and not check_file_read_permission(file, user_id):
         return False, "No authorization."
 
     parent_folders = FileService.get_all_parent_folders(file_id)
     return True, {"parent_folders": [pf.to_json() for pf in parent_folders]}
 
 
-async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
+async def delete_files(uid: str, file_ids: list, auth_header: str = "", workspace_id: str = None):
     """
     Delete files/folders with team permission check and recursive deletion.
 
@@ -422,6 +432,7 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
 
     def _rm_sync():
         nonlocal success_count
+        deletion_roots = []
         for file_id in file_ids:
             e, file = FileService.get_by_id(file_id)
             if not e or not file:
@@ -430,7 +441,10 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
             if not file.tenant_id:
                 errors.append(f"Tenant not found for file {file_id}")
                 continue
-            if not check_file_team_permission(file, uid):
+            if workspace_id and file.tenant_id != workspace_id:
+                errors.append(f"File {file_id} does not belong to the selected workspace")
+                continue
+            if not check_file_write_permission(file, uid):
                 errors.append(f"No authorization for file {file_id}")
                 continue
 
@@ -440,6 +454,24 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
             if file.source_type == "skill_space":
                 continue
 
+            deletion_roots.append(file)
+
+        deletion_targets = {}
+
+        def collect_deletion_targets(file):
+            if file.id in deletion_targets:
+                return
+            deletion_targets[file.id] = file
+            if file.type != FileType.FOLDER.value:
+                return
+            for child in FileService.list_all_files_by_parent_id(file.id):
+                collect_deletion_targets(child)
+
+        for file in deletion_roots:
+            collect_deletion_targets(file)
+        ResourceReferenceService.ensure_not_referenced("file", list(deletion_targets.values()))
+
+        for file in deletion_roots:
             if file.type == FileType.FOLDER.value:
                 success_count += _delete_folder_recursive(file, uid)
                 continue
@@ -453,7 +485,7 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
     return await thread_pool_exec(_rm_sync)
 
 
-async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new_name: str = None):
+async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new_name: str = None, workspace_id: str = None):
     """
     Move and/or rename files. Follows Linux mv semantics:
     - new_name only: rename in place (no storage operation)
@@ -478,7 +510,9 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
             return False, "File or folder not found!"
         if not file.tenant_id:
             return False, "Tenant not found!"
-        if not check_file_team_permission(file, uid):
+        if workspace_id and file.tenant_id != workspace_id:
+            return False, "Source files do not belong to the selected workspace."
+        if not check_file_write_permission(file, uid):
             return False, "No authorization."
 
     dest_folder = None
@@ -486,6 +520,14 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
         ok, dest_folder = FileService.get_by_id(dest_file_id)
         if not ok or not dest_folder:
             return False, "Parent folder not found!"
+        if dest_folder.type != FileType.FOLDER.value:
+            return False, "Destination must be a folder."
+        if workspace_id and dest_folder.tenant_id != workspace_id:
+            return False, "Destination does not belong to the selected workspace."
+        if not check_file_write_permission(dest_folder, uid):
+            return False, "No authorization for destination folder."
+        if any(file.tenant_id != dest_folder.tenant_id for file in files):
+            return False, "Files cannot be moved across workspaces."
 
     if new_name:
         file = files_dict[src_file_ids[0]]
@@ -591,7 +633,7 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
     return await thread_pool_exec(_move_or_rename_sync)
 
 
-def get_file_content(uid: str, file_id: str):
+def get_file_content(uid: str, file_id: str, tenant_id: str = None):
     """
     Get file content and metadata for download.
 
@@ -602,6 +644,8 @@ def get_file_content(uid: str, file_id: str):
     e, file = FileService.get_by_id(file_id)
     if not e:
         return False, "Document not found!"
-    if not check_file_team_permission(file, uid):
+    if tenant_id and file.tenant_id != tenant_id:
+        return False, "No authorization."
+    if not check_file_read_permission(file, uid):
         return False, "No authorization."
     return True, file

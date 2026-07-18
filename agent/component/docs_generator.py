@@ -136,8 +136,16 @@ class DocGenerator(Message, ABC):
                     "filename": filename,
                     "mime_type": mime_type,
                     "size": file_size,
+                    "workspace_id": self._canvas.get_tenant_id(),
+                    "agent_id": self._canvas.get_canvas_id(),
                     "base64": file_base64,
-                    "preview_url": agent_attachment_preview_path(doc_id, ext=output_format, mime_type=mime_type),
+                    "preview_url": agent_attachment_preview_path(
+                        doc_id,
+                        workspace_id=self._canvas.get_tenant_id(),
+                        agent_id=self._canvas.get_canvas_id(),
+                        ext=output_format,
+                        mime_type=mime_type,
+                    ),
                     "include_download_info_in_content": self._param.include_download_info_in_content,
                 }
                 self.set_output("doc_id", doc_id)

@@ -25,9 +25,9 @@ from api.apps import current_user, login_required
 from api.constants import DATASET_NAME_LIMIT
 from api.db.db_models import DB
 from api.db.services import duplicate_name
-from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.search_service import SearchService
-from api.db.services.user_service import TenantService, UserTenantService
+from api.db.services.user_service import TenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 from common.misc_utils import get_uuid
 from common.constants import RetCode, StatusEnum
 from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, server_error_response, validate_request
@@ -40,11 +40,40 @@ def _full_text_weight(vector_similarity_weight):
     return None
 
 
+def _build_search_response(search):
+    data = search.to_dict() if hasattr(search, "to_dict") else dict(search)
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
+    data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(current_user.id, data)
+    return data
+
+
+def _get_search(search_id, *, manage=False):
+    exists, search = SearchService.get_by_id(search_id)
+    if not exists:
+        return None
+    check = WorkspaceAccessService.can_manage_collaborative_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    return search if check(current_user.id, search) else None
+
+
+def _validate_search_knowledgebases(search_config, workspace_id):
+    if not isinstance(search_config, dict):
+        return "search_config must be a JSON object"
+    knowledgebase_ids = search_config.get("kb_ids") or []
+    if not isinstance(knowledgebase_ids, list):
+        return "search_config.kb_ids must be a list"
+    if not WorkspaceAccessService.can_reference_knowledgebases(current_user.id, workspace_id, knowledgebase_ids):
+        return "Searches can only reference datasets from the same workspace."
+    return None
+
+
 @manager.route("/searches", methods=["POST"])  # noqa: F821
 @login_required
 @validate_request("name")
 async def create():
     req = await get_request_json()
+    workspace_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
+    if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
+        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
     search_name = req["name"]
     description = req.get("description", "")
     if not isinstance(search_name, str):
@@ -53,18 +82,20 @@ async def create():
         return get_data_error_result(message="Search name can't be empty.")
     if len(search_name.encode("utf-8")) > 255:
         return get_data_error_result(message=f"Search name length is {len(search_name)} which is large than 255.")
-    e, _ = TenantService.get_by_id(current_user.id)
+    e, _ = TenantService.get_by_id(workspace_id)
     if not e:
         return get_data_error_result(message="Authorized identity.")
 
     search_name = search_name.strip()
-    search_name = duplicate_name(SearchService.query, name=search_name, tenant_id=current_user.id, status=StatusEnum.VALID.value)
+    search_name = duplicate_name(SearchService.query, name=search_name, tenant_id=workspace_id, status=StatusEnum.VALID.value)
 
     req["id"] = get_uuid()
     req["name"] = search_name
     req["description"] = description
-    req["tenant_id"] = current_user.id
+    req["tenant_id"] = workspace_id
     req["created_by"] = current_user.id
+    if error := _validate_search_knowledgebases(req.get("search_config", {}), workspace_id):
+        return get_data_error_result(message=error)
     with DB.atomic():
         try:
             if not SearchService.save(**req):
@@ -85,16 +116,18 @@ def list_searches():
     owner_ids = request.args.getlist("owner_ids")
 
     try:
+        accessible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(current_user.id))
         if not owner_ids:
-            tenants = []
-            search_apps, total = SearchService.get_by_tenant_ids(tenants, current_user.id, page_number, items_per_page, orderby, desc, keywords)
+            search_apps, total = SearchService.get_by_tenant_ids(list(accessible_workspace_ids), current_user.id, page_number, items_per_page, orderby, desc, keywords)
         else:
+            if not set(owner_ids).issubset(accessible_workspace_ids):
+                return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
             search_apps, total = SearchService.get_by_tenant_ids(owner_ids, current_user.id, 0, 0, orderby, desc, keywords)
             search_apps = [s for s in search_apps if s["tenant_id"] in owner_ids]
             total = len(search_apps)
             if page_number and items_per_page:
                 search_apps = search_apps[(page_number - 1) * items_per_page : page_number * items_per_page]
-        return get_json_result(data={"search_apps": search_apps, "total": total})
+        return get_json_result(data={"search_apps": [_build_search_response(search) for search in search_apps], "total": total})
     except Exception as e:
         return server_error_response(e)
 
@@ -103,17 +136,14 @@ def list_searches():
 @login_required
 def detail(search_id):
     try:
-        tenants = UserTenantService.query(user_id=current_user.id)
-        for tenant in tenants:
-            if SearchService.query(tenant_id=tenant.tenant_id, id=search_id):
-                break
-        else:
+        current_search = _get_search(search_id)
+        if not current_search:
             return get_json_result(data=False, message="Has no permission for this operation.", code=RetCode.OPERATING_ERROR)
 
         search = SearchService.get_detail(search_id)
         if not search:
             return get_data_error_result(message="Can't find this Search App!")
-        return get_json_result(data=search)
+        return get_json_result(data=_build_search_response(search))
     except Exception as e:
         return server_error_response(e)
 
@@ -131,19 +161,20 @@ async def update(search_id):
         return get_data_error_result(message=f"Search name length is {len(req['name'])} which is large than {DATASET_NAME_LIMIT}")
     req["name"] = req["name"].strip()
 
-    e, _ = TenantService.get_by_id(current_user.id)
-    if not e:
-        return get_data_error_result(message="Authorized identity.")
-
-    if not SearchService.accessible4deletion(search_id, current_user.id):
+    current_search = _get_search(search_id, manage=True)
+    if not current_search:
         return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
     try:
-        search_app = SearchService.query(tenant_id=current_user.id, id=search_id)[0]
+        search_app = current_search
         if not search_app:
             return get_json_result(data=False, message=f"Cannot find search {search_id}", code=RetCode.DATA_ERROR)
 
-        if req["name"].lower() != search_app.name.lower() and len(SearchService.query(name=req["name"], tenant_id=current_user.id, status=StatusEnum.VALID.value)) >= 1:
+        req.pop("workspace_id", None)
+
+        if req["name"].lower() != search_app.name.lower() and len(
+            SearchService.query(name=req["name"], tenant_id=search_app.tenant_id, status=StatusEnum.VALID.value)
+        ) >= 1:
             return get_data_error_result(message="Duplicated search name.")
 
         current_config = search_app.search_config or {}
@@ -151,6 +182,8 @@ async def update(search_id):
         if not isinstance(new_config, dict):
             return get_data_error_result(message="search_config must be a JSON object")
         req["search_config"] = {**current_config, **new_config}
+        if error := _validate_search_knowledgebases(req["search_config"], search_app.tenant_id):
+            return get_data_error_result(message=error)
         logging.debug(
             "Search update weight: search_id=%s user_id=%s incoming_vector_similarity_weight=%s stored_vector_similarity_weight=%s stored_full_text_weight=%s",
             search_id,
@@ -171,7 +204,7 @@ async def update(search_id):
         if not e:
             return get_data_error_result(message="Failed to fetch updated search")
 
-        return get_json_result(data=updated_search.to_dict())
+        return get_json_result(data=_build_search_response(updated_search))
 
     except Exception as e:
         return server_error_response(e)
@@ -180,7 +213,7 @@ async def update(search_id):
 @manager.route("/searches/<search_id>", methods=["DELETE"])  # noqa: F821
 @login_required
 def delete_search(search_id):
-    if not SearchService.accessible4deletion(search_id, current_user.id):
+    if not _get_search(search_id, manage=True):
         return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
     try:
@@ -196,7 +229,8 @@ def delete_search(search_id):
 @login_required
 @validate_request("question")
 async def completion(search_id):
-    if not SearchService.accessible4deletion(search_id, current_user.id):
+    current_search = _get_search(search_id)
+    if not current_search:
         return get_json_result(
             data=False,
             message="No authorization.",
@@ -205,6 +239,7 @@ async def completion(search_id):
 
     req = await get_request_json()
     uid = current_user.id
+    workspace_id = current_search.tenant_id
     search_app = SearchService.get_detail(search_id)
     if not search_app:
         return get_data_error_result(message=f"Cannot find search {search_id}")
@@ -221,15 +256,13 @@ async def completion(search_id):
     if not kb_ids:
         return get_data_error_result(message="`kb_ids` is required.")
 
-    # check if the kb_ids is accessible for this user
-    for kb_id in kb_ids:
-        if not KnowledgebaseService.accessible(kb_id=kb_id, user_id=uid):
-            return get_data_error_result(message=f"You don't own the dataset {kb_id}")
+    if not WorkspaceAccessService.can_reference_knowledgebases(uid, workspace_id, kb_ids):
+        return get_data_error_result(message="Search datasets are no longer accessible from this workspace.")
 
     async def stream():
         nonlocal req, uid, kb_ids, search_config
         try:
-            async for ans in async_ask(req["question"], kb_ids, uid, search_config=search_config, search_id=search_id):
+            async for ans in async_ask(req["question"], kb_ids, workspace_id, search_config=search_config, search_id=search_id):
                 yield "data:" + json.dumps({"code": 0, "message": "", "data": ans}, ensure_ascii=False) + "\n\n"
         except Exception as ex:
             yield (

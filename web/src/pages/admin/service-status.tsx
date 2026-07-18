@@ -72,6 +72,7 @@ import 'react18-json-view/src/style.css';
 
 import ServiceDetail from './service-detail';
 import TaskExecutorDetail from './task-executor-detail';
+import MonitoringPanel from './components/monitoring-panel';
 
 const columnHelper = createColumnHelper<AdminService.ListServicesItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListServicesItem>([
@@ -102,8 +103,10 @@ function AdminServiceStatus() {
 
   const { data: serviceDetails, error: serviceDetailsError } = useQuery({
     queryKey: ['admin/serviceDetails', itemToMakeAction?.id],
-    queryFn: async () =>
-      (await showServiceDetails(itemToMakeAction!?.id)).data.data,
+    queryFn: async () => {
+      if (!itemToMakeAction) throw new Error('Service is not selected');
+      return (await showServiceDetails(itemToMakeAction.id)).data.data;
+    },
     enabled: !!(itemToMakeAction && detailModalOpen),
     retry: false,
   });
@@ -125,7 +128,6 @@ function AdminServiceStatus() {
             resolveFilterValue: (v) => v || null,
           },
         ),
-        enableSorting: false,
       }),
       columnHelper.accessor('host', {
         header: t('admin.host'),
@@ -160,7 +162,6 @@ function AdminServiceStatus() {
             {t(`admin.${cell.getValue()}`)}
           </Badge>
         ),
-        enableSorting: false,
       }),
       columnHelper.display({
         id: 'actions',
@@ -207,8 +208,6 @@ function AdminServiceStatus() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-
-    enableSorting: false,
   });
 
   useEffect(() => {
@@ -223,6 +222,7 @@ function AdminServiceStatus() {
         <Spotlight />
 
         <ScrollArea className="size-full">
+          <MonitoringPanel />
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
             <CardTitle>{t('admin.serviceStatus')}</CardTitle>
 
@@ -244,11 +244,11 @@ function AdminServiceStatus() {
                       <RadioGroup
                         value={
                           (table
-                            .getColumn('service_type')!
+                            .getColumn('service_type')
                             ?.getFilterValue() as string) ?? ''
                         }
                         onValueChange={
-                          table.getColumn('service_type')!?.setFilterValue
+                          table.getColumn('service_type')?.setFilterValue
                         }
                       >
                         <Label className="flex items-center space-x-2">

@@ -19,11 +19,14 @@ from quart import Response, request
 from api.apps import current_user, login_required
 from api.db.db_models import MCPServer
 from api.db.services.mcp_server_service import MCPServerService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.user_service import TenantService
-from api.utils.api_utils import get_data_error_result, get_json_result, get_mcp_tools, get_request_json, server_error_response, validate_request
+from api.db.services.workspace_service import WorkspaceAccessService
+from api.utils.api_utils import get_data_error_result, get_json_result, get_mcp_tools, get_request_json, get_resource_in_use_result, server_error_response, validate_request
 from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.web_utils import get_float, safe_json_parse
 from common.constants import VALID_MCP_SERVER_TYPES
+from common.exceptions import ResourceInUseException
 from common.mcp_tool_call_conn import MCPToolCallSession, close_multiple_mcp_toolcall_sessions
 from common.misc_utils import get_uuid, thread_pool_exec
 from common.ssrf_guard import assert_url_is_safe, pin_dns_global
@@ -41,7 +44,7 @@ def _export_mcp_servers(mcp_ids: list[str]) -> dict | None:
     exported_servers = {}
     for mcp_id in mcp_ids:
         e, mcp_server = MCPServerService.get_by_id(mcp_id)
-        if e and mcp_server.tenant_id == current_user.id:
+        if e and WorkspaceAccessService.can_manage_workspace_resource(current_user.id, mcp_server):
             server_key = mcp_server.name
             exported_servers[server_key] = {
                 "type": mcp_server.server_type,
@@ -55,6 +58,27 @@ def _export_mcp_servers(mcp_ids: list[str]) -> dict | None:
         return None
 
     return {"mcpServers": exported_servers}
+
+
+def _mcp_response(server) -> dict:
+    data = server.to_dict() if hasattr(server, "to_dict") else dict(server)
+    data.update(WorkspaceAccessService.get_resource_workspace_metadata(data))
+    capabilities = WorkspaceAccessService.get_workspace_resource_capabilities(current_user.id, data)
+    data["capabilities"] = capabilities
+    if not capabilities["update"]:
+        data.pop("headers", None)
+        variables = dict(data.get("variables") or {})
+        variables.pop("authorization_token", None)
+        data["variables"] = variables
+    return data
+
+
+def _visible_workspace_ids() -> list[str]:
+    visible_ids = WorkspaceAccessService.list_visible_workspace_ids(current_user.id)
+    workspace_id = request.args.get("workspace_id")
+    if workspace_id:
+        return [workspace_id] if workspace_id in visible_ids else []
+    return visible_ids
 
 
 def _assert_mcp_url_is_safe(url, invalid_message: str = "Invalid url.") -> tuple[str, str, str | None]:
@@ -81,13 +105,13 @@ async def list_mcp() -> Response:
 
     mcp_ids = _get_mcp_ids_from_args()
     try:
-        servers = MCPServerService.get_servers(current_user.id, mcp_ids, 0, 0, orderby, desc, keywords) or []
+        servers = MCPServerService.get_servers_by_tenant_ids(_visible_workspace_ids(), mcp_ids, orderby, desc, keywords)
         total = len(servers)
 
         if page_number and items_per_page:
             servers = servers[(page_number - 1) * items_per_page : page_number * items_per_page]
 
-        return get_json_result(data={"mcp_servers": servers, "total": total})
+        return get_json_result(data={"mcp_servers": [_mcp_response(server) for server in servers], "total": total})
     except Exception as e:
         return server_error_response(e)
 
@@ -102,12 +126,12 @@ def detail(mcp_id: str) -> Response:
                 return get_data_error_result(message=f"Cannot find MCP server {mcp_id} for user {current_user.id}")
             return get_json_result(data=exported_servers)
 
-        mcp_server = MCPServerService.get_or_none(id=mcp_id, tenant_id=current_user.id)
+        mcp_server = MCPServerService.get_or_none(id=mcp_id)
 
-        if mcp_server is None:
+        if mcp_server is None or not WorkspaceAccessService.can_read_workspace_resource(current_user.id, mcp_server):
             return get_data_error_result(message=f"Cannot find MCP server {mcp_id} for user {current_user.id}")
 
-        return get_json_result(data=mcp_server.to_dict())
+        return get_json_result(data=_mcp_response(mcp_server))
     except Exception as e:
         return server_error_response(e)
 
@@ -117,6 +141,9 @@ def detail(mcp_id: str) -> Response:
 @validate_request("name", "url", "server_type")
 async def create() -> Response:
     req = await get_request_json()
+    workspace_id = req.pop("workspace_id", current_user.id)
+    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        return get_data_error_result(message="No authorization.")
 
     server_type = req.get("server_type", "")
     if server_type not in VALID_MCP_SERVER_TYPES:
@@ -126,7 +153,7 @@ async def create() -> Response:
     if not server_name or len(server_name.encode("utf-8")) > 255:
         return get_data_error_result(message=f"Invalid MCP name or length is {len(server_name)} which is large than 255.")
 
-    e, _ = MCPServerService.get_by_name_and_tenant(name=server_name, tenant_id=current_user.id)
+    e, _ = MCPServerService.get_by_name_and_tenant(name=server_name, tenant_id=workspace_id)
     if e:
         return get_data_error_result(message="Duplicated MCP server name.")
 
@@ -144,9 +171,9 @@ async def create() -> Response:
 
     try:
         req["id"] = get_uuid()
-        req["tenant_id"] = current_user.id
+        req["tenant_id"] = workspace_id
 
-        e, _ = TenantService.get_by_id(current_user.id)
+        e, _ = TenantService.get_by_id(workspace_id)
         if not e:
             return get_data_error_result(message="Tenant not found.")
 
@@ -164,7 +191,8 @@ async def create() -> Response:
         if not MCPServerService.insert(**req):
             return get_data_error_result(message="Failed to create MCP server.")
 
-        return get_json_result(data=req)
+        _, created = MCPServerService.get_by_id(req["id"])
+        return get_json_result(data=_mcp_response(created))
     except Exception as e:
         return server_error_response(e)
 
@@ -175,8 +203,9 @@ async def update(mcp_id: str) -> Response:
     req = await get_request_json()
 
     e, mcp_server = MCPServerService.get_by_id(mcp_id)
-    if not e or mcp_server.tenant_id != current_user.id:
+    if not e or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, mcp_server):
         return get_data_error_result(message=f"Cannot find MCP server {mcp_id} for user {current_user.id}")
+    workspace_id = mcp_server.tenant_id
 
     server_type = req.get("server_type", mcp_server.server_type)
     if server_type and server_type not in VALID_MCP_SERVER_TYPES:
@@ -185,7 +214,7 @@ async def update(mcp_id: str) -> Response:
     if server_name and len(server_name.encode("utf-8")) > 255:
         return get_data_error_result(message=f"Invalid MCP name or length is {len(server_name)} which is large than 255.")
     if server_name and server_name != mcp_server.name:
-        e, _ = MCPServerService.get_by_name_and_tenant(name=server_name, tenant_id=current_user.id)
+        e, _ = MCPServerService.get_by_name_and_tenant(name=server_name, tenant_id=workspace_id)
         if e:
             return get_data_error_result(message="Duplicated MCP server name.")
     url = req.get("url", mcp_server.url)
@@ -202,7 +231,7 @@ async def update(mcp_id: str) -> Response:
     timeout = get_float(req, "timeout", 10)
 
     try:
-        req["tenant_id"] = current_user.id
+        req["tenant_id"] = workspace_id
         req["id"] = mcp_id
 
         mcp_server = MCPServer(id=server_name, name=server_name, url=url, server_type=server_type, variables=variables, headers=headers)
@@ -216,14 +245,14 @@ async def update(mcp_id: str) -> Response:
         variables["tools"] = tools
         req["variables"] = variables
 
-        if not MCPServerService.filter_update([MCPServer.id == mcp_id, MCPServer.tenant_id == current_user.id], req):
+        if not MCPServerService.filter_update([MCPServer.id == mcp_id, MCPServer.tenant_id == workspace_id], req):
             return get_data_error_result(message="Failed to updated MCP server.")
 
         e, updated_mcp = MCPServerService.get_by_id(req["id"])
         if not e:
             return get_data_error_result(message="Failed to fetch updated MCP server.")
 
-        return get_json_result(data=updated_mcp.to_dict())
+        return get_json_result(data=_mcp_response(updated_mcp))
     except Exception as e:
         return server_error_response(e)
 
@@ -233,12 +262,15 @@ async def update(mcp_id: str) -> Response:
 async def rm(mcp_id: str) -> Response:
     try:
         e, mcp_server = MCPServerService.get_by_id(mcp_id)
-        if not e or mcp_server.tenant_id != current_user.id:
+        if not e or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, mcp_server):
             return get_data_error_result(message=f"Cannot find MCP server {mcp_id} for user {current_user.id}")
+        ResourceReferenceService.ensure_not_referenced("mcp", [mcp_server])
         if not MCPServerService.delete_by_ids([mcp_id]):
             return get_data_error_result(message=f"Failed to delete MCP servers {[mcp_id]}")
 
         return get_json_result(data=True)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         return server_error_response(e)
 
@@ -248,6 +280,9 @@ async def rm(mcp_id: str) -> Response:
 @validate_request("mcpServers")
 async def import_multiple() -> Response:
     req = await get_request_json()
+    workspace_id = req.pop("workspace_id", current_user.id)
+    if not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        return get_data_error_result(message="No authorization.")
     servers = req.get("mcpServers", {})
     if not servers:
         return get_data_error_result(message="No MCP servers provided.")
@@ -277,7 +312,7 @@ async def import_multiple() -> Response:
             counter = 0
 
             while True:
-                e, _ = MCPServerService.get_by_name_and_tenant(name=new_name, tenant_id=current_user.id)
+                e, _ = MCPServerService.get_by_name_and_tenant(name=new_name, tenant_id=workspace_id)
                 if not e:
                     break
                 new_name = f"{base_name}_{counter}"
@@ -285,7 +320,7 @@ async def import_multiple() -> Response:
 
             create_data = {
                 "id": get_uuid(),
-                "tenant_id": current_user.id,
+                "tenant_id": workspace_id,
                 "name": new_name,
                 "url": config["url"],
                 "server_type": config["type"],
@@ -323,6 +358,13 @@ async def import_multiple() -> Response:
 @validate_request("url", "server_type")
 async def test_mcp(mcp_id: str) -> Response:
     req = await get_request_json()
+    exists, stored_server = MCPServerService.get_by_id(mcp_id)
+    workspace_id = req.pop("workspace_id", current_user.id)
+    if exists:
+        if not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, stored_server):
+            return get_data_error_result(message="No authorization.")
+    elif not WorkspaceAccessService.can_create_shared_resource(current_user.id, workspace_id):
+        return get_data_error_result(message="No authorization.")
 
     url = req.get("url", "")
     if not isinstance(url, str) or not url:

@@ -37,7 +37,8 @@ from quart import Response, jsonify, request, make_response
 
 from api.apps import AUTH_JWT, AUTH_API, AUTH_BETA, current_user, login_required
 from api.apps.services.canvas_replica_service import CanvasReplicaService
-from api.db import CanvasCategory
+from api.apps.workspace_access import workspace_required
+from api.db import CanvasCategory, TenantPermission, WorkspaceType
 from api.db.db_models import Task
 from api.db.services.api_service import API4ConversationService
 from api.db.services.canvas_service import (
@@ -50,15 +51,18 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.pipeline_operation_log_service import PipelineOperationLogService
-from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow
-from api.db.services.user_service import TenantService, UserService
+from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow, register_task_authorization
+from api.db.services.user_service import TenantService
 from api.db.services.user_canvas_version import UserCanvasVersionService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import (
     add_tenant_id_to_kwargs,
     check_duplicate_ids,
     get_data_error_result,
     get_error_data_result,
     get_json_result,
+    get_resource_in_use_result,
     get_result,
     get_request_json,
     server_error_response,
@@ -68,6 +72,7 @@ from api.utils.pagination_utils import validate_rest_api_page_size
 from common import settings
 from common.ssrf_guard import assert_host_is_safe
 from common.constants import RetCode
+from common.exceptions import ResourceInUseException
 from common.misc_utils import get_uuid, thread_pool_exec
 from peewee import MySQLDatabase, PostgresqlDatabase
 
@@ -87,6 +92,32 @@ def _canvas_json_default(obj):
     if callable(obj):
         return None
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def _validate_agent_workspace_references(user_id: str, workspace_id: str, dsl: dict) -> str | None:
+    knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(dsl)
+    if not WorkspaceAccessService.can_reference_knowledgebases(user_id, workspace_id, knowledgebase_ids):
+        return "Agents can only reference datasets from the same workspace."
+
+    memory_ids = WorkspaceAccessService.extract_reference_ids(dsl, {"memory_id", "memory_ids"})
+    if not WorkspaceAccessService.can_reference_memories(user_id, workspace_id, memory_ids):
+        return "Agents can only reference memories from the same workspace."
+
+    mcp_ids = WorkspaceAccessService.extract_reference_ids(dsl, {"mcp_id", "mcp_ids"})
+    if not WorkspaceAccessService.can_reference_mcp_servers(user_id, workspace_id, mcp_ids):
+        return "Agents can only reference MCP servers from the same workspace."
+
+    compilation_group_ids = WorkspaceAccessService.extract_reference_ids(
+        dsl,
+        {"compilation_template_group_id", "compilation_template_group_ids"},
+    )
+    if not WorkspaceAccessService.can_reference_compilation_template_groups(user_id, workspace_id, compilation_group_ids):
+        return "Agents can only reference compilation templates from the same workspace."
+
+    file_ids = WorkspaceAccessService.extract_static_file_ids(dsl)
+    if not WorkspaceAccessService.can_reference_files(user_id, workspace_id, file_ids):
+        return "Agents can only reference files from the same workspace."
+    return None
 
 
 def _require_canvas_access_sync(func):
@@ -111,11 +142,23 @@ def _require_canvas_access_async(func):
     return wrapper
 
 
-def _require_canvas_owner_sync(func):
+def _require_canvas_manage_async(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        agent_id = kwargs.get("agent_id")
+        tenant_id = kwargs.get("tenant_id")
+        if not await thread_pool_exec(UserCanvasService.manageable, agent_id, tenant_id):
+            return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
+def _require_canvas_manage_sync(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not UserCanvasService.query(user_id=kwargs.get("tenant_id"), id=kwargs.get("agent_id")):
-            return get_json_result(data=False, message="Only the owner of the agent is authorized for this operation.", code=RetCode.OPERATING_ERROR)
+        if not UserCanvasService.manageable(kwargs.get("agent_id"), kwargs.get("tenant_id")):
+            return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
         return func(*args, **kwargs)
 
     return wrapper
@@ -137,11 +180,28 @@ def _allow_anonymous_webhook(security_cfg: dict) -> bool:
     return _is_truthy(security_cfg.get("allow_anonymous"))
 
 
-def _get_user_nickname(user_id: str) -> str:
-    exists, user = UserService.get_by_id(user_id)
-    if not exists:
-        return user_id
-    return str(getattr(user, "nickname", "") or user_id)
+def _get_workspace_name(workspace_id: str) -> str:
+    exists, workspace = TenantService.get_by_id(workspace_id)
+    return str(getattr(workspace, "name", "") or workspace_id) if exists else workspace_id
+
+
+def _build_agent_response(agent: dict, user_id: str) -> dict:
+    data = dict(agent)
+    workspace_id = data.get("user_id") or data.get("tenant_id")
+    data["tenant_id"] = workspace_id
+    data.update(
+        WorkspaceAccessService.get_resource_workspace_metadata(
+            data,
+            workspace_field="user_id" if data.get("user_id") else "tenant_id",
+        )
+    )
+    data["capabilities"] = WorkspaceAccessService.get_collaborative_resource_capabilities(
+        user_id,
+        data,
+        workspace_field="user_id" if data.get("user_id") else "tenant_id",
+        permission_field="permission",
+    )
+    return data
 
 
 def _build_sse_response(body):
@@ -223,6 +283,60 @@ def _normalize_agent_session(conv):
                 message["reference"] = []
     del conv["reference"]
     return conv
+
+
+def _bind_agent_attachments_to_workspace(data: dict, workspace_id: str, agent_id: str) -> dict:
+    for field in ("message", "messages"):
+        messages = data.get(field)
+        if not isinstance(messages, list):
+            continue
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            attachment = message.get("attachment")
+            if isinstance(attachment, dict) and attachment.get("doc_id"):
+                attachment.setdefault("workspace_id", workspace_id)
+                attachment.setdefault("agent_id", agent_id)
+            downloads = message.get("downloads")
+            if not isinstance(downloads, list):
+                continue
+            for download in downloads:
+                if not isinstance(download, dict) or not download.get("doc_id"):
+                    continue
+                download.setdefault("workspace_id", workspace_id)
+                download.setdefault("agent_id", agent_id)
+                preview_url = download.get("preview_url")
+                if isinstance(preview_url, str) and preview_url:
+                    if "workspace_id=" not in preview_url:
+                        separator = "&" if "?" in preview_url else "?"
+                        preview_url = f"{preview_url}{separator}workspace_id={workspace_id}"
+                    if "agent_id=" not in preview_url:
+                        separator = "&" if "?" in preview_url else "?"
+                        preview_url = f"{preview_url}{separator}agent_id={agent_id}"
+                    download["preview_url"] = preview_url
+    return data
+
+
+def _agent_session_owner_filter(agent):
+    workspace_id = str(agent.user_id)
+    if WorkspaceAccessService.is_superuser(current_user.id) or WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM:
+        return None
+    return str(current_user.id)
+
+
+def _build_agent_session_response(session, agent):
+    data = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    _bind_agent_attachments_to_workspace(data, str(agent.user_id), str(agent.id))
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, data)
+    return _normalize_agent_session(data)
+
+
+def _build_agent_session_name_response(session, agent):
+    data = session.to_dict() if hasattr(session, "to_dict") else dict(session)
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, data)
+    data.pop("dialog_id", None)
+    data.pop("user_id", None)
+    return data
 
 
 def _agent_session_list_result(data, total):
@@ -433,18 +547,22 @@ async def _run_workflow_session(
 @_require_canvas_access_sync
 def list_agent_sessions(agent_id, tenant_id):
     session_id = request.args.get("id")
-    user_id = request.args.get("user_id")
+    exists, agent = UserCanvasService.get_by_id(agent_id)
+    if not exists:
+        return get_data_error_result(message="Agent not found.")
+    owner_filter = _agent_session_owner_filter(agent)
     page_number = int(request.args.get("page", 1))
     items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 30)))
     keywords = request.args.get("keywords")
     from_date = request.args.get("from_date")
     to_date = request.args.get("to_date")
     orderby = request.args.get("orderby", "update_time")
-    exp_user_id = request.args.get("exp_user_id")
+    names_only = bool(request.args.get("exp_user_id"))
     desc = request.args.get("desc") not in {"False", "false"}
 
-    if exp_user_id:
-        sessions = API4ConversationService.get_names(agent_id, exp_user_id)
+    if names_only:
+        sessions = API4ConversationService.get_names(agent_id, owner_filter)
+        sessions = [_build_agent_session_name_response(session, agent) for session in sessions]
         return _agent_session_list_result(sessions, len(sessions))
 
     include_dsl = request.args.get("dsl") not in {"False", "false"}
@@ -456,14 +574,13 @@ def list_agent_sessions(agent_id, tenant_id):
         orderby,
         desc,
         session_id,
-        user_id,
+        owner_filter,
         include_dsl,
         keywords,
         from_date,
         to_date,
-        exp_user_id=exp_user_id,
     )
-    sessions = [_normalize_agent_session(session) for session in sessions]
+    sessions = [_build_agent_session_response(session, agent) for session in sessions]
     return _agent_session_list_result(sessions, total)
 
 
@@ -475,7 +592,7 @@ async def create_agent_session(agent_id, tenant_id):
     from agent.canvas import Canvas
 
     req = await get_request_json()
-    user_id = req.get("user_id") or request.args.get("user_id", tenant_id)
+    user_id = tenant_id
     release_mode = bool(req.get("release", request.args.get("release", False)))
 
     try:
@@ -486,7 +603,7 @@ async def create_agent_session(agent_id, tenant_id):
         return get_data_error_result(message=str(e))
 
     session_id = get_uuid()
-    canvas = Canvas(dsl, tenant_id, agent_id, canvas_id=cvs.id)
+    canvas = Canvas(dsl, cvs.user_id, agent_id, canvas_id=cvs.id)
     canvas.reset()
 
     cvs.dsl = json.loads(str(canvas))
@@ -504,7 +621,7 @@ async def create_agent_session(agent_id, tenant_id):
         "version_title": version_title,
     }
     API4ConversationService.save(**conv)
-    return get_result(data=_normalize_agent_session(conv))
+    return get_result(data=_build_agent_session_response(conv, cvs))
 
 
 @manager.route("/agents/<agent_id>/sessions/<session_id>", methods=["GET"])  # noqa: F821
@@ -512,10 +629,14 @@ async def create_agent_session(agent_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_access_sync
 def get_agent_session(agent_id, session_id, tenant_id):
+    agent_exists, agent = UserCanvasService.get_by_id(agent_id)
     exists, conv = API4ConversationService.get_by_id(session_id)
-    if not exists or conv.dialog_id != agent_id:
+    if not agent_exists or not exists or not WorkspaceAccessService.can_read_agent_session(current_user.id, agent, conv):
         return get_data_error_result(message="Session not found!")
-    return get_json_result(data=conv.to_dict())
+    data = conv.to_dict()
+    _bind_agent_attachments_to_workspace(data, str(agent.user_id), str(agent.id))
+    data["capabilities"] = WorkspaceAccessService.get_agent_session_capabilities(current_user.id, agent, conv)
+    return get_json_result(data=data)
 
 
 @manager.route("/agents/<agent_id>/sessions/<session_id>", methods=["DELETE"])  # noqa: F821
@@ -523,8 +644,9 @@ def get_agent_session(agent_id, session_id, tenant_id):
 @add_tenant_id_to_kwargs
 @_require_canvas_access_sync
 def delete_agent_session_item(agent_id, session_id, tenant_id):
+    agent_exists, agent = UserCanvasService.get_by_id(agent_id)
     exists, conv = API4ConversationService.get_by_id(session_id)
-    if not exists or conv.dialog_id != agent_id:
+    if not agent_exists or not exists or not WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, conv):
         return get_data_error_result(message="Session not found!")
     return get_json_result(data=API4ConversationService.delete_by_id(session_id))
 
@@ -537,17 +659,18 @@ async def delete_agent_session(tenant_id, agent_id):
     errors = []
     success_count = 0
     req = await get_request_json()
-    cvs = await thread_pool_exec(UserCanvasService.query, user_id=tenant_id, id=agent_id)
-    if not cvs:
-        return get_error_data_result(f"You don't own the agent {agent_id}")
-
     if not req:
         return get_result()
+
+    agent_exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    if not agent_exists:
+        return get_data_error_result(message="Agent not found.")
 
     ids = req.get("ids")
     if not ids:
         if req.get("delete_all") is True:
-            ids = [conv.id for conv in await thread_pool_exec(API4ConversationService.query, dialog_id=agent_id)]
+            sessions = await thread_pool_exec(API4ConversationService.query, dialog_id=agent_id)
+            ids = [conv.id for conv in sessions if WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, conv)]
             if not ids:
                 return get_result()
         else:
@@ -559,9 +682,9 @@ async def delete_agent_session(tenant_id, agent_id):
     conv_list = unique_conv_ids
 
     for session_id in conv_list:
-        conv = await thread_pool_exec(API4ConversationService.query, id=session_id, dialog_id=agent_id)
-        if not conv:
-            errors.append(f"The agent doesn't own the session {session_id}")
+        sessions = await thread_pool_exec(API4ConversationService.query, id=session_id, dialog_id=agent_id)
+        if not sessions or not WorkspaceAccessService.can_manage_agent_session(current_user.id, agent, sessions[0]):
+            errors.append(f"No permission to delete session {session_id}")
             continue
         await thread_pool_exec(API4ConversationService.delete_by_id, session_id)
         success_count += 1
@@ -685,9 +808,7 @@ def list_agents(tenant_id):
     items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 0)))
     order_by = request.args.get("orderby", "create_time")
     desc = str(request.args.get("desc", "true")).lower() != "false"
-    tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
-    authorized_owner_ids = {member["tenant_id"] for member in tenants}
-    authorized_owner_ids.add(tenant_id)
+    authorized_owner_ids = set(WorkspaceAccessService.list_visible_workspace_ids(tenant_id))
 
     if owner_ids:
         requested_owner_ids = set(owner_ids)
@@ -713,7 +834,10 @@ def list_agents(tenant_id):
         canvas_category,
         tags,
         canvas_type,
+        WorkspaceAccessService.is_superuser(tenant_id),
     )
+
+    canvas = [_build_agent_response(agent, tenant_id) for agent in canvas]
 
     return get_json_result(data={"canvas": canvas, "total": total})
 
@@ -724,9 +848,13 @@ def list_agents(tenant_id):
 def list_agent_tags(tenant_id):
     """Aggregate tag usage counts across agents visible to the caller."""
     canvas_category = request.args.get("canvas_category")
-    tenants = TenantService.get_joined_tenants_by_user_id(tenant_id)
-    joined_ids = list({member["tenant_id"] for member in tenants} | {tenant_id})
-    counts = UserCanvasService.list_tags(joined_ids, tenant_id, canvas_category)
+    joined_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
+    counts = UserCanvasService.list_tags(
+        joined_ids,
+        tenant_id,
+        canvas_category,
+        WorkspaceAccessService.is_superuser(tenant_id),
+    )
     logging.info(
         "list_agent_tags tenant=%s canvas_category=%s tags_count=%d",
         tenant_id,
@@ -740,7 +868,7 @@ def list_agent_tags(tenant_id):
 @login_required
 @add_tenant_id_to_kwargs
 async def update_agent_tags(tenant_id, canvas_id):
-    if not UserCanvasService.accessible(canvas_id, tenant_id):
+    if not UserCanvasService.manageable(canvas_id, tenant_id):
         logging.info(
             "update_agent_tags denied tenant=%s canvas_id=%s reason=no_permission",
             tenant_id,
@@ -782,8 +910,12 @@ async def update_agent_tags(tenant_id, canvas_id):
 @add_tenant_id_to_kwargs
 async def create_agent(tenant_id):
     req = {k: v for k, v in (await get_request_json()).items() if v is not None}
+    workspace_id = req.pop("workspace_id", req.pop("user_id", tenant_id))
+    if not WorkspaceAccessService.can_create_collaborative_resource(tenant_id, workspace_id):
+        return get_json_result(data=False, message="No authorization.", code=RetCode.OPERATING_ERROR)
     req["canvas_type"] = req.get("canvas_type", "")
-    req["user_id"] = tenant_id
+    req["user_id"] = workspace_id
+    req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM else TenantPermission.ME
     req["canvas_category"] = req.get("canvas_category") or CanvasCategory.Agent
     req["release"] = bool(req.get("release", ""))
 
@@ -802,6 +934,13 @@ async def create_agent(tenant_id):
             message=str(exc),
             code=RetCode.ARGUMENT_ERROR,
         )
+    reference_error = _validate_agent_workspace_references(tenant_id, workspace_id, req["dsl"])
+    if reference_error:
+        return get_json_result(
+            data=False,
+            message=reference_error,
+            code=RetCode.OPERATING_ERROR,
+        )
 
     if req.get("title") is None:
         return get_json_result(
@@ -811,7 +950,7 @@ async def create_agent(tenant_id):
         )
 
     req["title"] = req["title"].strip()
-    for canvas in UserCanvasService.query(user_id=tenant_id, canvas_category=req["canvas_category"]):
+    for canvas in UserCanvasService.query(user_id=workspace_id, canvas_category=req["canvas_category"]):
         canvas_title = getattr(canvas, "title", req["title"])
         if canvas_title and canvas_title.lower() == req["title"].lower():
             return get_data_error_result(message=f"{req['title']} already exists.")
@@ -820,7 +959,7 @@ async def create_agent(tenant_id):
     if not UserCanvasService.save(**req):
         return get_data_error_result(message="Fail to create agent.")
 
-    owner_nickname = _get_user_nickname(tenant_id)
+    owner_nickname = _get_workspace_name(workspace_id)
     UserCanvasVersionService.save_or_replace_latest(
         user_canvas_id=req["id"],
         title=UserCanvasVersionService.build_version_title(owner_nickname, req.get("title")),
@@ -829,7 +968,7 @@ async def create_agent(tenant_id):
     )
     replica_ok = CanvasReplicaService.replace_for_set(
         canvas_id=req["id"],
-        tenant_id=str(tenant_id),
+        tenant_id=str(workspace_id),
         runtime_user_id=str(tenant_id),
         dsl=req["dsl"],
         canvas_category=req["canvas_category"],
@@ -841,7 +980,7 @@ async def create_agent(tenant_id):
     exists, created_agent = UserCanvasService.get_by_canvas_id(req["id"])
     if not exists:
         return get_data_error_result(message="Fail to create agent.")
-    return get_json_result(data=created_agent)
+    return get_json_result(data=_build_agent_response(created_agent, tenant_id))
 
 
 @manager.route("/agents/<agent_id>/upload", methods=["POST"])  # noqa: F821
@@ -851,21 +990,27 @@ async def create_agent(tenant_id):
 async def upload_agent_file(agent_id, tenant_id):
     files = await request.files
     file_objs = files.getlist("file") if files and files.get("file") else []
+    exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    if not exists:
+        return get_data_error_result(message="Agent not found.")
+    workspace_id = agent.user_id
     logging.info(
-        "Agent file upload requested: tenant_id=%s agent_id=%s file_count=%s",
+        "Agent file upload requested: workspace_id=%s actor_id=%s agent_id=%s file_count=%s",
+        workspace_id,
         tenant_id,
         agent_id,
         len(file_objs),
     )
     try:
         if len(file_objs) == 1:
-            uploaded = await thread_pool_exec(FileService.upload_info, tenant_id, file_objs[0], request.args.get("url"))
+            uploaded = await thread_pool_exec(FileService.upload_info, workspace_id, file_objs[0], request.args.get("url"))
             return get_json_result(data=uploaded)
-        results = await asyncio.gather(*(thread_pool_exec(FileService.upload_info, tenant_id, file_obj) for file_obj in file_objs))
+        results = await asyncio.gather(*(thread_pool_exec(FileService.upload_info, workspace_id, file_obj) for file_obj in file_objs))
         return get_json_result(data=results)
     except Exception as exc:
         logging.exception(
-            "Agent file upload failed: tenant_id=%s agent_id=%s",
+            "Agent file upload failed: workspace_id=%s actor_id=%s agent_id=%s",
+            workspace_id,
             tenant_id,
             agent_id,
         )
@@ -883,7 +1028,7 @@ def get_agent_component_input_form(agent_id, component_id, tenant_id):
         exists, user_canvas = UserCanvasService.get_by_id(agent_id)
         if not exists:
             return get_data_error_result(message="canvas not found.")
-        canvas = Canvas(json.dumps(user_canvas.dsl), tenant_id, canvas_id=user_canvas.id)
+        canvas = Canvas(json.dumps(user_canvas.dsl), user_canvas.user_id, canvas_id=user_canvas.id)
         return get_json_result(data=canvas.get_component_input_form(component_id))
     except Exception as exc:
         return server_error_response(exc)
@@ -901,7 +1046,7 @@ async def debug_agent_component(agent_id, component_id, tenant_id):
         from agent.component import LLM
 
         _, user_canvas = UserCanvasService.get_by_id(agent_id)
-        canvas = Canvas(json.dumps(user_canvas.dsl), tenant_id, canvas_id=user_canvas.id)
+        canvas = Canvas(json.dumps(user_canvas.dsl), user_canvas.user_id, canvas_id=user_canvas.id)
         canvas.reset()
         canvas.message_id = get_uuid()
         component = canvas.get_component(component_id)["obj"]
@@ -939,9 +1084,10 @@ def get_agent(agent_id, tenant_id):
         return get_data_error_result(message="canvas not found.")
 
     try:
+        workspace_id = canvas.get("user_id", tenant_id)
         CanvasReplicaService.bootstrap(
             canvas_id=agent_id,
-            tenant_id=str(tenant_id),
+            tenant_id=str(workspace_id),
             runtime_user_id=str(tenant_id),
             dsl=canvas.get("dsl"),
             canvas_category=canvas.get("canvas_category", CanvasCategory.Agent),
@@ -962,6 +1108,7 @@ def get_agent(agent_id, tenant_id):
 
     canvas["dsl"] = normalize_chunker_dsl(canvas.get("dsl", {}))
     canvas["last_publish_time"] = last_publish_time
+    canvas = _build_agent_response(canvas, tenant_id)
 
     if canvas.get("canvas_category") == CanvasCategory.DataFlow:
         datasets = list(KnowledgebaseService.query(pipeline_id=agent_id))
@@ -1021,18 +1168,28 @@ async def get_agent_logs(agent_id, message_id, tenant_id):
 @manager.route("/agents/<agent_id>", methods=["DELETE"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@_require_canvas_owner_sync
+@_require_canvas_manage_sync
 def delete_agent(agent_id, tenant_id):
-    UserCanvasService.delete_by_id(agent_id)
+    found, canvas = UserCanvasService.get_by_id(agent_id)
+    if not found:
+        return get_error_data_result(message="Agent not found.")
+    if canvas.canvas_category == CanvasCategory.DataFlow:
+        try:
+            ResourceReferenceService.ensure_not_referenced("dataflow", [canvas])
+        except ResourceInUseException as exc:
+            return get_resource_in_use_result(exc)
+    UserCanvasService.delete_with_dependencies(agent_id)
     return get_json_result(data=True)
 
 
 @manager.route("/agents/<agent_id>", methods=["PUT"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@_require_canvas_access_async
+@_require_canvas_manage_async
 async def update_agent(agent_id, tenant_id):
     req = {k: v for k, v in (await get_request_json()).items() if v is not None}
+    for field in ("user_id", "workspace_id", "permission"):
+        req.pop(field, None)
     req["canvas_type"] = req.get("canvas_type", "")
     req["release"] = bool(req.get("release", ""))
 
@@ -1047,17 +1204,26 @@ async def update_agent(agent_id, tenant_id):
             )
 
     _, current_agent = UserCanvasService.get_by_id(agent_id)
+    workspace_id = current_agent.user_id if current_agent else tenant_id
+    if req.get("dsl") is not None:
+        reference_error = _validate_agent_workspace_references(tenant_id, workspace_id, req["dsl"])
+        if reference_error:
+            return get_json_result(
+                data=False,
+                message=reference_error,
+                code=RetCode.OPERATING_ERROR,
+            )
     if req.get("title") is not None:
         req["title"] = req["title"].strip()
         canvas_category_for_duplicate_check = req.get("canvas_category") or (current_agent.canvas_category if current_agent else CanvasCategory.Agent)
-        for canvas in UserCanvasService.query(user_id=tenant_id, canvas_category=canvas_category_for_duplicate_check):
+        for canvas in UserCanvasService.query(user_id=workspace_id, canvas_category=canvas_category_for_duplicate_check):
             canvas_title = getattr(canvas, "title", "")
             if getattr(canvas, "id", None) != agent_id and canvas_title and canvas_title.lower() == req["title"].lower():
                 return get_data_error_result(message=f"{req['title']} already exists.")
 
     agent_title_for_version = req.get("title") or (current_agent.title if current_agent else "")
     canvas_category = req.get("canvas_category") or (current_agent.canvas_category if current_agent else CanvasCategory.Agent)
-    owner_nickname = _get_user_nickname(tenant_id)
+    owner_nickname = _get_workspace_name(workspace_id)
     UserCanvasService.update_by_id(agent_id, req)
 
     if req.get("dsl") is not None:
@@ -1069,7 +1235,7 @@ async def update_agent(agent_id, tenant_id):
         )
         replica_ok = CanvasReplicaService.replace_for_set(
             canvas_id=agent_id,
-            tenant_id=str(tenant_id),
+            tenant_id=str(workspace_id),
             runtime_user_id=str(tenant_id),
             dsl=req["dsl"],
             canvas_category=canvas_category,
@@ -1084,7 +1250,7 @@ async def update_agent(agent_id, tenant_id):
 @manager.route("/agents/<agent_id>/reset", methods=["POST"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@_require_canvas_access_async
+@_require_canvas_manage_async
 async def reset_agent(agent_id, tenant_id):
     try:
         from agent.canvas import Canvas
@@ -1093,13 +1259,13 @@ async def reset_agent(agent_id, tenant_id):
         if not exists:
             return get_data_error_result(message="canvas not found.")
 
-        canvas = Canvas(json.dumps(user_canvas.dsl), tenant_id, canvas_id=user_canvas.id)
+        canvas = Canvas(json.dumps(user_canvas.dsl), user_canvas.user_id, canvas_id=user_canvas.id)
         canvas.reset()
         dsl = json.loads(str(canvas))
         UserCanvasService.update_by_id(agent_id, {"dsl": dsl})
         replica_ok = CanvasReplicaService.replace_for_set(
             canvas_id=agent_id,
-            tenant_id=str(tenant_id),
+            tenant_id=str(user_canvas.user_id),
             runtime_user_id=str(tenant_id),
             dsl=dsl,
             canvas_category=user_canvas.canvas_category,
@@ -1124,7 +1290,7 @@ async def rerun_agent(tenant_id):
     if not doc:
         return get_data_error_result(message="Document not found.")
     doc = doc[0]
-    if not DocumentService.accessible(doc["id"], tenant_id):
+    if not KnowledgebaseService.modifiable(doc["kb_id"], tenant_id):
         logging.warning(
             "rerun_agent denied: tenant_id=%s log_id=%s doc_id=%s",
             tenant_id,
@@ -1135,8 +1301,11 @@ async def rerun_agent(tenant_id):
     if 0 < doc["progress"] < 1:
         return get_data_error_result(message=f"`{doc['name']}` is processing...")
 
-    if settings.docStoreConn.index_exist(search.index_name(tenant_id), doc["kb_id"]):
-        settings.docStoreConn.delete({"doc_id": doc["id"]}, search.index_name(tenant_id), doc["kb_id"])
+    doc_tenant_id = DocumentService.get_tenant_id(doc["id"])
+    if not doc_tenant_id:
+        return get_data_error_result(message="Document workspace not found.")
+    if settings.docStoreConn.index_exist(search.index_name(doc_tenant_id), doc["kb_id"]):
+        settings.docStoreConn.delete({"doc_id": doc["id"]}, search.index_name(doc_tenant_id), doc["kb_id"])
     doc["progress_msg"] = ""
     doc["chunk_num"] = 0
     doc["token_num"] = 0
@@ -1148,7 +1317,7 @@ async def rerun_agent(tenant_id):
     dsl["path"] = [req["component_id"]]
     PipelineOperationLogService.update_by_id(req["id"], {"dsl": dsl})
     queue_dataflow(
-        tenant_id=tenant_id,
+        tenant_id=doc_tenant_id,
         flow_id=req["id"],
         task_id=get_uuid(),
         doc_id=doc["id"],
@@ -1323,6 +1492,17 @@ async def agent_chat_completion(tenant_id, agent_id=None):
     req = dict(req)
     req.pop("agent_id", None)
     req.pop("openai-compatible", None)
+    req["user_id"] = str(tenant_id)
+    if not UserCanvasService.accessible(agent_id, tenant_id):
+        return get_json_result(
+            data=False,
+            message="Make sure you have permission to access the agent.",
+            code=RetCode.OPERATING_ERROR,
+        )
+    exists, cvs = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    if not exists:
+        return get_data_error_result(message="canvas not found.")
+    workspace_id = str(cvs.user_id)
     session_id = req.get("session_id")
     workflow_session = False
     workflow_conv = None
@@ -1336,10 +1516,10 @@ async def agent_chat_completion(tenant_id, agent_id=None):
                 message="Session does not belong to the requested agent.",
                 code=RetCode.OPERATING_ERROR,
             )
-        if not UserCanvasService.accessible(agent_id, tenant_id):
+        if not WorkspaceAccessService.can_manage_agent_session(current_user.id, cvs, conv):
             return get_json_result(
                 data=False,
-                message="Only authorized users can access this agent session.",
+                message="Session not found!",
                 code=RetCode.OPERATING_ERROR,
             )
         workflow_session = getattr(conv, "source", "") == "workflow"
@@ -1357,7 +1537,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         if stream:
             return _build_sse_response(
                 completion_openai(
-                    tenant_id,
+                    workspace_id,
                     agent_id,
                     question,
                     session_id=session_id,
@@ -1367,7 +1547,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
             )
 
         async for response in completion_openai(
-            tenant_id,
+            workspace_id,
             agent_id,
             question,
             session_id=session_id,
@@ -1381,13 +1561,8 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         query = req.get("query", "") or req.get("question", "")
         files = req.get("files", [])
         inputs = req.get("inputs", {})
-        runtime_user_id = req.get("user_id") or tenant_id
-        user_id = str(runtime_user_id)
+        user_id = str(tenant_id)
         custom_header = req.get("custom_header", "")
-
-        _, cvs = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
-        if not cvs:
-            return get_data_error_result(message="canvas not found.")
 
         if not isinstance(workflow_conv.get("message"), list):
             workflow_conv["message"] = []
@@ -1419,12 +1594,12 @@ async def agent_chat_completion(tenant_id, agent_id=None):
                 dsl_str = workflow_dsl
             else:
                 dsl_str = json.dumps(workflow_dsl, ensure_ascii=False)
-            canvas = Canvas(dsl_str, str(tenant_id), task_id=session_id, canvas_id=agent_id, custom_header=custom_header)
+            canvas = Canvas(dsl_str, workspace_id, task_id=session_id, canvas_id=agent_id, custom_header=custom_header)
         except Exception as exc:
             return server_error_response(exc)
 
         return await _run_workflow_session(
-            tenant_id=tenant_id,
+            tenant_id=workspace_id,
             agent_id=agent_id,
             workflow_conv=workflow_conv,
             canvas=canvas,
@@ -1442,37 +1617,25 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         )
 
     if not session_id:
-        if not UserCanvasService.accessible(agent_id, tenant_id):
-            return get_json_result(
-                data=False,
-                message="Make sure you have permission to access the agent.",
-                code=RetCode.OPERATING_ERROR,
-            )
-
         # Keep the original workflow execution path, but assign a session_id so the
         # response shape stays closer to the older agent completion contract.
         query = req.get("query", "") or req.get("question", "")
         files = req.get("files", [])
         inputs = req.get("inputs", {})
-        runtime_user_id = req.get("user_id") or tenant_id
-        user_id = str(runtime_user_id)
+        user_id = str(tenant_id)
         custom_header = req.get("custom_header", "")
         session_id = get_uuid()
 
-        _, cvs = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
-        if not cvs:
-            return get_data_error_result(message="canvas not found.")
-
         replica_payload = CanvasReplicaService.load_for_run(
             canvas_id=agent_id,
-            tenant_id=str(tenant_id),
+            tenant_id=workspace_id,
             runtime_user_id=user_id,
         )
         if not replica_payload:
             try:
                 replica_payload = CanvasReplicaService.bootstrap(
                     canvas_id=agent_id,
-                    tenant_id=str(tenant_id),
+                    tenant_id=workspace_id,
                     runtime_user_id=user_id,
                     dsl=cvs.dsl,
                     canvas_category=getattr(cvs, "canvas_category", CanvasCategory.Agent),
@@ -1519,19 +1682,20 @@ async def agent_chat_completion(tenant_id, agent_id=None):
             await thread_pool_exec(API4ConversationService.save, **workflow_conv)
             Pipeline(
                 dsl_str,
-                tenant_id=str(tenant_id),
+                tenant_id=workspace_id,
                 doc_id=CANVAS_DEBUG_DOC_ID,
                 task_id=task_id,
                 flow_id=agent_id,
             )
             ok, error_message = await thread_pool_exec(
                 queue_dataflow,
-                user_id,
+                workspace_id,
                 agent_id,
                 task_id,
                 CANVAS_DEBUG_DOC_ID,
                 files[0],
                 0,
+                actor_id=user_id,
             )
             if not ok:
                 return get_data_error_result(message=error_message)
@@ -1540,7 +1704,8 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         try:
             from agent.canvas import Canvas
 
-            canvas = Canvas(dsl_str, str(tenant_id), task_id=session_id, canvas_id=agent_id, custom_header=custom_header)
+            await thread_pool_exec(register_task_authorization, session_id, workspace_id, agent_id, user_id)
+            canvas = Canvas(dsl_str, workspace_id, task_id=session_id, canvas_id=agent_id, custom_header=custom_header)
             canvas.clear_history()
         except Exception as exc:
             return server_error_response(exc)
@@ -1572,7 +1737,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         workflow_conv["reference"] = [_normalize_agent_reference_entry(reference) for reference in workflow_conv["reference"]]
         await thread_pool_exec(API4ConversationService.save, **workflow_conv)
         return await _run_workflow_session(
-            tenant_id=tenant_id,
+            tenant_id=workspace_id,
             agent_id=agent_id,
             workflow_conv=workflow_conv,
             canvas=canvas,
@@ -1594,7 +1759,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
 
         async def generate():
             emitted = False
-            async for ans in _iter_session_completion_events(tenant_id, agent_id, req, return_trace):
+            async for ans in _iter_session_completion_events(workspace_id, agent_id, req, return_trace):
                 emitted = True
                 yield "data:" + json.dumps(ans, ensure_ascii=False, default=_canvas_json_default) + "\n\n"
             if not emitted:
@@ -1619,7 +1784,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
     trace_items = []
     structured_output = {}
     run_usage = None
-    async for ans in _iter_session_completion_events(tenant_id, agent_id, req, return_trace):
+    async for ans in _iter_session_completion_events(workspace_id, agent_id, req, return_trace):
         try:
             if ans["event"] == "message":
                 full_content += ans["data"]["content"]
@@ -1685,14 +1850,14 @@ async def webhook(agent_id: str):
 @login_required
 @add_tenant_id_to_kwargs
 async def webhook_test(agent_id: str, tenant_id: str):
-    if not UserCanvasService.query(user_id=tenant_id, id=agent_id):
+    if not UserCanvasService.manageable(agent_id, tenant_id):
         logging.warning(
-            "Webhook test denied: owner check failed agent_id=%s tenant_id=%s method=%s",
+            "Webhook test denied: management check failed agent_id=%s tenant_id=%s method=%s",
             agent_id,
             tenant_id,
             request.method,
         )
-        return get_json_result(data=False, message="Only the owner of the agent is authorized for this operation.", code=RetCode.OPERATING_ERROR)
+        return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
     return await _webhook_impl(agent_id, is_test=True)
 
 
@@ -2366,7 +2531,12 @@ async def _webhook_impl(agent_id: str, is_test: bool):
 @login_required
 async def webhook_trace(agent_id: str):
     exists, cvs = UserCanvasService.get_by_id(agent_id)
-    if not exists or str(cvs.user_id) != str(current_user.id):
+    if not exists or not WorkspaceAccessService.can_read_shared_resource(
+        current_user.id,
+        cvs,
+        workspace_field="user_id",
+        permission_field="permission",
+    ):
         return get_data_error_result(
             message="Canvas not found.",
         )
@@ -2488,8 +2658,31 @@ def _attachment_request_metadata():
     return content_type, resolved_ext, filename
 
 
+async def _can_read_agent_attachment(workspace_id: str) -> bool:
+    requested_workspace_id = request.args.get("workspace_id")
+    if not requested_workspace_id:
+        return True
+    agent_id = request.args.get("agent_id")
+    if not agent_id:
+        return False
+    exists, agent = await thread_pool_exec(UserCanvasService.get_by_id, agent_id)
+    return bool(
+        exists
+        and str(agent.user_id) == str(workspace_id)
+        and await thread_pool_exec(
+            WorkspaceAccessService.can_read_shared_resource,
+            current_user.id,
+            agent,
+            workspace_field="user_id",
+            permission_field="permission",
+        )
+    )
+
+
 async def _stream_agent_attachment(tenant_id, attachment_id, *, inline: bool):
     attachment_id = attachment_id or request.view_args.get("attachment_id")
+    if not await _can_read_agent_attachment(tenant_id):
+        return get_error_data_result(message="Permission denied", code=RetCode.FORBIDDEN)
     content_type, ext, filename = _attachment_request_metadata()
     data = await thread_pool_exec(settings.STORAGE_IMPL.get, tenant_id, attachment_id)
     if not data:
@@ -2505,8 +2698,9 @@ async def _stream_agent_attachment(tenant_id, attachment_id, *, inline: bool):
 @manager.route("/agents/attachments/<attachment_id>/preview", methods=["GET"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
+@workspace_required()
 async def preview_attachment(tenant_id=None, attachment_id=None):
-    """Stream an agent-generated attachment for inline preview in MCP clients."""
+    """Stream an attachment from an authorized personal or team workspace."""
     try:
         return await _stream_agent_attachment(tenant_id, attachment_id, inline=True)
     except Exception as e:
@@ -2516,8 +2710,9 @@ async def preview_attachment(tenant_id=None, attachment_id=None):
 @manager.route("/agents/attachments/<attachment_id>/download", methods=["GET"])  # noqa: F821
 @login_required(auth_types=[AUTH_JWT, AUTH_API, AUTH_BETA])
 @add_tenant_id_to_kwargs
+@workspace_required()
 async def download_attachment(tenant_id=None, attachment_id=None):
-    """Stream an agent-generated attachment as a download."""
+    """Download an attachment from an authorized personal or team workspace."""
     try:
         if request.args.get("disposition", "").lower() == "inline":
             return await _stream_agent_attachment(tenant_id, attachment_id, inline=True)

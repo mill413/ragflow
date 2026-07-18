@@ -178,6 +178,16 @@ class FileSource(StrEnum):
     AZURE_BLOB = "azure_blob"
 
 
+SUPPORTED_DATA_SOURCES = frozenset(
+    {
+        FileSource.S3.value,
+        FileSource.IMAP.value,
+        FileSource.MYSQL.value,
+        FileSource.POSTGRESQL.value,
+    }
+)
+
+
 class PipelineTaskType(StrEnum):
     PARSE = "Parse"
     DOWNLOAD = "Download"
@@ -307,9 +317,17 @@ MAXIMUM_PAGE_NUMBER = 100000
 MAXIMUM_TASK_PAGE_NUMBER = MAXIMUM_PAGE_NUMBER * 1000
 
 
-MINERU_ENV_KEYS = ["MINERU_APISERVER", "MINERU_OUTPUT_DIR", "MINERU_BACKEND", "MINERU_SERVER_URL", "MINERU_DELETE_OUTPUT"]
+MINERU_ENV_KEYS = [
+    "MINERU_APISERVER",
+    "MINERU_API_KEY",
+    "MINERU_OUTPUT_DIR",
+    "MINERU_BACKEND",
+    "MINERU_SERVER_URL",
+    "MINERU_DELETE_OUTPUT",
+]
 MINERU_DEFAULT_CONFIG = {
     "MINERU_APISERVER": "",
+    "MINERU_API_KEY": "",
     "MINERU_OUTPUT_DIR": "",
     "MINERU_BACKEND": "pipeline",
     "MINERU_SERVER_URL": "",

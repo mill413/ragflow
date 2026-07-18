@@ -5,7 +5,9 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useFetchChatList } from '@/hooks/use-chat-request';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
@@ -18,6 +20,11 @@ import { useRenameChat } from './hooks/use-rename-chat';
 
 export default function ChatList() {
   const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction('create_collaborative_resource');
+  const {
     data,
     setPagination,
     pagination,
@@ -28,9 +35,7 @@ export default function ChatList() {
   } = useFetchChatList();
   const { t } = useTranslation();
   const { t: tc } = useTranslation('common');
-  const owners = [
-    buildOwnersFilter(data?.chats ?? [], undefined, tc('owner')),
-  ];
+  const owners = [buildOwnersFilter(data?.chats ?? [], undefined, tc('owner'))];
   const {
     initialChatName,
     chatRenameVisible,
@@ -55,18 +60,24 @@ export default function ChatList() {
   );
 
   const handleShowCreateModal = useCallback(() => {
-    showCreateChatModal();
-  }, [showCreateChatModal]);
+    runInWritableWorkspace(showCreateChatModal);
+  }, [runInWritableWorkspace, showCreateChatModal]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const isCreate = searchParams.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canRunInWritableWorkspace) {
       handleShowCreateModal();
       searchParams.delete('isCreate');
       setSearchParams(searchParams);
     }
-  }, [isCreate, handleShowCreateModal, searchParams, setSearchParams]);
+  }, [
+    isCreate,
+    canRunInWritableWorkspace,
+    handleShowCreateModal,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const renameDialogProps = useMemo(() => {
     if (chatRenameVisible) {
@@ -103,6 +114,7 @@ export default function ChatList() {
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data.chats?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -118,10 +130,15 @@ export default function ChatList() {
               value={filterValue}
               onChange={handleFilterSubmit}
             >
-              <Button data-testid="create-chat" onClick={handleShowCreateModal}>
-                <Plus className="size-[1em]" />
-                {t('chat.createChat')}
-              </Button>
+              {canRunInWritableWorkspace && (
+                <Button
+                  data-testid="create-chat"
+                  onClick={handleShowCreateModal}
+                >
+                  <Plus className="size-[1em]" />
+                  {t('chat.createChat')}
+                </Button>
+              )}
             </ListFilterBar>
           </header>
 
@@ -168,7 +185,11 @@ export default function ChatList() {
             size="large"
             className="w-[480px] p-14"
             type={EmptyCardType.Chat}
-            onClick={() => handleShowCreateModal()}
+            onClick={
+              canRunInWritableWorkspace
+                ? () => handleShowCreateModal()
+                : undefined
+            }
             testId="chats-empty-create"
           />
         </article>

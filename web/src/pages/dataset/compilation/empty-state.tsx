@@ -48,14 +48,16 @@ export function CompilationEmptyState({
   const { status, percent } = useGenerateStatus(data);
 
   const handleGenerate = useCallback(() => {
+    if (disabled) return;
     runGenerate({ type: generateType }).catch(() => {});
-  }, [runGenerate, generateType]);
+  }, [disabled, runGenerate, generateType]);
 
   const handlePause = useCallback(() => {
+    if (disabled) return;
     if (data?.id) {
       pauseGenerate({ task_id: data.id, type: generateType }).catch(() => {});
     }
-  }, [pauseGenerate, data?.id, generateType]);
+  }, [disabled, pauseGenerate, data?.id, generateType]);
 
   const showProgress = status === 'running' || status === 'failed';
 
@@ -99,7 +101,10 @@ export function CompilationEmptyState({
             )}
             {status === 'failed' && (
               <span
-                className="text-state-error cursor-pointer"
+                className={cn('text-state-error', {
+                  'cursor-pointer': !disabled,
+                  'cursor-not-allowed opacity-50': disabled,
+                })}
                 onClick={handleGenerate}
               >
                 <IconFontFill name="reparse" className="text-accent-primary" />
@@ -107,7 +112,10 @@ export function CompilationEmptyState({
             )}
             {status !== 'failed' && (
               <span
-                className="text-state-error cursor-pointer"
+                className={cn('text-state-error', {
+                  'cursor-pointer': !disabled,
+                  'cursor-not-allowed opacity-50': disabled,
+                })}
                 onClick={handlePause}
               >
                 <CirclePause />

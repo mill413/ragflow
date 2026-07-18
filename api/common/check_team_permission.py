@@ -15,26 +15,14 @@
 #
 
 
-from api.db import TenantPermission
 from api.db.db_models import File, Knowledgebase
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
-from api.db.services.user_service import TenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 
 
 def check_kb_team_permission(kb: dict | Knowledgebase, other: str) -> bool:
-    kb = kb.to_dict() if isinstance(kb, Knowledgebase) else kb
-
-    kb_tenant_id = kb["tenant_id"]
-
-    if kb_tenant_id == other:
-        return True
-
-    if kb["permission"] != TenantPermission.TEAM:
-        return False
-
-    joined_tenants = TenantService.get_joined_tenants_by_user_id(other)
-    return any(tenant["tenant_id"] == kb_tenant_id for tenant in joined_tenants)
+    return WorkspaceAccessService.can_read_knowledgebase(other, kb)
 
 
 def check_file_team_permission(file: dict | File, other: str) -> bool:
@@ -57,3 +45,14 @@ def check_file_team_permission(file: dict | File, other: str) -> bool:
             return True
 
     return False
+
+
+def check_file_read_permission(file: dict | File, user_id: str) -> bool:
+    file = file.to_dict() if isinstance(file, File) else file
+    if file["tenant_id"] in WorkspaceAccessService.list_visible_workspace_ids(user_id):
+        return True
+    return check_file_team_permission(file, user_id)
+
+
+def check_file_write_permission(file: dict | File, user_id: str) -> bool:
+    return WorkspaceAccessService.can_manage_file(user_id, file)

@@ -809,7 +809,7 @@ def _load_agent_api_module(monkeypatch):
     )
 
     user_service_mod = ModuleType("api.db.services.user_service")
-    user_service_mod.TenantService = SimpleNamespace(get_joined_tenants_by_user_id=lambda *_args, **_kwargs: [])
+    user_service_mod.TenantService = SimpleNamespace(list_accessible_by_user_id=lambda *_args, **_kwargs: [])
     user_service_mod.UserService = SimpleNamespace(get_by_id=lambda *_args, **_kwargs: (False, None))
     user_service_mod.UserTenantService = SimpleNamespace(query=lambda **_kwargs: [])
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
@@ -855,6 +855,12 @@ def _load_openai_api_module(monkeypatch):
     api_apps_mod.login_required = lambda func: func
     api_apps_mod.current_user = SimpleNamespace(id="tenant-1")
     monkeypatch.setitem(sys.modules, "api.apps", api_apps_mod)
+
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
+        can_read_shared_resource=lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
 
     api_apps_restful_mod = ModuleType("api.apps.restful_apis")
     api_apps_restful_mod.__path__ = [str(repo_root / "api" / "apps" / "restful_apis")]
@@ -949,6 +955,39 @@ def test_openai_chat_validation_matrix_unit(monkeypatch):
         monkeypatch.setattr(module, "get_request_json", lambda p=payload: _AwaitableValue(p))
         res = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
         assert expected in res["message"]
+
+
+@pytest.mark.p2
+def test_openai_chat_uses_chat_workspace_instead_of_token_owner(monkeypatch):
+    module = _load_openai_api_module(monkeypatch)
+    query_args = {}
+    model_tenant_ids = []
+    dialog = SimpleNamespace(kb_ids=[], llm_id="team-model", tenant_id="team-1", llm_setting={})
+
+    def query_dialog(**kwargs):
+        query_args.update(kwargs)
+        return [dialog]
+
+    monkeypatch.setattr(module.DialogService, "query", query_dialog)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_read_shared_resource", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(module, "_validate_llm_id", lambda _model, tenant_id, _setting: model_tenant_ids.append(tenant_id))
+    monkeypatch.setattr(module, "get_api_key", lambda **_kwargs: "key")
+    monkeypatch.setattr(module, "num_tokens_from_string", lambda text: len(text or ""))
+    monkeypatch.setattr(
+        module,
+        "get_request_json",
+        lambda: _AwaitableValue({"model": "team-model", "messages": [{"role": "user", "content": "hello"}]}),
+    )
+
+    async def fake_async_chat(*_args, **_kwargs):
+        yield {"answer": "ok", "reference": {}}
+
+    monkeypatch.setattr(module, "async_chat", fake_async_chat)
+    result = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
+
+    assert result["choices"][0]["message"]["content"] == "ok"
+    assert "tenant_id" not in query_args
+    assert model_tenant_ids == ["team-1"]
 
 
 @pytest.mark.p2
@@ -1389,6 +1428,11 @@ class _FakeRequestFiles:
 def test_agent_file_download_and_upload_unit(monkeypatch):
     module = _load_agent_api_module(monkeypatch)
     monkeypatch.setattr(module, "Response", _StubResponse)
+    monkeypatch.setattr(
+        module.UserCanvasService,
+        "get_by_id",
+        lambda _agent_id: (True, SimpleNamespace(id="agent-1", user_id="team-1")),
+    )
 
     get_blob_calls = []
 
@@ -1422,12 +1466,12 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] == 0
     assert res["data"]["file"] == "one.png"
-    assert upload_calls == [("tenant-1", "one.png", "https://example.com/a.png")]
+    assert upload_calls == [("team-1", "one.png", "https://example.com/a.png")]
 
     monkeypatch.setattr(
         module,
@@ -1441,14 +1485,14 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] == 0
     assert len(res["data"]) == 2
     assert set(upload_calls) == {
-        ("tenant-1", "a.png", None),
-        ("tenant-1", "b.png", None),
+        ("team-1", "a.png", None),
+        ("team-1", "b.png", None),
     }
 
     def _boom(*_a, **_k):
@@ -1466,7 +1510,7 @@ def test_agent_file_download_and_upload_unit(monkeypatch):
     res = _run(
         inspect.unwrap(module.upload_agent_file)(
             agent_id="agent-1",
-            tenant_id="tenant-1",
+            tenant_id="user-1",
         )
     )
     assert res["code"] != 0
@@ -1794,7 +1838,7 @@ def test_searchbots_retrieval_test_embedded_matrix_unit(monkeypatch):
     monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(tenant_id="tenant-a")])
     monkeypatch.setattr(module.KnowledgebaseService, "query", lambda **_kwargs: [])
     res = _run(handler())
-    assert "Only owner of dataset authorized for this operation." in res["message"]
+    assert "No authorization to access this dataset." in res["message"]
 
     llm_calls = []
 
@@ -2325,7 +2369,7 @@ def _load_chat_api_module(monkeypatch):
     user_svc_mod = ModuleType("api.db.services.user_service")
     user_svc_mod.TenantService = SimpleNamespace(
         get_by_id=lambda _id: (True, SimpleNamespace(id=_id, llm_id="chat-model")),
-        get_joined_tenants_by_user_id=lambda _id: [],
+        list_accessible_by_user_id=lambda _id: [],
     )
     user_svc_mod.UserTenantService = SimpleNamespace(query=lambda **_k: [])
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_svc_mod)

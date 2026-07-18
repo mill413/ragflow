@@ -29,7 +29,7 @@ from langfuse import Langfuse, propagate_attributes
 from peewee import fn
 from api.db.services.file_service import FileService
 from common.constants import LLMType, ParserType, StatusEnum
-from api.db.db_models import DB, Dialog
+from api.db.db_models import DB, Dialog, Tenant
 from api.db.services.common_service import CommonService
 from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
@@ -205,8 +205,6 @@ class DialogService(CommonService):
         id=None,
         name=None,
     ):
-        from api.db.db_models import User
-
         fields = [
             cls.model.id,
             cls.model.tenant_id,
@@ -226,14 +224,13 @@ class DialogService(CommonService):
             cls.model.kb_ids,
             cls.model.icon,
             cls.model.status,
-            User.nickname,
-            User.avatar.alias("tenant_avatar"),
+            Tenant.name.alias("nickname"),
             cls.model.update_time,
             cls.model.create_time,
         ]
         dialogs = (
             cls.model.select(*fields)
-            .join(User, on=(cls.model.tenant_id == User.id))
+            .join(Tenant, on=(cls.model.tenant_id == Tenant.id))
             .where(
                 (cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value),
             )

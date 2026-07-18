@@ -20,7 +20,7 @@ from pathlib import Path
 
 from quart import request
 
-from api.common.check_team_permission import check_file_team_permission, check_kb_team_permission
+from api.common.check_team_permission import check_file_write_permission
 from api.db.services import duplicate_name
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
@@ -51,6 +51,8 @@ def _convert_files(file_ids, kb_ids, user_id, mode):
                 doc_id = inform.document_id
                 e, doc = DocumentService.get_by_id(doc_id)
                 if e and doc:
+                    if not KnowledgebaseService.modifiable(doc.kb_id, user_id):
+                        raise PermissionError("No authorization to replace an existing dataset document.")
                     tenant_id = DocumentService.get_tenant_id(doc_id)
                     if not tenant_id:
                         raise RuntimeError("Tenant not found!")
@@ -71,6 +73,8 @@ def _convert_files(file_ids, kb_ids, user_id, mode):
             e, kb = KnowledgebaseService.get_by_id(kb_id)
             if not e:
                 continue
+            if not KnowledgebaseService.modifiable(kb_id, user_id):
+                raise PermissionError("No authorization to link files to this dataset.")
             filename = duplicate_name(DocumentService.query, name=file.name, kb_id=kb.id)
             doc = DocumentService.insert(
                 {
@@ -159,7 +163,7 @@ async def convert():
                     kb_ids,
                 )
                 return get_data_error_result(message="File not found!")
-            if not check_file_team_permission(file, user_id):
+            if not check_file_write_permission(file, user_id):
                 logger.warning(
                     "user_id=%s resource_type=file resource_id=%s action=authorize_file result=denied file_ids=%s kb_ids=%s",
                     user_id,
@@ -170,7 +174,7 @@ async def convert():
                 return get_data_error_result(message="No authorization.")
 
         for kb_id, kb in kb_map.items():
-            if not check_kb_team_permission(kb, user_id):
+            if not KnowledgebaseService.modifiable(kb_id, user_id):
                 logger.warning(
                     "user_id=%s resource_type=dataset resource_id=%s action=authorize_dataset result=denied file_ids=%s kb_ids=%s",
                     user_id,
@@ -179,6 +183,13 @@ async def convert():
                     kb_ids,
                 )
                 return get_data_error_result(message="No authorization.")
+
+        if mode == "replace":
+            for file_id in all_file_ids:
+                for link in File2DocumentService.get_by_file_id(file_id):
+                    exists, linked_document = DocumentService.get_by_id(link.document_id)
+                    if exists and linked_document and not KnowledgebaseService.modifiable(linked_document.kb_id, user_id):
+                        return get_data_error_result(message="No authorization to replace an existing dataset document.")
 
         # Run the blocking DB work in a thread so the event loop is not blocked.
         # For large folders this prevents 504 Gateway Timeout by returning as

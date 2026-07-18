@@ -779,7 +779,7 @@ def _load_chat_routes_unit_module(monkeypatch):
             return True, SimpleNamespace(llm_id="glm-4", tenant_llm_id="tenant-llm-id")
 
         @staticmethod
-        def get_joined_tenants_by_user_id(_user_id):
+        def list_accessible_by_user_id(_user_id):
             return [{"tenant_id": "tenant-1"}, {"tenant_id": "team-tenant-2"}]
 
     class _StubUserTenantService:

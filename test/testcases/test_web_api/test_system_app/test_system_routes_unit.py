@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -41,6 +42,14 @@ class _ExprField:
 class _DummyAPITokenModel:
     tenant_id = _ExprField("tenant_id")
     token = _ExprField("token")
+
+
+class _DummyRequest:
+    args = {}
+    payload = {}
+
+    async def get_json(self, **_kwargs):
+        return self.payload
 
 
 @pytest.fixture(scope="session")
@@ -121,6 +130,10 @@ def _load_system_module(monkeypatch):
     kb_service_mod.KnowledgebaseService = SimpleNamespace(get_by_id=lambda _kb_id: True)
     monkeypatch.setitem(sys.modules, "api.db.services.knowledgebase_service", kb_service_mod)
 
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(can_create_shared_resource=lambda _user_id, _workspace_id: True)
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
+
     user_service_mod = ModuleType("api.db.services.user_service")
     user_service_mod.UserTenantService = SimpleNamespace(query=lambda **_kwargs: [SimpleNamespace(role="owner", tenant_id="tenant-1")])
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
@@ -152,6 +165,7 @@ def _load_system_module(monkeypatch):
 
     quart_mod = ModuleType("quart")
     quart_mod.jsonify = lambda payload: payload
+    quart_mod.request = _DummyRequest()
     monkeypatch.setitem(sys.modules, "quart", quart_mod)
 
     module_path = repo_root / "api" / "apps" / "restful_apis" / "system_api.py"
@@ -220,3 +234,22 @@ def test_get_config_returns_register_enabled_unit(monkeypatch):
     res = module.get_config()
     assert res["code"] == 0
     assert res["data"]["registerEnabled"] is False
+
+
+@pytest.mark.p2
+def test_api_token_is_created_for_explicit_workspace(monkeypatch):
+    module = _load_system_module(monkeypatch)
+    saved = {}
+    module.request.payload = {"workspace_id": "team-1"}
+    monkeypatch.setattr(
+        module.WorkspaceAccessService,
+        "can_create_shared_resource",
+        lambda user_id, workspace_id: (user_id, workspace_id) == ("user-1", "team-1"),
+    )
+    monkeypatch.setattr(module.APITokenService, "save", lambda **kwargs: saved.update(kwargs) or True)
+
+    result = asyncio.run(module.new_token())
+
+    assert result["code"] == 0
+    assert saved["tenant_id"] == "team-1"
+    assert "|" not in saved["token"]

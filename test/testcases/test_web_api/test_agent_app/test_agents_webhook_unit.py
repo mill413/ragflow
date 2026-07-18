@@ -92,13 +92,14 @@ class _DummyRequest:
 
 
 class _CanvasRecord:
-    def __init__(self, *, canvas_category, dsl, user_id="tenant-1"):
+    def __init__(self, *, canvas_category, dsl, user_id="tenant-1", permission="me"):
         self.canvas_category = canvas_category
         self.dsl = dsl
         self.user_id = user_id
+        self.permission = permission
 
     def to_dict(self):
-        return {"user_id": self.user_id, "dsl": self.dsl}
+        return {"user_id": self.user_id, "dsl": self.dsl, "permission": self.permission}
 
 
 class _StubCanvas:
@@ -348,6 +349,13 @@ def _load_agents_app(monkeypatch, *, target="rest"):
     monkeypatch.setitem(sys.modules, "api.db.services.pipeline_operation_log_service", pipeline_log_service_mod)
     services_pkg.pipeline_operation_log_service = pipeline_log_service_mod
 
+    resource_reference_mod = ModuleType("api.db.services.resource_reference_service")
+    resource_reference_mod.ResourceReferenceService = SimpleNamespace(
+        ensure_not_referenced=lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.resource_reference_service", resource_reference_mod)
+    services_pkg.resource_reference_service = resource_reference_mod
+
     task_service_mod = ModuleType("api.db.services.task_service")
     task_service_mod.CANVAS_DEBUG_DOC_ID = "debug-doc-id"
     task_service_mod.TaskService = type(
@@ -397,7 +405,7 @@ def _load_agents_app(monkeypatch, *, target="rest"):
 
     class _StubTenantService:
         @staticmethod
-        def get_joined_tenants_by_user_id(_tenant_id):
+        def list_accessible_by_user_id(_tenant_id):
             return []
 
     class _StubUserService:
@@ -415,6 +423,24 @@ def _load_agents_app(monkeypatch, *, target="rest"):
     services_pkg.user_service = user_service_mod
     services_pkg.TenantService = _StubTenantService
     services_pkg.UserService = _StubUserService
+
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
+        can_create_collaborative_resource=lambda *_args, **_kwargs: True,
+        can_read_shared_resource=lambda *_args, **_kwargs: True,
+        can_reference_knowledgebases=lambda *_args, **_kwargs: True,
+        extract_knowledgebase_ids=lambda *_args, **_kwargs: set(),
+        get_collaborative_resource_capabilities=lambda *_args, **_kwargs: {
+            "read": True,
+            "update": True,
+            "delete": True,
+        },
+        get_workspace_type=lambda *_args, **_kwargs: None,
+        is_superuser=lambda *_args, **_kwargs: False,
+        list_visible_workspace_ids=lambda tenant_id: [tenant_id],
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
+    services_pkg.workspace_service = workspace_service_mod
 
     # Stub api.apps package to prevent api/apps/__init__.py from executing
     # (it triggers heavy imports like quart, settings, DB connections).
@@ -509,7 +535,7 @@ def _assert_bad_request(res, expected_substring):
 def test_agents_crud_unit_branches(monkeypatch):
     module = _load_agents_app(monkeypatch)
 
-    monkeypatch.setattr(module.TenantService, "get_joined_tenants_by_user_id", lambda _tenant_id: [])
+    monkeypatch.setattr(module.TenantService, "list_accessible_by_user_id", lambda _tenant_id: [])
     monkeypatch.setattr(
         module,
         "request",
@@ -613,7 +639,7 @@ def test_agents_crud_unit_branches(monkeypatch):
 
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: False)
 
-    @module._require_canvas_owner_sync
+    @module._require_canvas_manage_sync
     def _dummy_delete(agent_id, tenant_id):
         return module.get_json_result(data=True)
 
@@ -682,7 +708,7 @@ def test_webhook_security_dispatch(monkeypatch):
 
 
 @pytest.mark.p2
-def test_webhook_test_requires_owner(monkeypatch):
+def test_webhook_test_requires_manage_permission(monkeypatch):
     module = _load_agents_app(monkeypatch)
     _patch_background_task(monkeypatch, module)
 
@@ -695,7 +721,7 @@ def test_webhook_test_requires_owner(monkeypatch):
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: [])
     denied = _run(module.webhook_test(agent_id="agent-1"))
     assert denied["code"] == module.RetCode.OPERATING_ERROR
-    assert "Only the owner" in denied["message"]
+    assert "No authorization to manage this agent" in denied["message"]
 
     cvs = _make_webhook_cvs(module, params=_default_webhook_params(security=_anonymous_security()))
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: [cvs])
@@ -1126,6 +1152,27 @@ def test_webhook_trace_polling_branches(monkeypatch):
     assert [event["ts"] for event in res["data"]["events"]] == [101.2, 102.5]
     assert res["data"]["next_since_ts"] == 102.5
     assert res["data"]["finished"] is True
+
+
+@pytest.mark.p2
+def test_webhook_trace_enforces_agent_workspace_permission(monkeypatch):
+    module = _load_agents_app(monkeypatch)
+    canvas = _CanvasRecord(
+        canvas_category=module.CanvasCategory.Agent,
+        dsl={},
+        user_id="team-1",
+        permission="team",
+    )
+    monkeypatch.setattr(module.UserCanvasService, "get_by_id", lambda _id: (True, canvas))
+    monkeypatch.setattr(
+        module.WorkspaceAccessService,
+        "can_read_shared_resource",
+        lambda *_args, **_kwargs: False,
+    )
+
+    result = _run(module.webhook_trace("agent-1"))
+    assert result["code"] != module.RetCode.SUCCESS
+    assert result["message"] == "Canvas not found."
 
 
 @pytest.mark.p2

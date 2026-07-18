@@ -13,28 +13,45 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useListTenantUser } from '@/hooks/use-user-setting-request';
+import {
+  useFetchUserInfo,
+  useListTenantUser,
+  useUpdateTeamMember,
+} from '@/hooks/use-user-setting-request';
 import { formatDate } from '@/utils/date';
 import { upperFirst } from 'lodash';
-import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Crown, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TenantRole } from '../constants';
 import { useHandleDeleteUser } from './hooks';
 
 const ColorMap: Record<string, string> = {
-  [TenantRole.Normal]: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  [TenantRole.Normal]:
+    'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   [TenantRole.Invite]: 'bg-accent-primary-5 bg-accent-primary rounded-sm',
   [TenantRole.Owner]: 'bg-red-100 text-red-800',
+  [TenantRole.Admin]: 'bg-blue-100 text-blue-800',
 };
 
-const UserTable = ({ searchUser }: { searchUser: string }) => {
-  const { data, loading } = useListTenantUser();
+const UserTable = ({
+  searchUser,
+  tenantId,
+  canManage,
+  canTransfer,
+}: {
+  searchUser: string;
+  tenantId: string;
+  canManage: boolean;
+  canTransfer: boolean;
+}) => {
+  const { data, loading } = useListTenantUser(tenantId);
   const { deleteTenantUser } = useHandleDeleteUser();
+  const { updateTeamMember } = useUpdateTeamMember(tenantId);
+  const { data: currentUser } = useFetchUserInfo();
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const { t } = useTranslation();
   const sortedData = useMemo(() => {
-    console.log('sortedData', data, searchUser);
     if (!data || data.length === 0) return data;
     let filtered = data;
     if (searchUser) {
@@ -141,35 +158,72 @@ const UserTable = ({ searchUser }: { searchUser: string }) => {
                   )}
                 </TableCell>
                 <TableCell className="p-4">
-                  <ConfirmDeleteDialog
-                    title={t('deleteModal.delMember')}
-                    onOk={async () => {
-                      await deleteTenantUser({
-                        userId: record.user_id,
-                      });
-                      return;
-                    }}
-                    content={{
-                      node: (
-                        <ConfirmDeleteDialogNode
-                          avatar={{
-                            avatar: record.avatar,
-                            name: record.nickname,
-                            isPerson: true,
-                          }}
-                          name={record.email}
-                        ></ConfirmDeleteDialogNode>
-                      ),
-                    }}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 p-0 hover:bg-state-error-5 hover:text-state-error"
+                  {canManage && record.role !== TenantRole.Owner && (
+                    <select
+                      aria-label={t('setting.role')}
+                      className="mr-2 h-8 rounded-md border border-border-default bg-bg-input px-2"
+                      value={record.role}
+                      onChange={(event) =>
+                        updateTeamMember({
+                          userId: record.user_id,
+                          role: event.target.value as 'admin' | 'normal',
+                        })
+                      }
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </ConfirmDeleteDialog>
+                      <option value="normal">Member</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  )}
+                  {canTransfer &&
+                    record.role !== TenantRole.Owner &&
+                    currentUser.id !== record.user_id && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={t('setting.transferOwnership')}
+                        onClick={() =>
+                          updateTeamMember({
+                            userId: record.user_id,
+                            transferOwnership: true,
+                          })
+                        }
+                      >
+                        <Crown className="h-4 w-4" />
+                      </Button>
+                    )}
+                  {record.role !== TenantRole.Owner &&
+                    (canManage || currentUser.id === record.user_id) && (
+                      <ConfirmDeleteDialog
+                        title={t('deleteModal.delMember')}
+                        onOk={async () => {
+                          await deleteTenantUser({
+                            userId: record.user_id,
+                            tenantId,
+                          });
+                          return;
+                        }}
+                        content={{
+                          node: (
+                            <ConfirmDeleteDialogNode
+                              avatar={{
+                                avatar: record.avatar,
+                                name: record.nickname,
+                                isPerson: true,
+                              }}
+                              name={record.email}
+                            ></ConfirmDeleteDialogNode>
+                          ),
+                        }}
+                      >
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 p-0 hover:bg-state-error-5 hover:text-state-error"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ConfirmDeleteDialog>
+                    )}
                 </TableCell>
               </TableRow>
             ))

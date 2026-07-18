@@ -18,6 +18,7 @@ import logging
 from api.apps import current_user, login_required
 from api.db.services.chat_channel_service import ChatChannelService
 from api.db.services.dialog_service import DialogService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, validate_request
 from common.constants import RetCode
 from common.misc_utils import get_uuid
@@ -76,6 +77,8 @@ async def update_chat_channel(channel_id):
     e, conn = ChatChannelService.get_by_id(channel_id)
     if not e:
         return get_data_error_result(message="Can't find this chat channel!")
+    if not WorkspaceAccessService.can_manage_shared_resource(current_user.id, conn):
+        return _chat_channel_auth_error(channel_id, current_user.id)
 
     req = await get_request_json()
     if isinstance(req, dict) and isinstance(req.get("data"), dict):
@@ -104,6 +107,12 @@ async def update_chat_channel(channel_id):
 def rm_chat_channel(channel_id):
     """Delete an accessible chat channel bot."""
     if not ChatChannelService.accessible(channel_id, current_user.id):
+        return _chat_channel_auth_error(channel_id, current_user.id)
+
+    e, conn = ChatChannelService.get_by_id(channel_id)
+    if not e:
+        return get_data_error_result(message="Can't find this chat channel!")
+    if not WorkspaceAccessService.can_manage_shared_resource(current_user.id, conn):
         return _chat_channel_auth_error(channel_id, current_user.id)
 
     ChatChannelService.delete_by_id(channel_id)

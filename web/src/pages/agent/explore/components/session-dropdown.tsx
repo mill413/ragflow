@@ -49,6 +49,10 @@ export function SessionDropdown({
       setSessionId,
     ]);
 
+  if (!session.is_new && session.capabilities?.delete === false) {
+    return children;
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>

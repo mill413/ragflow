@@ -287,6 +287,10 @@ def _load_dataset_module(monkeypatch):
         def accessible(_dataset_id, _tenant_id):
             return True
 
+        @staticmethod
+        def modifiable(dataset_id, tenant_id):
+            return _StubKnowledgebaseService.accessible(dataset_id, tenant_id)
+
     knowledgebase_service_mod.KnowledgebaseService = _StubKnowledgebaseService
     monkeypatch.setitem(sys.modules, "api.db.services.knowledgebase_service", knowledgebase_service_mod)
     services_pkg.knowledgebase_service = knowledgebase_service_mod
@@ -311,7 +315,7 @@ def _load_dataset_module(monkeypatch):
             return True, SimpleNamespace(embd_id="embd-default")
 
         @staticmethod
-        def get_joined_tenants_by_user_id(_tenant_id):
+        def list_accessible_by_user_id(_tenant_id):
             return [{"tenant_id": "tenant-1"}]
 
     class _StubUserService:
@@ -321,7 +325,7 @@ def _load_dataset_module(monkeypatch):
 
     class _StubUserTenantService:
         @staticmethod
-        def get_tenants_by_user_id(_user_id):
+        def list_memberships_by_user_id(_user_id):
             return []
 
     user_service_mod.TenantService = _StubTenantService

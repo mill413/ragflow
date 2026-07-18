@@ -73,7 +73,11 @@ class UserFillUp(ComponentBase):
 
             file_value = value["value"]
             files = file_value if isinstance(file_value, list) else [file_value]
-            return FileService.get_files(files, layout_recognize=layout_recognize)
+            return FileService.get_files(
+                files,
+                layout_recognize=layout_recognize,
+                tenant_id=self._canvas.get_tenant_id(),
+            )
 
         if isinstance(value, dict):
             raw = value.get("value")

@@ -51,21 +51,6 @@ class _Field:
         return (self.name, other)
 
 
-class _Invitee:
-    def __init__(self, user_id="invitee-1", email="invitee@example.com"):
-        self.id = user_id
-        self.email = email
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "avatar": "avatar-url",
-            "email": self.email,
-            "nickname": "Invitee",
-            "password": "ignored",
-        }
-
-
 def _run(coro):
     return asyncio.run(coro)
 
@@ -83,252 +68,6 @@ def _set_request_json(monkeypatch, module, payload):
         return payload
 
     monkeypatch.setattr(module, "get_request_json", _request_json)
-
-
-def _load_tenant_module(monkeypatch):
-    repo_root = Path(__file__).resolve().parents[3]
-
-    api_pkg = ModuleType("api")
-    api_pkg.__path__ = [str(repo_root / "api")]
-    monkeypatch.setitem(sys.modules, "api", api_pkg)
-
-    apps_mod = ModuleType("api.apps")
-    apps_mod.__path__ = [str(repo_root / "api" / "apps")]
-    apps_mod.current_user = SimpleNamespace(id="tenant-1", email="owner@example.com")
-    apps_mod.login_required = lambda fn: fn
-    monkeypatch.setitem(sys.modules, "api.apps", apps_mod)
-
-    db_mod = ModuleType("api.db")
-    db_mod.UserTenantRole = SimpleNamespace(NORMAL="normal", OWNER="owner", INVITE="invite")
-    monkeypatch.setitem(sys.modules, "api.db", db_mod)
-
-    db_models_mod = ModuleType("api.db.db_models")
-    db_models_mod.UserTenant = type(
-        "UserTenant",
-        (),
-        {
-            "tenant_id": _Field("tenant_id"),
-            "user_id": _Field("user_id"),
-        },
-    )
-    monkeypatch.setitem(sys.modules, "api.db.db_models", db_models_mod)
-
-    services_pkg = ModuleType("api.db.services")
-    services_pkg.__path__ = []
-    monkeypatch.setitem(sys.modules, "api.db.services", services_pkg)
-
-    user_service_mod = ModuleType("api.db.services.user_service")
-
-    class _UserTenantService:
-        @staticmethod
-        def get_by_tenant_id(_tenant_id):
-            return []
-
-        @staticmethod
-        def query(**_kwargs):
-            return []
-
-        @staticmethod
-        def save(**_kwargs):
-            return True
-
-        @staticmethod
-        def filter_delete(_conditions):
-            return True
-
-        @staticmethod
-        def get_tenants_by_user_id(_user_id):
-            return []
-
-        @staticmethod
-        def filter_update(_conditions, _payload):
-            return True
-
-    class _UserService:
-        @staticmethod
-        def query(**_kwargs):
-            return []
-
-        @staticmethod
-        def get_by_id(_user_id):
-            return False, None
-
-    user_service_mod.UserTenantService = _UserTenantService
-    user_service_mod.UserService = _UserService
-    monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
-
-    api_utils_mod = ModuleType("api.utils.api_utils")
-    api_utils_mod.get_json_result = lambda data=None, message="", code=0: {"code": code, "message": message, "data": data}
-    api_utils_mod.get_data_error_result = lambda message="": {"code": 102, "message": message, "data": False}
-    api_utils_mod.server_error_response = lambda exc: {"code": 100, "message": repr(exc), "data": False}
-    api_utils_mod.validate_request = lambda *_args, **_kwargs: lambda fn: fn
-    api_utils_mod.get_request_json = lambda: _AwaitableValue({})
-    monkeypatch.setitem(sys.modules, "api.utils.api_utils", api_utils_mod)
-
-    web_utils_mod = ModuleType("api.utils.web_utils")
-    web_utils_mod.send_invite_email = lambda **_kwargs: {"ok": True}
-    monkeypatch.setitem(sys.modules, "api.utils.web_utils", web_utils_mod)
-
-    common_pkg = ModuleType("common")
-    common_pkg.__path__ = [str(repo_root / "common")]
-    monkeypatch.setitem(sys.modules, "common", common_pkg)
-
-    constants_mod = ModuleType("common.constants")
-    constants_mod.RetCode = SimpleNamespace(AUTHENTICATION_ERROR=401, SERVER_ERROR=500, DATA_ERROR=102)
-    constants_mod.StatusEnum = SimpleNamespace(VALID=SimpleNamespace(value=1))
-    monkeypatch.setitem(sys.modules, "common.constants", constants_mod)
-
-    misc_utils_mod = ModuleType("common.misc_utils")
-    misc_utils_mod.get_uuid = lambda: "uuid-1"
-    monkeypatch.setitem(sys.modules, "common.misc_utils", misc_utils_mod)
-
-    time_utils_mod = ModuleType("common.time_utils")
-    time_utils_mod.delta_seconds = lambda _value: 0
-    monkeypatch.setitem(sys.modules, "common.time_utils", time_utils_mod)
-
-    settings_mod = ModuleType("common.settings")
-    settings_mod.MAIL_FRONTEND_URL = "https://frontend.example/invite"
-    monkeypatch.setitem(sys.modules, "common.settings", settings_mod)
-    common_pkg.settings = settings_mod
-
-    sys.modules.pop("test_tenant_app_unit_module", None)
-    module_path = repo_root / "api" / "apps" / "restful_apis" / "tenant_api.py"
-    spec = importlib.util.spec_from_file_location("test_tenant_app_unit_module", module_path)
-    module = importlib.util.module_from_spec(spec)
-    module.manager = _DummyManager()
-    monkeypatch.setitem(sys.modules, "test_tenant_app_unit_module", module)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.mark.p2
-def test_user_list_auth_success_exception_matrix_unit(monkeypatch):
-    module = _load_tenant_module(monkeypatch)
-
-    module.current_user.id = "other-user"
-    res = module.user_list("tenant-1")
-    assert res["code"] == module.RetCode.AUTHENTICATION_ERROR, res
-    assert res["message"] == "No authorization.", res
-
-    module.current_user.id = "tenant-1"
-    monkeypatch.setattr(
-        module.UserTenantService,
-        "get_by_tenant_id",
-        lambda _tenant_id: [{"id": "u1", "update_date": "2024-01-01 00:00:00"}],
-    )
-    monkeypatch.setattr(module, "delta_seconds", lambda _value: 42)
-    res = module.user_list("tenant-1")
-    assert res["code"] == 0, res
-    assert res["data"][0]["delta_seconds"] == 42, res
-
-    monkeypatch.setattr(module.UserTenantService, "get_by_tenant_id", lambda _tenant_id: (_ for _ in ()).throw(RuntimeError("list boom")))
-    res = module.user_list("tenant-1")
-    assert res["code"] == 100, res
-    assert "list boom" in res["message"], res
-
-
-@pytest.mark.p2
-def test_create_invite_role_and_email_failure_matrix_unit(monkeypatch):
-    module = _load_tenant_module(monkeypatch)
-
-    module.current_user.id = "other-user"
-    _set_request_json(monkeypatch, module, {"email": "invitee@example.com"})
-    res = _run(module.create("tenant-1"))
-    assert res["code"] == module.RetCode.AUTHENTICATION_ERROR, res
-    assert res["message"] == "No authorization.", res
-
-    module.current_user.id = "tenant-1"
-    monkeypatch.setattr(module.UserService, "query", lambda **_kwargs: [])
-    res = _run(module.create("tenant-1"))
-    assert res["message"] == "User not found.", res
-
-    invitee = _Invitee()
-    monkeypatch.setattr(module.UserService, "query", lambda **_kwargs: [invitee])
-    monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(role=module.UserTenantRole.NORMAL)])
-    res = _run(module.create("tenant-1"))
-    assert "already in the team." in res["message"], res
-
-    monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(role=module.UserTenantRole.OWNER)])
-    res = _run(module.create("tenant-1"))
-    assert "owner of the team." in res["message"], res
-
-    monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(role="strange-role")])
-    res = _run(module.create("tenant-1"))
-    assert "role: strange-role is invalid." in res["message"], res
-
-    saved = []
-    scheduled = []
-    monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [])
-    monkeypatch.setattr(module.UserTenantService, "save", lambda **kwargs: saved.append(kwargs) or True)
-    monkeypatch.setattr(module.UserService, "get_by_id", lambda _user_id: (True, SimpleNamespace(nickname="Inviter Nick")))
-    monkeypatch.setattr(module, "send_invite_email", lambda **kwargs: kwargs)
-    monkeypatch.setattr(module.asyncio, "create_task", lambda payload: scheduled.append(payload) or SimpleNamespace())
-    res = _run(module.create("tenant-1"))
-    assert res["code"] == 0, res
-    assert saved and saved[-1]["role"] == module.UserTenantRole.INVITE, saved
-    assert scheduled and scheduled[-1]["inviter"] == "Inviter Nick", scheduled
-    assert sorted(res["data"].keys()) == ["avatar", "email", "id", "nickname"], res
-
-    monkeypatch.setattr(module.asyncio, "create_task", lambda _payload: (_ for _ in ()).throw(RuntimeError("send boom")))
-    res = _run(module.create("tenant-1"))
-    assert res["code"] == module.RetCode.SERVER_ERROR, res
-    assert "Failed to send invite email." in res["message"], res
-
-
-@pytest.mark.p2
-def test_rm_and_tenant_list_matrix_unit(monkeypatch):
-    module = _load_tenant_module(monkeypatch)
-
-    module.current_user.id = "outsider"
-    _set_request_json(monkeypatch, module, {"user_id": "user-2"})
-    res = _run(module.rm("tenant-1"))
-    assert res["code"] == module.RetCode.AUTHENTICATION_ERROR, res
-    assert res["message"] == "No authorization.", res
-
-    module.current_user.id = "tenant-1"
-    deleted = []
-    monkeypatch.setattr(module.UserTenantService, "filter_delete", lambda conditions: deleted.append(conditions) or True)
-    res = _run(module.rm("tenant-1"))
-    assert res["code"] == 0, res
-    assert res["data"] is True, res
-    assert deleted, "filter_delete should be called"
-
-    monkeypatch.setattr(module.UserTenantService, "filter_delete", lambda _conditions: (_ for _ in ()).throw(RuntimeError("rm boom")))
-    res = _run(module.rm("tenant-1"))
-    assert res["code"] == 100, res
-    assert "rm boom" in res["message"], res
-
-    monkeypatch.setattr(
-        module.UserTenantService,
-        "get_tenants_by_user_id",
-        lambda _user_id: [{"id": "tenant-1", "update_date": "2024-01-01 00:00:00"}],
-    )
-    monkeypatch.setattr(module, "delta_seconds", lambda _value: 9)
-    res = module.tenant_list()
-    assert res["code"] == 0, res
-    assert res["data"][0]["delta_seconds"] == 9, res
-
-    monkeypatch.setattr(module.UserTenantService, "get_tenants_by_user_id", lambda _user_id: (_ for _ in ()).throw(RuntimeError("tenant boom")))
-    res = module.tenant_list()
-    assert res["code"] == 100, res
-    assert "tenant boom" in res["message"], res
-
-
-@pytest.mark.p2
-def test_agree_success_and_exception_unit(monkeypatch):
-    module = _load_tenant_module(monkeypatch)
-
-    calls = []
-    monkeypatch.setattr(module.UserTenantService, "filter_update", lambda conditions, payload: calls.append((conditions, payload)) or True)
-    res = module.agree("tenant-1")
-    assert res["code"] == 0, res
-    assert res["data"] is True, res
-    assert calls and calls[-1][1]["role"] == module.UserTenantRole.NORMAL
-
-    monkeypatch.setattr(module.UserTenantService, "filter_update", lambda _conditions, _payload: (_ for _ in ()).throw(RuntimeError("agree boom")))
-    res = module.agree("tenant-1")
-    assert res["code"] == 100, res
-    assert "agree boom" in res["message"], res
 
 
 class _Args(dict):
@@ -391,9 +130,6 @@ class _DummyUser:
 
     def to_dict(self):
         return {"id": self.id, "email": self.email}
-
-    def to_safe_dict(self, **_kwargs):
-        return self.to_dict()
 
     def to_safe_dict(self, *, for_self: bool = False):
         _sensitive = {"password", "access_token", "email"}
@@ -531,8 +267,8 @@ def _load_user_app(monkeypatch):
             return True, SimpleNamespace(id=_tenant_id)
 
         @staticmethod
-        def get_info_by(_user_id):
-            return []
+        def get_personal_by_user_id(_user_id):
+            return None
 
         @staticmethod
         def update_by_id(_tenant_id, _payload):
@@ -614,7 +350,9 @@ def _load_user_app(monkeypatch):
     monkeypatch.setitem(sys.modules, "api.utils.api_utils", api_utils_mod)
 
     crypt_mod = ModuleType("api.utils.crypt")
+    crypt_mod.check_password_hash = lambda _stored, _candidate: False
     crypt_mod.decrypt = lambda value: value
+    crypt_mod.generate_password_hash = lambda value: value
     monkeypatch.setitem(sys.modules, "api.utils.crypt", crypt_mod)
 
     web_utils_mod = ModuleType("api.utils.web_utils")
@@ -1105,7 +843,7 @@ def test_registration_helpers_and_register_route_matrix_unit(monkeypatch):
 def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     module = _load_user_app(monkeypatch)
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", lambda _uid: [])
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", lambda _uid: None)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.DATA_ERROR, res
     assert "Tenant not found" in res["message"], res
@@ -1113,7 +851,7 @@ def test_tenant_info_and_set_tenant_info_exception_matrix_unit(monkeypatch):
     def _raise_tenant_info(_uid):
         raise RuntimeError("tenant info boom")
 
-    monkeypatch.setattr(module.TenantService, "get_info_by", _raise_tenant_info)
+    monkeypatch.setattr(module.TenantService, "get_personal_by_user_id", _raise_tenant_info)
     res = _run(module.tenant_info())
     assert res["code"] == module.RetCode.EXCEPTION_ERROR, res
     assert "tenant info boom" in res["message"], res
@@ -1538,7 +1276,7 @@ def _load_chat_routes_unit_module(monkeypatch):
         (),
         {
             "get_by_id": staticmethod(lambda _tenant_id: (True, SimpleNamespace(llm_id="glm-4", tenant_llm_id="tenant-llm-id"))),
-            "get_joined_tenants_by_user_id": staticmethod(lambda _user_id: [{"tenant_id": "tenant-1"}, {"tenant_id": "team-tenant-2"}]),
+            "list_accessible_by_user_id": staticmethod(lambda _user_id: [{"tenant_id": "tenant-1"}, {"tenant_id": "team-tenant-2"}]),
         },
     )
     user_service_mod.UserTenantService = type("UserTenantService", (), {"query": staticmethod(lambda **_kwargs: [])})

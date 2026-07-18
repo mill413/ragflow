@@ -59,6 +59,7 @@ import {
   listWhitelist,
   updateWhitelistEntry,
 } from '@/services/admin-service';
+import { formatDate } from '@/utils/date';
 
 import { EMPTY_DATA, createFuzzySearchFn, getSortIcon } from './utils';
 
@@ -171,13 +172,14 @@ function AdminWhitelist() {
     () => [
       columnHelper.accessor('email', {
         header: t('admin.email'),
-        enableSorting: false,
       }),
       columnHelper.accessor('create_date', {
         header: t('admin.createDate'),
+        cell: ({ cell }) => formatDate(cell.getValue()) || '-',
       }),
       columnHelper.accessor('update_date', {
         header: t('admin.updateDate'),
+        cell: ({ cell }) => formatDate(cell.getValue()) || '-',
       }),
       columnHelper.display({
         id: 'actions',
@@ -223,8 +225,6 @@ function AdminWhitelist() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-
-    enableSorting: false,
   });
 
   return (

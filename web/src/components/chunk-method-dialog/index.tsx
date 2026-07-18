@@ -303,7 +303,9 @@ export function ChunkMethodDialog({
               {parseType === ParseType.BuiltIn && <ChunkMethodItem />}
 
               {parseType === ParseType.BuiltIn && (
-                <CompilationTemplateFormField></CompilationTemplateFormField>
+                <CompilationTemplateFormField
+                  workspaceId={knowledgeDetails.tenant_id}
+                ></CompilationTemplateFormField>
               )}
 
               {showPages && parseType === ParseType.BuiltIn && (
@@ -391,6 +393,7 @@ export function ChunkMethodDialog({
             <div className="space-y-6 empty:hidden">
               {parseType === ParseType.Pipeline && (
                 <DataFlowSelect
+                  workspaceId={knowledgeDetails.tenant_id || ''}
                   isMult={false}
                   // toDataPipeline={navigateToAgents}
                   formFieldName="pipeline_id"

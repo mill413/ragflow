@@ -110,6 +110,12 @@ const {
   adminDeleteUser,
   adminListUserDatasets,
   adminListUserAgents,
+  adminUpdateUserDepartment,
+  adminGetUserLoginUrl,
+  adminDepartments,
+  adminDepartment,
+  adminListManagedResources,
+  adminListFailedDocuments,
 
   adminListServices,
   adminShowServiceDetails,
@@ -135,6 +141,7 @@ const {
   adminImportWhitelist,
 
   adminGetSystemVersion,
+  adminGetMonitoringSummary,
 
   adminListSandboxProviders,
   adminGetSandboxProviderSchema,
@@ -155,10 +162,15 @@ export const logout = () => request.get<ResponseData<boolean>>(adminLogout);
 export const listUsers = () =>
   request.get<ResponseData<AdminService.ListUsersItem[]>>(adminListUsers, {});
 
-export const createUser = (email: string, password: string) =>
+export const createUser = (
+  email: string,
+  password: string,
+  departmentId?: string,
+) =>
   request.post<ResponseData<boolean>>(adminCreateUser, {
     username: email,
     password,
+    department_id: departmentId || null,
   });
 
 export const grantSuperuser = (email: string) =>
@@ -171,6 +183,21 @@ export const getUserDetails = (email: string) =>
   request.get<ResponseData<[AdminService.UserDetail]>>(
     adminGetUserDetails(email),
   );
+export const updateUser = (
+  email: string,
+  data: {
+    nickname: string;
+    departmentId: string | null;
+    isActive: boolean;
+    isSuperuser: boolean;
+    password?: string;
+    remark?: string;
+  },
+) =>
+  request.patch<ResponseData<{ id: string; email: string }>>(
+    adminGetUserDetails(email),
+    data,
+  );
 export const listUserDatasets = (email: string) =>
   request.get<ResponseData<AdminService.ListUserDatasetItem[]>>(
     adminListUserDatasets(email),
@@ -178,6 +205,94 @@ export const listUserDatasets = (email: string) =>
 export const listUserAgents = (email: string) =>
   request.get<ResponseData<AdminService.ListUserAgentItem[]>>(
     adminListUserAgents(email),
+  );
+export const updateUserDepartment = (email: string, departmentId?: string) =>
+  request.put<ResponseData<boolean>>(adminUpdateUserDepartment(email), {
+    department_id: departmentId || null,
+  });
+export const getUserLoginUrl = (email: string) =>
+  request.post<ResponseData<{ url: string; email: string }>>(
+    adminGetUserLoginUrl(email),
+  );
+export const listDepartments = (query?: string) =>
+  request.get<ResponseData<AdminService.Department[]>>(adminDepartments, {
+    params: { q: query || undefined },
+  });
+export const createDepartment = (name: string, parentId?: string) =>
+  request.post<ResponseData<AdminService.Department>>(adminDepartments, {
+    name,
+    parent_id: parentId || null,
+  });
+export const updateDepartment = (
+  departmentId: string,
+  name: string,
+  parentId?: string,
+) =>
+  request.put<ResponseData<AdminService.Department>>(
+    adminDepartment(departmentId),
+    { name, parent_id: parentId || null },
+  );
+export const deleteDepartment = (departmentId: string) =>
+  request.delete<ResponseData<boolean>>(adminDepartment(departmentId));
+export const listAdminTeams = () =>
+  request.get<ResponseData<AdminService.Team[]>>(api.adminTeams);
+export const createAdminTeam = (name: string, ownerId: string) =>
+  request.post<ResponseData<AdminService.Team>>(api.adminTeams, {
+    name,
+    owner_id: ownerId,
+  });
+export const updateAdminTeam = (
+  teamId: string,
+  name: string,
+  ownerId: string,
+) =>
+  request.put<ResponseData<AdminService.Team>>(api.adminTeam(teamId), {
+    name,
+    owner_id: ownerId,
+  });
+export const deleteAdminTeam = (teamId: string) =>
+  request.delete<ResponseData<boolean>>(api.adminTeam(teamId));
+export const listAdminTeamMembers = (teamId: string) =>
+  request.get<ResponseData<AdminService.TeamMember[]>>(
+    api.adminTeamMembers(teamId),
+  );
+export const addAdminTeamMember = (
+  teamId: string,
+  userId: string,
+  role: AdminService.TeamMemberRole,
+) =>
+  request.post<ResponseData<boolean>>(api.adminTeamMembers(teamId), {
+    user_id: userId,
+    role,
+  });
+export const updateAdminTeamMember = (
+  teamId: string,
+  userId: string,
+  role: AdminService.TeamMemberRole,
+) =>
+  request.put<ResponseData<boolean>>(api.adminTeamMember(teamId, userId), {
+    role,
+  });
+export const deleteAdminTeamMember = (teamId: string, userId: string) =>
+  request.delete<ResponseData<boolean>>(api.adminTeamMember(teamId, userId));
+export const listManagedResources = (params: {
+  type: AdminService.ManagedResourceType;
+  page: number;
+  pageSize: number;
+  keywords?: string;
+}) =>
+  request.get<ResponseData<AdminService.ManagedResourceList>>(
+    adminListManagedResources,
+    { params },
+  );
+export const listFailedDocuments = (params: {
+  page: number;
+  pageSize: number;
+  keywords?: string;
+}) =>
+  request.get<ResponseData<AdminService.FailedDocumentList>>(
+    adminListFailedDocuments,
+    { params },
   );
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });
@@ -188,6 +303,10 @@ export const deleteUser = (email: string) =>
 
 export const listServices = () =>
   request.get<ResponseData<AdminService.ListServicesItem[]>>(adminListServices);
+export const getMonitoringSummary = () =>
+  request.get<ResponseData<AdminService.MonitoringSummary>>(
+    adminGetMonitoringSummary,
+  );
 export const showServiceDetails = (serviceId: number) =>
   request.get<ResponseData<AdminService.ServiceDetail>>(
     adminShowServiceDetails(String(serviceId)),

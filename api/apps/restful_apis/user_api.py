@@ -23,7 +23,6 @@ from datetime import datetime
 import base64
 
 from quart import make_response, redirect, request, session
-from werkzeug.security import check_password_hash, generate_password_hash
 
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
@@ -41,7 +40,7 @@ from api.utils.api_utils import (
     validate_request,
 )
 from api.utils.nickname_validation import validate_nickname
-from api.utils.crypt import decrypt
+from api.utils.crypt import check_password_hash, decrypt, generate_password_hash
 from rag.utils.redis_conn import REDIS_CONN
 from api.apps import login_required, current_user, login_user, logout_user
 from api.utils.web_utils import (
@@ -587,10 +586,10 @@ async def tenant_info():
               description: Embedding model ID.
     """
     try:
-        tenants = TenantService.get_info_by(current_user.id)
-        if not tenants:
+        tenant = TenantService.get_personal_by_user_id(current_user.id)
+        if not tenant:
             return get_data_error_result(message="Tenant not found!")
-        return get_json_result(data=tenants[0])
+        return get_json_result(data=tenant)
     except Exception as e:
         return server_error_response(e)
 

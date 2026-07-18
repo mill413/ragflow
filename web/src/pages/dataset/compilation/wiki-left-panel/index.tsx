@@ -23,6 +23,7 @@ type WikiLeftPanelProps = {
   selectedArtifact: IArtifact | null;
   onSelectArtifact: (artifact: IArtifact) => void;
   onClearWiki?: () => void;
+  readOnly?: boolean;
 };
 
 export function WikiLeftPanel({
@@ -31,6 +32,7 @@ export function WikiLeftPanel({
   selectedArtifact,
   onSelectArtifact,
   onClearWiki,
+  readOnly = false,
 }: WikiLeftPanelProps) {
   const { t } = useTranslation();
   const { data } = useFetchArtifactGraph(undefined, {
@@ -64,6 +66,8 @@ export function WikiLeftPanel({
             variant="ghost"
             size="icon-sm"
             disabled={loading}
+            aria-disabled={readOnly}
+            className={readOnly ? 'hidden' : undefined}
             data-testid="wiki-clear-trigger"
           >
             <Trash2 className="size-[1em]" />

@@ -87,5 +87,20 @@ class MCPServerService(CommonService):
 
     @classmethod
     @DB.connection_context()
+    def get_servers_by_tenant_ids(cls, tenant_ids: list[str], id_list: list[str] | None, orderby: str, desc: bool, keywords: str):
+        if not tenant_ids:
+            return []
+        if not hasattr(cls.model, orderby):
+            orderby = "create_time"
+        query = cls.model.select().where(cls.model.tenant_id.in_(tenant_ids))
+        if id_list:
+            query = query.where(cls.model.id.in_(id_list))
+        if keywords:
+            query = query.where(fn.LOWER(cls.model.name).contains(keywords.lower()))
+        order_field = getattr(cls.model, orderby)
+        return list(query.order_by(order_field.desc() if desc else order_field.asc()))
+
+    @classmethod
+    @DB.connection_context()
     def delete_by_tenant_id(cls, tenant_id: str):
         return cls.model.delete().where(cls.model.tenant_id == tenant_id).execute()

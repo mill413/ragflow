@@ -6,7 +6,7 @@ import {
   SortDirection,
   TransformFilterValueFn,
 } from '@tanstack/react-table';
-import { LucideSortAsc, LucideSortDesc } from 'lucide-react';
+import { LucideArrowUpDown, LucideSortAsc, LucideSortDesc } from 'lucide-react';
 import { DefaultValues } from 'react-hook-form';
 
 type AsyncDefaultValues<TValues> = (payload?: unknown) => Promise<TValues>;
@@ -68,10 +68,12 @@ export function createColumnFilterFn<TData extends RowData>(
 }
 
 export function getSortIcon(sorting: false | SortDirection) {
-  return {
-    asc: <LucideSortAsc />,
-    desc: <LucideSortDesc />,
-  }[sorting as string];
+  return (
+    {
+      asc: <LucideSortAsc />,
+      desc: <LucideSortDesc />,
+    }[sorting as string] ?? <LucideArrowUpDown className="opacity-50" />
+  );
 }
 
 export const PERMISSION_TYPES = ['enable', 'read', 'write', 'share'] as const;

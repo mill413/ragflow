@@ -15,13 +15,21 @@ export default {
   loginChannel: (channel: string) => `${restAPIv1}/auth/login/${channel}`,
 
   // team
-  addTenantUser: (tenantId: string) => `${restAPIv1}/tenants/${tenantId}/users`,
+  addTenantUser: (tenantId: string) =>
+    `${restAPIv1}/teams/${tenantId}/invitations`,
   listTenantUser: (tenantId: string) =>
-    `${restAPIv1}/tenants/${tenantId}/users`,
+    `${restAPIv1}/teams/${tenantId}/members`,
   deleteTenantUser: (tenantId: string) =>
-    `${restAPIv1}/tenants/${tenantId}/users`,
-  listTenant: `${restAPIv1}/tenants`,
-  agreeTenant: (tenantId: string) => `${restAPIv1}/tenants/${tenantId}`,
+    `${restAPIv1}/teams/${tenantId}/members`,
+  listTenant: `${restAPIv1}/teams`,
+  listWorkspace: `${restAPIv1}/workspaces`,
+  listTeamInvitations: `${restAPIv1}/teams/invitations`,
+  createTeam: `${restAPIv1}/teams`,
+  team: (tenantId: string) => `${restAPIv1}/teams/${tenantId}`,
+  agreeTenant: (tenantId: string) =>
+    `${restAPIv1}/teams/${tenantId}/invitations/accept`,
+  teamMember: (tenantId: string, userId: string) =>
+    `${restAPIv1}/teams/${tenantId}/members/${userId}`,
 
   // llm model
   listAllAddedModels: `${restAPIv1}/models`,
@@ -113,23 +121,6 @@ export default {
   dataSourceRebuild: (id: string) => `${restAPIv1}/connectors/${id}/rebuild`,
   dataSourceLogs: (id: string) => `${restAPIv1}/connectors/${id}/logs`,
   dataSourceDetail: (id: string) => `${restAPIv1}/connectors/${id}`,
-  dataSourceTest: (id: string) => `${restAPIv1}/connectors/${id}/test`,
-  googleWebAuthStart: (type: 'google-drive' | 'gmail') =>
-    `${restAPIv1}/connectors/google/oauth/web/start?type=${type}`,
-  googleWebAuthResult: (type: 'google-drive' | 'gmail') =>
-    `${restAPIv1}/connectors/google/oauth/web/result?type=${type}`,
-  boxWebAuthStart: () => `${restAPIv1}/connectors/box/oauth/web/start`,
-  boxWebAuthResult: () => `${restAPIv1}/connectors/box/oauth/web/result`,
-
-  // chat channel
-  chatChannelSet: `${restAPIv1}/chat-channels`,
-  chatChannelList: `${restAPIv1}/chat-channels`,
-  chatChannelDetail: (id: string) => `${restAPIv1}/chat-channels/${id}`,
-  chatChannelUpdate: (id: string) => `${restAPIv1}/chat-channels/${id}`,
-  chatChannelDel: (id: string) => `${restAPIv1}/chat-channels/${id}`,
-  chatChannelRuntime: (id: string) =>
-    `${restAPIv1}/chat-channels/${id}/runtime`,
-
   // plugin
   llmTools: `${restAPIv1}/plugin/tools`,
 
@@ -427,6 +418,21 @@ export default {
     `${restAPIv1}/admin/users/${username}/datasets`,
   adminListUserAgents: (username: string) =>
     `${restAPIv1}/admin/users/${username}/agents`,
+  adminUpdateUserDepartment: (username: string) =>
+    `${restAPIv1}/admin/users/${username}/department`,
+  adminGetUserLoginUrl: (username: string) =>
+    `${restAPIv1}/admin/users/${username}/login-url`,
+  adminDepartments: `${restAPIv1}/admin/departments`,
+  adminDepartment: (departmentId: string) =>
+    `${restAPIv1}/admin/departments/${departmentId}`,
+  adminTeams: `${restAPIv1}/admin/teams`,
+  adminTeam: (teamId: string) => `${restAPIv1}/admin/teams/${teamId}`,
+  adminTeamMembers: (teamId: string) =>
+    `${restAPIv1}/admin/teams/${teamId}/members`,
+  adminTeamMember: (teamId: string, userId: string) =>
+    `${restAPIv1}/admin/teams/${teamId}/members/${userId}`,
+  adminListManagedResources: `${restAPIv1}/admin/resources`,
+  adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>
@@ -461,6 +467,7 @@ export default {
   adminImportWhitelist: `${restAPIv1}/admin/whitelist/batch`,
 
   adminGetSystemVersion: `${restAPIv1}/admin/version`,
+  adminGetMonitoringSummary: `${restAPIv1}/admin/monitoring/summary`,
 
   // Sandbox settings
   adminListSandboxProviders: `${restAPIv1}/admin/sandbox/providers`,

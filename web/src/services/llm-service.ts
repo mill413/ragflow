@@ -96,6 +96,44 @@ const methods = {
   },
 } as const;
 
-const llmService = registerNextServer<keyof typeof methods>(methods);
+const rawLlmService = registerNextServer<keyof typeof methods>(methods);
+
+const llmService = new Proxy(rawLlmService, {
+  get(target, property: keyof typeof rawLlmService) {
+    const method = target[property];
+    if (typeof method !== 'function') return method;
+
+    return (config: any = {}, useAxiosNativeConfig = false) => {
+      const activeWorkspaceId = localStorage.getItem('activeWorkspaceId');
+      const workspaceId =
+        activeWorkspaceId && activeWorkspaceId !== '__all__'
+          ? activeWorkspaceId
+          : undefined;
+      if (!workspaceId) return method(config, useAxiosNativeConfig);
+
+      if (useAxiosNativeConfig) {
+        return method(
+          {
+            ...config,
+            params: {
+              ...config?.params,
+              workspace_id: config?.params?.workspace_id ?? workspaceId,
+            },
+          },
+          true,
+        );
+      }
+
+      return method(
+        {
+          ...config,
+          data: config,
+          params: { workspace_id: workspaceId },
+        },
+        true,
+      );
+    };
+  },
+});
 
 export default llmService;

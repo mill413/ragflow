@@ -154,6 +154,7 @@ def _capture_run_mineru_api(monkeypatch, module, *, pdf_path: Path, extracted_di
         captured["url"] = url
         captured["data"] = data
         captured["files"] = files
+        captured["headers"] = headers
         return _FakePostContext(_FakeZipResponse(), captured)
 
     monkeypatch.setattr(module.requests, "post", fake_post)
@@ -233,6 +234,84 @@ def test_run_mineru_api_uses_full_document_when_no_range_given(monkeypatch, tmp_
 
     assert captured["data"]["start_page_id"] == 0
     assert captured["data"]["end_page_id"] == 99999
+
+
+def test_mineru_api_adds_optional_bearer_token(monkeypatch, tmp_path):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser(
+        mineru_api="http://mineru.local",
+        api_key="secret-token",
+    )
+
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    extracted_dir = tmp_path / "out"
+    extracted_dir.mkdir()
+
+    captured = _capture_run_mineru_api(
+        monkeypatch,
+        module,
+        pdf_path=pdf_path,
+        extracted_dir=extracted_dir,
+    )
+    parser._run_mineru_api(
+        pdf_path,
+        extracted_dir,
+        module.MinerUParseOptions(),
+    )
+
+    assert captured["headers"] == {
+        "Accept": "application/json",
+        "Authorization": "Bearer secret-token",
+    }
+
+
+def test_mineru_api_omits_authorization_without_key(monkeypatch, tmp_path):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser(mineru_api="http://mineru.local")
+
+    pdf_path = tmp_path / "sample.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 fake")
+    extracted_dir = tmp_path / "out"
+    extracted_dir.mkdir()
+
+    captured = _capture_run_mineru_api(
+        monkeypatch,
+        module,
+        pdf_path=pdf_path,
+        extracted_dir=extracted_dir,
+    )
+    parser._run_mineru_api(
+        pdf_path,
+        extracted_dir,
+        module.MinerUParseOptions(),
+    )
+
+    assert captured["headers"] == {"Accept": "application/json"}
+
+
+def test_mineru_availability_probe_uses_bearer_token(monkeypatch):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser(
+        mineru_api="http://mineru.local",
+        api_key="secret-token",
+    )
+    captured = {}
+
+    def fake_head(url, timeout, allow_redirects, headers):
+        captured.update(
+            url=url,
+            timeout=timeout,
+            allow_redirects=allow_redirects,
+            headers=headers,
+        )
+        return type("Response", (), {"status_code": 200})()
+
+    monkeypatch.setattr(module.requests, "head", fake_head)
+
+    assert parser.check_installation() == (True, "")
+    assert captured["url"] == "http://mineru.local/openapi.json"
+    assert captured["headers"]["Authorization"] == "Bearer secret-token"
 
 
 def test_end_page_minus_one_normalizes_for_mineru_api(monkeypatch, tmp_path):

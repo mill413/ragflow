@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { FormLayout } from '@/constants/form';
 import { ParseType } from '@/constants/knowledge';
 import { useFetchDefaultModelDictionary } from '@/hooks/use-llm-request';
+import { AllWorkspacesId, useWorkspace } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { omit } from 'lodash';
@@ -40,6 +41,17 @@ const ChunkMethodName = 'chunk_method';
 export function InputForm({ onOk }: IModalProps<any>) {
   const { t } = useTranslation();
   const defaultModelDictionary = useFetchDefaultModelDictionary();
+  const { workspaceId, options } = useWorkspace();
+  const writableWorkspaceOptions = options.filter(
+    (option) =>
+      option.value !== AllWorkspacesId &&
+      option.capabilities?.create_knowledgebase,
+  );
+  const defaultWorkspaceId =
+    writableWorkspaceOptions.find((option) => option.value === workspaceId)
+      ?.value ||
+    writableWorkspaceOptions[0]?.value ||
+    '';
 
   const FormSchema = z
     .object({
@@ -49,6 +61,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
           message: t('knowledgeList.namePlaceholder'),
         })
         .trim(),
+      workspace_id: z.string().min(1),
       parseType: z.nativeEnum(ParseType).optional(),
       embedding_model: z
         .string()
@@ -85,6 +98,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
     resolver: zodResolver(FormSchema),
     defaultValues: {
       name: '',
+      workspace_id: defaultWorkspaceId,
       parseType: ParseType.BuiltIn,
       [ChunkMethodName]: '',
       embedding_model: defaultModelDictionary?.embd_id,
@@ -94,6 +108,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
   const parseType = useWatch({
     control: form.control,
     name: 'parseType',
+  });
+  const selectedWorkspaceId = useWatch({
+    control: form.control,
+    name: 'workspace_id',
   });
 
   function onSubmit(data: z.infer<typeof FormSchema>) {
@@ -110,6 +128,16 @@ export function InputForm({ onOk }: IModalProps<any>) {
       form.setValue('embedding_model', defaultModelDictionary?.embd_id);
     }
   }, [parseType, form, defaultModelDictionary]);
+
+  useEffect(() => {
+    if (defaultWorkspaceId) {
+      form.setValue('workspace_id', defaultWorkspaceId);
+    }
+  }, [defaultWorkspaceId, form]);
+
+  useEffect(() => {
+    form.setValue('pipeline_id', '');
+  }, [selectedWorkspaceId, form]);
 
   return (
     <Form {...form}>
@@ -137,6 +165,29 @@ export function InputForm({ onOk }: IModalProps<any>) {
           )}
         />
 
+        <FormField
+          control={form.control}
+          name="workspace_id"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <FormLabel required>{t('setting.workspace')}</FormLabel>
+              <FormControl>
+                <select
+                  className="h-9 w-full rounded-md border border-border-default bg-bg-input px-3"
+                  {...field}
+                >
+                  {writableWorkspaceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
         <EmbeddingModelItem line={2} isEdit={false} />
         <ParseTypeItem />
         {parseType === ParseType.BuiltIn && (
@@ -144,6 +195,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
         )}
         {parseType === ParseType.Pipeline && (
           <DataFlowSelect
+            workspaceId={selectedWorkspaceId || ''}
             isMult={false}
             showToDataPipeline={true}
             formFieldName="pipeline_id"

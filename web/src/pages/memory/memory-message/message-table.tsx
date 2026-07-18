@@ -24,6 +24,7 @@ import ProcessLogModal, {
   replaceText,
 } from '@/pages/dataset/process-log-modal';
 import { MemoryOptions } from '@/pages/memories/constants';
+import { formatDate } from '@/utils/date';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -40,7 +41,6 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import dayjs from 'dayjs';
 import { t } from 'i18next';
 import { pick } from 'lodash';
 import {
@@ -153,9 +153,7 @@ export function MemoryTable({
   const showLog = (row: Row<IMessageInfo>) => {
     const task = row.original.task;
     const logDetail = {
-      startTime: dayjs(task.create_time)
-        .locale(document.documentElement.lang)
-        .format('MM/DD/YYYY HH:mm:ss'),
+      startTime: formatDate(task.create_time),
       status: getTaskStatus(task.progress),
       details: task.progress_msg,
     } as unknown as ILogInfo;

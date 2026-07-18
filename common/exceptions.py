@@ -34,3 +34,10 @@ class ModelException(Exception):
         super().__init__(msg)
         self.msg = msg
         self.retryable = retryable
+
+
+class ResourceInUseException(Exception):
+    def __init__(self, targets: list[dict], references: list[dict]):
+        super().__init__("Resource is referenced and cannot be deleted.")
+        self.targets = targets
+        self.references = references

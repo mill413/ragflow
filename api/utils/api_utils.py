@@ -241,9 +241,9 @@ def active_required(func):
 def add_tenant_id_to_kwargs(func):
     @wraps(func)
     async def wrapper(**kwargs):
-        from api.apps import current_user
+        from api.apps import current_user, g
 
-        kwargs["tenant_id"] = current_user.id
+        kwargs["tenant_id"] = getattr(g, "api_token_workspace_id", None) or current_user.id
         if inspect.iscoroutinefunction(func):
             return await func(**kwargs)
         return func(**kwargs)
@@ -254,6 +254,18 @@ def add_tenant_id_to_kwargs(func):
 def get_json_result(code: RetCode = RetCode.SUCCESS, message="success", data=None):
     response = {"code": code, "message": message, "data": data}
     return _safe_jsonify(response)
+
+
+def get_resource_in_use_result(error):
+    return get_json_result(
+        code=RetCode.CONFLICT,
+        message="Resource is referenced and cannot be deleted.",
+        data={
+            "reason": "resource_in_use",
+            "targets": error.targets,
+            "references": error.references,
+        },
+    )
 
 
 def build_error_result(code=RetCode.FORBIDDEN, message="success"):

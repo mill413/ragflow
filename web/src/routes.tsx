@@ -47,7 +47,6 @@ export enum Routes {
   CompilationTemplatesCreateNext = '/compilation-templates/create-next',
   DataSource = '/data-source',
   DataSourceDetailPage = '/data-source-detail-page',
-  ChatChannel = '/chat-channel',
   ProfileMcp = `${ProfileSetting}${Mcp}`,
   ProfileTeam = `${ProfileSetting}${Team}`,
   ProfilePlan = `${ProfileSetting}${Plan}`,
@@ -74,10 +73,12 @@ export enum Routes {
   Admin = '/admin',
   AdminServices = `${Admin}/services`,
   AdminUserManagement = `${Admin}/users`,
+  AdminTeamManagement = `${Admin}/teams`,
+  AdminDepartments = `${Admin}/departments`,
+  AdminResourceManagement = `${Admin}/resources`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
   AdminRoles = `${Admin}/roles`,
-  AdminMonitoring = `${Admin}/monitoring`,
 }
 
 const defaultRouteFallback = (
@@ -299,10 +300,6 @@ const routeConfigOptions = [
             Component: () => import('@/pages/user-setting/data-source'),
           },
           {
-            path: `${Routes.UserSetting}${Routes.ChatChannel}`,
-            Component: () => import('@/pages/user-setting/chat-channel'),
-          },
-          {
             path: `${Routes.UserSetting}${Routes.CompilationTemplates}`,
             Component: () =>
               import('@/pages/user-setting/compilation-templates'),
@@ -409,6 +406,18 @@ const routeConfigOptions = [
                 Component: () => import('@/pages/admin/users'),
               },
               {
+                path: Routes.AdminTeamManagement,
+                Component: () => import('@/pages/admin/teams'),
+              },
+              {
+                path: Routes.AdminDepartments,
+                Component: () => import('@/pages/admin/departments'),
+              },
+              {
+                path: Routes.AdminResourceManagement,
+                Component: () => import('@/pages/admin/resources'),
+              },
+              {
                 path: Routes.AdminSandboxSettings,
                 Component: () => import('@/pages/admin/sandbox-settings'),
               },
@@ -421,10 +430,6 @@ const routeConfigOptions = [
                     {
                       path: Routes.AdminRoles,
                       Component: () => import('@/pages/admin/roles'),
-                    },
-                    {
-                      path: Routes.AdminMonitoring,
-                      Component: () => import('@/pages/admin/monitoring'),
                     },
                   ]
                 : []),

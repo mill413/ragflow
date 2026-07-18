@@ -11,7 +11,6 @@ import Divider from '@/components/ui/divider';
 import { Form } from '@/components/ui/form';
 import { FormLayout } from '@/constants/form';
 import { DocumentParserType, ParseType } from '@/constants/knowledge';
-import { PermissionRole } from '@/constants/permission';
 import { IConnector, IDataset } from '@/interfaces/database/dataset';
 import { useDataSourceInfo } from '@/pages/user-setting/data-source/constant';
 import { IDataSourceBase } from '@/pages/user-setting/data-source/interface';
@@ -62,7 +61,6 @@ export default function DatasetSettings() {
     defaultValues: {
       name: '',
       chunk_method: DocumentParserType.Naive,
-      permission: PermissionRole.Me,
       language: 'English',
       parser_config: {
         layout_recognize: DocumentType.DeepDOC,
@@ -150,15 +148,9 @@ export default function DatasetSettings() {
       );
       form.setValue('pipeline_id', knowledgeDetails.pipeline_id || '');
     }
-  }, [knowledgeDetails, form]);
+  }, [dataSourceInfo, knowledgeDetails, form]);
 
-  async function onSubmit(data: z.infer<typeof formSchema>) {
-    try {
-      console.log('Form validation passed, submit data', data);
-    } catch (error) {
-      console.error('An error occurred during submission:', error);
-    }
-  }
+  function onSubmit() {}
   // const handleLinkOrEditSubmit = (
   //   data: IDataPipelineSelectNode | undefined,
   // ) => {
@@ -171,7 +163,7 @@ export default function DatasetSettings() {
   //   }
   // };
 
-  const handleLinkOrEditSubmit = (data: IConnector[] | undefined) => {
+  const handleLinkOrEditSubmit = (data: IDataSourceBase[] | undefined) => {
     if (data) {
       const connectors = data.map((connector) => {
         return {
@@ -183,7 +175,7 @@ export default function DatasetSettings() {
         };
       });
       setSourceData(connectors as IDataSourceNodeProps[]);
-      form.setValue('connectors', connectors || []);
+      form.setValue('connectors', connectors as IConnector[]);
       // form.setValue('pipeline_name', data.name || '');
       // form.setValue('pipeline_avatar', data.avatar || '');
     }
@@ -289,6 +281,7 @@ export default function DatasetSettings() {
                     )}
                     {parseType === ParseType.Pipeline && (
                       <DataFlowSelect
+                        workspaceId={knowledgeDetails.tenant_id || ''}
                         isMult={false}
                         showToDataPipeline={true}
                         formFieldName="pipeline_id"
@@ -304,6 +297,7 @@ export default function DatasetSettings() {
                   /> */}
                     <Divider />
                     <LinkDataSource
+                      workspaceId={knowledgeDetails.tenant_id}
                       data={sourceData}
                       handleLinkOrEditSubmit={handleLinkOrEditSubmit}
                       unbindFunc={unbindFunc}

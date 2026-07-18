@@ -23,6 +23,7 @@ from api.db.services.common_service import CommonService
 from common.time_utils import current_timestamp, datetime_format
 from api.db.services import duplicate_name
 from api.db.services.user_service import TenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 from common.misc_utils import get_uuid
 from common.constants import StatusEnum
 from api.constants import DATASET_NAME_LIMIT
@@ -73,7 +74,7 @@ class KnowledgebaseService(CommonService):
     model = Knowledgebase
 
     @classmethod
-    def _visibility_and_status_filter(cls, joined_tenant_ids, user_id):
+    def _visibility_and_status_filter(cls, joined_tenant_ids, user_id, include_private=False):
         """
         Build a Peewee filter expression representing knowledgebase visibility
         for a given user, combined with a valid-status constraint.
@@ -81,9 +82,14 @@ class KnowledgebaseService(CommonService):
         Visibility rules:
         - Team KBs (`permission == TenantPermission.TEAM`) owned by any tenant in `joined_tenant_ids`
         - KBs owned by the current user (`tenant_id == user_id`)
+        - All KBs in the requested workspaces when `include_private` is true
         Always constrained to `StatusEnum.VALID`.
         """
-        return ((cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value)
+        if include_private:
+            visibility = cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)
+        else:
+            visibility = (cls.model.tenant_id.in_(joined_tenant_ids) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.tenant_id == user_id)
+        return visibility & (cls.model.status == StatusEnum.VALID.value)
 
     @classmethod
     @DB.connection_context()
@@ -112,11 +118,8 @@ class KnowledgebaseService(CommonService):
                 2. The user is not the creator of the dataset
         """
         # Check if a dataset can be deleted by a user
-        docs = cls.model.select(cls.model.id).where(cls.model.id == kb_id, cls.model.created_by == user_id).paginate(0, 1)
-        docs = docs.dicts()
-        if not docs:
-            return False
-        return True
+        knowledgebase = cls.model.get_or_none((cls.model.id == kb_id) & (cls.model.status == StatusEnum.VALID.value))
+        return bool(knowledgebase and WorkspaceAccessService.can_delete_knowledgebase(user_id, knowledgebase))
 
     @classmethod
     @DB.connection_context()
@@ -400,7 +403,7 @@ class KnowledgebaseService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def create_with_name(cls, *, name: str, tenant_id: str, parser_id: str | None = None, **kwargs):
+    def create_with_name(cls, *, name: str, tenant_id: str, created_by: str, parser_id: str | None = None, **kwargs):
         """Create a dataset (knowledgebase) by name with kb_app defaults.
 
         This encapsulates the creation logic used in kb_app.create so other callers
@@ -438,7 +441,7 @@ class KnowledgebaseService(CommonService):
             "id": kb_id,
             "name": dataset_name,
             "tenant_id": tenant_id,
-            "created_by": tenant_id,
+            "created_by": created_by,
             "parser_id": (parser_id or "naive"),
             **kwargs,  # Includes optional fields such as description, language, permission, avatar, parser_config, etc.
         }
@@ -451,7 +454,7 @@ class KnowledgebaseService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def get_list(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, id, name, keywords, parser_id=None):
+    def get_list(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, id, name, keywords, parser_id=None, include_private=False):
         # Get list of knowledge bases with filtering and pagination
         # Args:
         #     joined_tenant_ids: List of tenant IDs
@@ -477,7 +480,7 @@ class KnowledgebaseService(CommonService):
         if parser_id:
             kbs = kbs.where(cls.model.parser_id == parser_id)
 
-        kbs = kbs.where(cls._visibility_and_status_filter(joined_tenant_ids, user_id))
+        kbs = kbs.where(cls._visibility_and_status_filter(joined_tenant_ids, user_id, include_private))
 
         if desc:
             kbs = kbs.order_by(cls.model.getter_by(orderby).desc())
@@ -505,14 +508,13 @@ class KnowledgebaseService(CommonService):
         if kb.status != StatusEnum.VALID.value:
             return False
 
-        if kb.tenant_id == user_id:
-            return True
+        return WorkspaceAccessService.can_read_knowledgebase(user_id, kb)
 
-        if kb.permission != TenantPermission.TEAM.value:
-            return False
-
-        joined_tenants = TenantService.get_joined_tenants_by_user_id(user_id)
-        return any(tenant["tenant_id"] == kb.tenant_id for tenant in joined_tenants)
+    @classmethod
+    @DB.connection_context()
+    def modifiable(cls, kb_id, user_id):
+        e, kb = cls.get_by_id(kb_id)
+        return bool(e and WorkspaceAccessService.can_update_knowledgebase(user_id, kb))
 
     @classmethod
     @DB.connection_context()

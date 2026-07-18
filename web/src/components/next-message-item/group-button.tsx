@@ -129,6 +129,8 @@ export const AssistantGroupButton = ({
                 const response = await downloadAgentFile({
                   docId: attachment.doc_id,
                   ext: attachment.format,
+                  workspaceId: attachment.workspace_id,
+                  agentId: attachment.agent_id,
                 });
                 const blob = new Blob([response.data], {
                   type: response.data.type,

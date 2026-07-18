@@ -23,6 +23,8 @@ export function DocumentDownloadButton({
       const response = await downloadAgentFile({
         docId: downloadInfo.doc_id,
         ext,
+        workspaceId: downloadInfo.workspace_id,
+        agentId: downloadInfo.agent_id,
       });
       const blob = new Blob([response.data], {
         type: downloadInfo.mime_type || response.data.type,

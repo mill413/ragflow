@@ -9,6 +9,7 @@ import { get } from 'lodash';
 import { memo } from 'react';
 import { NodeHandleId, RetrievalFrom } from '../../constant';
 import { RetrievalFormSchemaType } from '../../form/retrieval-form/next';
+import { useOwnerTenantId } from '../../context';
 import { useGetVariableLabelOrTypeByValue } from '../../hooks/use-get-begin-query';
 import { LabelCard } from './card';
 import { CommonHandle, LeftEndHandle } from './handle';
@@ -25,7 +26,12 @@ function InnerRetrievalNode({
 }: NodeProps<BaseNode<RetrievalFormSchemaType>>) {
   const knowledgeBaseIds: string[] = get(data, 'form.dataset_ids', []);
   const memoryIds: string[] = get(data, 'form.memory_ids', []);
-  const { list: knowledgeList } = useFetchKnowledgeList(true);
+  const ownerTenantId = useOwnerTenantId();
+  const { list: knowledgeList } = useFetchKnowledgeList(
+    true,
+    '',
+    ownerTenantId,
+  );
 
   const { getLabel } = useGetVariableLabelOrTypeByValue({ nodeId: id });
 

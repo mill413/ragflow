@@ -27,6 +27,8 @@ export interface IFetchKnowledgeListRequestParams {
   id?: string;
   page?: number;
   page_size?: number;
+  scope?: 'all' | 'personal' | 'team';
+  workspace_id?: string;
   ext?: {
     keywords?: string;
     owner_ids?: string[];

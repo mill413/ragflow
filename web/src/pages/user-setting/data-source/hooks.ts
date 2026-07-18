@@ -8,12 +8,13 @@ import dataSourceService, {
   deleteDataSource,
   featchDataSourceDetail,
   getDataSourceLogs,
-  testDataSource,
+  listDataSources,
 } from '@/services/data-source-service';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from 'i18next';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { useWorkspace } from '@/hooks/use-workspace';
 import { DataSourceKey, useDataSourceInfo } from './constant';
 import {
   IDataSorceInfo,
@@ -22,12 +23,16 @@ import {
   IDataSourceLog,
 } from './interface';
 
-export const useListDataSource = () => {
+export const useListDataSource = (targetWorkspaceId?: string) => {
+  const { workspaceFilterId } = useWorkspace();
+  const workspaceId = targetWorkspaceId ?? workspaceFilterId;
   const { dataSourceInfo } = useDataSourceInfo();
   const { data: list, isFetching } = useQuery<IDataSource[]>({
-    queryKey: ['data-source'],
+    queryKey: ['data-source', workspaceId],
     queryFn: async () => {
-      const { data } = await dataSourceService.dataSourceList();
+      const { data } = await listDataSources({
+        workspace_id: workspaceId,
+      });
       return data.data;
     },
   });
@@ -66,14 +71,14 @@ export const useListDataSource = () => {
       }
     });
 
-    console.log('🚀 ~ useListDataSource ~ sourceList:', sourceList);
     return sourceList;
-  }, [list]);
+  }, [dataSourceInfo, list]);
 
   return { list, categorizedList: updatedDataSourceTemplates, isFetching };
 };
 
 export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
+  const { workspaceId } = useWorkspace();
   const [addSource, setAddSource] = useState<IDataSorceInfo | undefined>(
     undefined,
   );
@@ -100,8 +105,10 @@ export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
             ...data,
             reschedule: true,
           })
-        : await dataSourceService.dataSourceSet(data);
-      console.log('🚀 ~ handleAddOk ~ code:', res.code);
+        : await dataSourceService.dataSourceSet({
+            ...data,
+            workspace_id: workspaceId,
+          });
       if (res.code === 0) {
         if (isEdit && res.data?.id) {
           queryClient.setQueryData(
@@ -118,7 +125,7 @@ export const useAddDataSource = ({ isEdit = false }: { isEdit?: boolean }) => {
       }
       setAddLoading(false);
     },
-    [hideAddingModal, isEdit, queryClient],
+    [hideAddingModal, isEdit, queryClient, workspaceId],
   );
 
   return {
@@ -257,29 +264,4 @@ export const useDataSourceRebuild = () => {
     [id],
   );
   return { handleRebuild };
-};
-
-export const useTestDataSource = () => {
-  const [currentQueryParameters] = useSearchParams();
-  const id = currentQueryParameters.get('id');
-  const [loading, setLoading] = useState(false);
-
-  const handleTest = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    try {
-      const { data } = await testDataSource(id);
-      if (data.code === 0) {
-        message.success(t('setting.restApiTestSuccess'));
-      } else {
-        message.error(data.message || t('setting.restApiTestFailed'));
-      }
-    } catch {
-      message.error(t('setting.restApiTestFailed'));
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  return { loading, handleTest };
 };

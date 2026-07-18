@@ -137,6 +137,45 @@ def _load_user_from_session():
     return user
 
 
+def _load_user_from_api_token_record(token_record, auth_type):
+    """Load a workspace-bound API principal through its current owner.
+
+    The owner supplies the user-shaped execution context expected by existing
+    APIs; token validity never depends on the user who originally issued it.
+    """
+    workspace_id = token_record.tenant_id
+    from api.db.services.workspace_service import WorkspaceAccessService
+
+    actor_id = WorkspaceAccessService.get_workspace_owner_id(workspace_id)
+    if not actor_id:
+        logging.warning("API token workspace has no valid owner: workspace_id=%s", workspace_id)
+        return None
+
+    users = UserService.query(id=actor_id, status=StatusEnum.VALID.value)
+    if not users:
+        return None
+
+    g.auth_type = auth_type
+    g.api_token_workspace_id = workspace_id
+    g.api_token_principal_type = "workspace"
+    g.user = users[0]
+    return users[0]
+
+
+async def _api_token_request_matches_scope():
+    workspace_id = getattr(g, "api_token_workspace_id", None)
+    if not workspace_id:
+        return True
+
+    scope_keys = ("workspace_id", "owner_tenant_id", "tenant_id")
+    requested_ids = [request.args.get(key) for key in scope_keys]
+    if request.is_json:
+        payload = (await request.get_json(silent=True)) or {}
+        if isinstance(payload, dict):
+            requested_ids.extend(payload.get(key) for key in scope_keys)
+    return all(requested_id in (None, "", workspace_id) for requested_id in requested_ids)
+
+
 def _load_user(auth_types=None):
     explicit_auth_types = auth_types is not None
     auth_types = _normalize_auth_types(auth_types)
@@ -167,11 +206,9 @@ def _load_user(auth_types=None):
         try:
             objs = APIToken.query(beta=auth_token)
             if objs:
-                user = UserService.query(id=objs[0].tenant_id, status=StatusEnum.VALID.value)
+                user = _load_user_from_api_token_record(objs[0], AUTH_BETA)
                 if user:
-                    g.auth_type = AUTH_BETA
-                    g.user = user[0]
-                    return user[0]
+                    return user
             g.auth_error_message = "Authentication error: API key is invalid! "
         except Exception as e_beta:
             logging.warning(f"load_user from beta token got exception {e_beta}")
@@ -206,15 +243,10 @@ def _load_user(auth_types=None):
         try:
             objs = APIToken.query(token=auth_token)
             if objs:
-                user = UserService.query(id=objs[0].tenant_id, status=StatusEnum.VALID.value)
+                user = _load_user_from_api_token_record(objs[0], AUTH_API)
                 if user:
-                    if not user[0].access_token or not user[0].access_token.strip():
-                        logging.warning(f"User {user[0].email} has empty access_token in database")
-                        return None
-                    g.auth_type = AUTH_API
-                    g.user = user[0]
-                    return user[0]
-                logging.warning(f"load_user: No user found for tenant_id={objs[0].tenant_id} from APIToken")
+                    return user
+                logging.warning(f"load_user: No valid actor found for workspace_id={objs[0].tenant_id} from APIToken")
             else:
                 logging.warning(f"load_user: No APIToken found for token={auth_token[:10]}...")
         except Exception as e_api_token:
@@ -265,6 +297,8 @@ def login_required(func: Callable[P, Awaitable[T]] = None, auth_types=None) -> C
                         message=getattr(g, "auth_error_message", None) or "Authorization is not valid!",
                     )
                 raise QuartAuthUnauthorized()
+            if not await _api_token_request_matches_scope():
+                return get_json_result(code=RetCode.FORBIDDEN, message="API token cannot access another workspace.")
             return await current_app.ensure_async(func)(*args, **kwargs)
 
         return wrapper

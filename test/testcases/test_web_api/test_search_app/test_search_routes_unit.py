@@ -79,13 +79,14 @@ class _DummyRetCode:
 
 
 class _SearchRecord:
-    def __init__(self, search_id="search-1", name="search", search_config=None):
+    def __init__(self, search_id="search-1", name="search", search_config=None, tenant_id="tenant-1"):
         self.id = search_id
         self.name = name
+        self.tenant_id = tenant_id
         self.search_config = {} if search_config is None else dict(search_config)
 
     def to_dict(self):
-        return {"id": self.id, "name": self.name, "search_config": dict(self.search_config)}
+        return {"id": self.id, "name": self.name, "tenant_id": self.tenant_id, "search_config": dict(self.search_config)}
 
 
 def _run(coro):
@@ -223,7 +224,7 @@ def _load_search_api(monkeypatch):
     class _TenantService:
         @staticmethod
         def get_by_id(_tenant_id):
-            return True, SimpleNamespace(id=_tenant_id)
+            return True, SimpleNamespace(id=_tenant_id, name="Workspace")
 
     class _UserTenantService:
         @staticmethod
@@ -233,6 +234,40 @@ def _load_search_api(monkeypatch):
     user_service_mod.TenantService = _TenantService
     user_service_mod.UserTenantService = _UserTenantService
     monkeypatch.setitem(sys.modules, "api.db.services.user_service", user_service_mod)
+
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+
+    class _WorkspaceAccessService:
+        @staticmethod
+        def can_create_collaborative_resource(_user_id, _workspace_id):
+            return True
+
+        @staticmethod
+        def can_reference_knowledgebases(_user_id, _workspace_id, _knowledgebase_ids):
+            return True
+
+        @staticmethod
+        def can_read_shared_resource(_user_id, _resource):
+            return True
+
+        @staticmethod
+        def can_manage_collaborative_resource(_user_id, _resource):
+            return True
+
+        @staticmethod
+        def get_workspace_type(_workspace_id):
+            return "personal"
+
+        @staticmethod
+        def get_collaborative_resource_capabilities(_user_id, _resource):
+            return {"read": True, "update": True, "delete": True}
+
+        @staticmethod
+        def list_visible_workspace_ids(_user_id):
+            return ["tenant-1"]
+
+    workspace_service_mod.WorkspaceAccessService = _WorkspaceAccessService
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
 
     utils_pkg = ModuleType("api.utils")
     utils_pkg.__path__ = []
@@ -265,6 +300,10 @@ def _load_search_api(monkeypatch):
     api_utils_mod.validate_request = _validate_request
     monkeypatch.setitem(sys.modules, "api.utils.api_utils", api_utils_mod)
     utils_pkg.api_utils = api_utils_mod
+
+    pagination_utils_mod = ModuleType("api.utils.pagination_utils")
+    pagination_utils_mod.validate_rest_api_page_size = lambda size: size
+    monkeypatch.setitem(sys.modules, "api.utils.pagination_utils", pagination_utils_mod)
 
     module_name = "test_search_api_unit_module"
     module_path = repo_root / "api" / "apps" / "restful_apis" / "search_api.py"
@@ -346,30 +385,22 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
     assert res["code"] == module.RetCode.DATA_ERROR
     assert "large than" in res["message"]
 
-    # update: tenant not found
-    _set_request_json(monkeypatch, module, {"name": "ok", "search_config": {}})
-    monkeypatch.setattr(module.TenantService, "get_by_id", lambda _tenant_id: (False, None))
-    res = _run(module.update(search_id="s1"))
-    assert res["code"] == module.RetCode.DATA_ERROR
-    assert "authorized identity" in res["message"].lower()
-
     # update: no access
-    monkeypatch.setattr(module.TenantService, "get_by_id", lambda _tenant_id: (True, SimpleNamespace(id=_tenant_id)))
-    monkeypatch.setattr(module.SearchService, "accessible4deletion", lambda _search_id, _user_id: False)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: False)
     _set_request_json(monkeypatch, module, {"name": "ok", "search_config": {}})
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
     assert "authorization" in res["message"].lower()
 
-    # update: search not found (query returns [None])
-    monkeypatch.setattr(module.SearchService, "accessible4deletion", lambda _search_id, _user_id: True)
-    monkeypatch.setattr(module.SearchService, "query", lambda **_kwargs: [None])
+    # update: search not found
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: True)
+    monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: (False, None))
     _set_request_json(monkeypatch, module, {"name": "ok", "search_config": {}})
     res = _run(module.update(search_id="s1"))
-    assert res["code"] == module.RetCode.DATA_ERROR
-    assert "cannot find search" in res["message"].lower()
+    assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
 
     existing = _SearchRecord(search_id="s1", name="old-name", search_config={"existing": 1})
+    monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: (True, existing))
 
     def _query_duplicate(**kwargs):
         if "id" in kwargs:
@@ -386,7 +417,7 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
     assert "duplicated" in res["message"].lower()
 
     # update: search_config not a dict
-    monkeypatch.setattr(module.SearchService, "query", lambda **_kwargs: [existing])
+    monkeypatch.setattr(module.SearchService, "query", lambda **_kwargs: [])
     _set_request_json(monkeypatch, module, {"name": "old-name", "search_config": []})
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.DATA_ERROR
@@ -401,7 +432,7 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
         return False
 
     monkeypatch.setattr(module.SearchService, "update_by_id", _update_fail)
-    _set_request_json(monkeypatch, module, {"name": "old-name", "search_config": {"top_k": 3}})
+    _set_request_json(monkeypatch, module, {"name": "new-name", "search_config": {"top_k": 3}})
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.DATA_ERROR
     assert "failed to update" in res["message"].lower()
@@ -410,7 +441,8 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
 
     # update: get_by_id fails after successful update
     monkeypatch.setattr(module.SearchService, "update_by_id", lambda _search_id, _req: True)
-    monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: (False, None))
+    get_calls = iter(((True, existing), (False, None)))
+    monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: next(get_calls))
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.DATA_ERROR
     assert "failed to fetch" in res["message"].lower()
@@ -430,27 +462,31 @@ def test_update_and_detail_route_matrix_unit(monkeypatch):
         raise RuntimeError("update boom")
 
     monkeypatch.setattr(module.SearchService, "query", _raise_query)
-    _set_request_json(monkeypatch, module, {"name": "old-name", "search_config": {"top_k": 3}})
+    _set_request_json(monkeypatch, module, {"name": "new-name", "search_config": {"top_k": 3}})
     res = _run(module.update(search_id="s1"))
     assert res["code"] == module.RetCode.EXCEPTION_ERROR
     assert "update boom" in res["message"]
 
     # detail: no permission
-    monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(tenant_id="tenant-a")])
-    monkeypatch.setattr(module.SearchService, "query", lambda **_kwargs: [])
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_read_shared_resource", lambda _user_id, _resource: False)
     res = module.detail(search_id="s1")
     assert res["code"] == module.RetCode.OPERATING_ERROR
     assert "permission" in res["message"].lower()
 
     # detail: search not found
-    monkeypatch.setattr(module.SearchService, "query", lambda **_kwargs: [SimpleNamespace(id="s1")])
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_read_shared_resource", lambda _user_id, _resource: True)
+    monkeypatch.setattr(module.SearchService, "get_by_id", lambda _search_id: (True, existing))
     monkeypatch.setattr(module.SearchService, "get_detail", lambda _search_id: None)
     res = module.detail(search_id="s1")
     assert res["code"] == module.RetCode.DATA_ERROR
     assert "can't find" in res["message"].lower()
 
     # detail: success
-    monkeypatch.setattr(module.SearchService, "get_detail", lambda _search_id: {"id": _search_id, "name": "detail-name"})
+    monkeypatch.setattr(
+        module.SearchService,
+        "get_detail",
+        lambda _search_id: {"id": _search_id, "name": "detail-name", "tenant_id": "tenant-1"},
+    )
     res = module.detail(search_id="s1")
     assert res["code"] == 0
     assert res["data"]["id"] == "s1"
@@ -516,13 +552,13 @@ def test_list_and_delete_route_matrix_unit(monkeypatch):
     assert "list boom" in res["message"]
 
     # delete: no authorization
-    monkeypatch.setattr(module.SearchService, "accessible4deletion", lambda _search_id, _user_id: False)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: False)
     res = module.delete_search(search_id="search-1")
     assert res["code"] == module.RetCode.AUTHENTICATION_ERROR
     assert "authorization" in res["message"].lower()
 
     # delete: delete_by_id fails
-    monkeypatch.setattr(module.SearchService, "accessible4deletion", lambda _search_id, _user_id: True)
+    monkeypatch.setattr(module.WorkspaceAccessService, "can_manage_collaborative_resource", lambda _user_id, _resource: True)
     monkeypatch.setattr(module.SearchService, "delete_by_id", lambda _search_id: False)
     res = module.delete_search(search_id="search-1")
     assert res["code"] == module.RetCode.DATA_ERROR

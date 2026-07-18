@@ -27,6 +27,7 @@ type UseDatasetTableColumnsType = UseChangeDocumentParserShowType &
   UseRenameDocumentShowType & {
     showLog: (record: IDocumentInfo) => void;
     showManageMetadataModal: (config: ShowManageMetadataModalProps) => void;
+    readOnly?: boolean;
   };
 
 export function useDatasetTableColumns({
@@ -34,6 +35,7 @@ export function useDatasetTableColumns({
   showRenameModal,
   showManageMetadataModal,
   showLog,
+  readOnly = false,
 }: UseDatasetTableColumnsType) {
   const { t } = useTranslation('translation', {
     keyPrefix: 'knowledgeDetails',
@@ -54,6 +56,7 @@ export function useDatasetTableColumns({
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
+          disabled={readOnly}
         />
       ),
       cell: ({ row }) => (
@@ -61,6 +64,7 @@ export function useDatasetTableColumns({
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
+          disabled={readOnly}
         />
       ),
       enableSorting: false,
@@ -170,6 +174,7 @@ export function useDatasetTableColumns({
         return (
           <Switch
             checked={row.getValue('status') === '1'}
+            disabled={readOnly}
             onCheckedChange={(e) => {
               setDocumentStatus({
                 status: e,
@@ -197,6 +202,7 @@ export function useDatasetTableColumns({
           <Button
             variant="static"
             size="auto"
+            disabled={readOnly}
             onClick={() => {
               showManageMetadataModal({
                 // metadata: util.JSONToMetaDataTableData(
@@ -243,6 +249,7 @@ export function useDatasetTableColumns({
           <ParseDropdownButton
             record={row.original}
             showChangeParserModal={showChangeParserModal}
+            readOnly={readOnly}
           />
         );
       },
@@ -256,6 +263,7 @@ export function useDatasetTableColumns({
             record={row.original}
             showChangeParserModal={showChangeParserModal}
             showLog={showLog}
+            readOnly={readOnly}
           />
         );
       },
@@ -271,6 +279,7 @@ export function useDatasetTableColumns({
           <DatasetActionCell
             record={record}
             showRenameModal={showRenameModal}
+            readOnly={readOnly}
           />
         );
       },

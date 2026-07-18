@@ -28,7 +28,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.document_service import DocMetadataService
 from api.utils.common import hash128
 from common.misc_utils import get_uuid
-from common.constants import ConnectorTaskType, TaskStatus
+from common.constants import ConnectorTaskType, SUPPORTED_DATA_SOURCES, TaskStatus
 from common.settings import TIMEZONE
 from common.time_utils import current_timestamp, timestamp_to_date
 
@@ -79,7 +79,7 @@ class ConnectorService(CommonService):
 
         from api.db.services.user_service import TenantService
 
-        joined_tenants = TenantService.get_joined_tenants_by_user_id(user_id)
+        joined_tenants = TenantService.list_accessible_by_user_id(user_id)
         has_access = any(tenant["tenant_id"] == connector.tenant_id for tenant in joined_tenants)
         if not has_access:
             LOGGER.warning(
@@ -129,6 +129,22 @@ class ConnectorService(CommonService):
     def list(cls, tenant_id):
         fields = [cls.model.id, cls.model.name, cls.model.source, cls.model.status]
         return list(cls.model.select(*fields).where(cls.model.tenant_id == tenant_id).dicts())
+
+    @classmethod
+    def list_by_tenant_ids(cls, tenant_ids: List[str]):
+        if not tenant_ids:
+            return []
+        fields = [cls.model.id, cls.model.tenant_id, cls.model.name, cls.model.source, cls.model.status]
+        return list(cls.model.select(*fields).where(cls.model.tenant_id.in_(tenant_ids)).order_by(cls.model.update_time.desc()))
+
+    @classmethod
+    @DB.connection_context()
+    def delete_connector(cls, connector_id: str) -> None:
+        cls.cancel_tasks(connector_id)
+        with DB.atomic():
+            SyncLogs.delete().where(SyncLogs.connector_id == connector_id).execute()
+            Connector2Kb.delete().where(Connector2Kb.connector_id == connector_id).execute()
+            Connector.delete().where(Connector.id == connector_id).execute()
 
     @classmethod
     def rebuild(cls, kb_id: str, connector_id: str, tenant_id: str):
@@ -312,6 +328,7 @@ class SyncLogsService(CommonService):
         query = query.where(
             Connector.input_type == InputType.POLL,
             Connector.status == TaskStatus.SCHEDULE,
+            Connector.source.in_(SUPPORTED_DATA_SOURCES),
             cls.model.status == TaskStatus.SCHEDULE,
             cls.model.task_type == task_type,
         )
@@ -480,6 +497,15 @@ class Connector2KbService(CommonService):
 
     @classmethod
     def link_connectors(cls, kb_id: str, connectors: list[dict], tenant_id: str):
+        connector_ids = [conn.get("id") for conn in connectors if isinstance(conn, dict) and conn.get("id")]
+        if connector_ids:
+            matched_count = Connector.select().where(
+                Connector.id.in_(connector_ids),
+                Connector.tenant_id == tenant_id,
+            ).count()
+            if matched_count != len(set(connector_ids)):
+                return "Connectors and datasets must belong to the same workspace."
+
         arr = cls.query(kb_id=kb_id)
         old_conn_ids = [a.connector_id for a in arr]
         connector_ids = []

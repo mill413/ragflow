@@ -922,16 +922,18 @@ const DynamicForm = {
     submitLoading,
     buttonText,
     submitFunc,
+    disabled,
   }: {
     submitLoading?: boolean;
     buttonText?: string;
     submitFunc?: (values: FieldValues) => void;
+    disabled?: boolean;
   }) => {
     const form = useFormContext();
     return (
       <button
         type="button"
-        disabled={submitLoading}
+        disabled={submitLoading || disabled}
         onClick={() => {
           (async () => {
             try {

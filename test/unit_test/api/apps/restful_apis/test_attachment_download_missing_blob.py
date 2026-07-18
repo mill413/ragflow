@@ -116,6 +116,11 @@ def _load_agent_api(monkeypatch, *, storage_get):
         UserService=SimpleNamespace(get_by_id=lambda *_a, **_k: (False, None)),
     )
     _stub(monkeypatch, "api.db.services.user_canvas_version", UserCanvasVersionService=SimpleNamespace())
+    _stub(
+        monkeypatch,
+        "api.db.services.workspace_service",
+        WorkspaceAccessService=SimpleNamespace(),
+    )
 
     _stub(
         monkeypatch,
@@ -132,6 +137,11 @@ def _load_agent_api(monkeypatch, *, storage_get):
         # must return an identity decorator (the lenient fallback would return None
         # and `@None` raises TypeError during import).
         validate_request=lambda *_a, **_k: lambda func: func,
+    )
+    _stub(
+        monkeypatch,
+        "api.apps.workspace_access",
+        workspace_required=lambda **_kwargs: lambda func: func,
     )
     _stub(
         monkeypatch,
@@ -222,8 +232,79 @@ class TestAttachmentDownloadMissingBlob:
         assert "not found" in result["message"].lower()
 
     def test_nonempty_blob_proceeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Happy path: real bytes flow through make_response untouched."""
-        module = _load_agent_api(monkeypatch, storage_get=lambda *_a, **_k: b"PDFDATA")
-        result = asyncio.run(module.download_attachment(tenant_id="t1", attachment_id="good"))
+        """The authorized workspace ID selects the attachment storage bucket."""
+        storage_reads = []
+
+        def storage_get(workspace_id, attachment_id):
+            storage_reads.append((workspace_id, attachment_id))
+            return b"PDFDATA"
+
+        module = _load_agent_api(monkeypatch, storage_get=storage_get)
+        module.request = SimpleNamespace(
+            method="GET",
+            args={"ext": "markdown", "workspace_id": "team-1", "agent_id": "agent-1"},
+        )
+        module.UserCanvasService = SimpleNamespace(
+            get_by_id=lambda _agent_id: (
+                True,
+                SimpleNamespace(id="agent-1", user_id="team-1", permission="team"),
+            )
+        )
+        module.WorkspaceAccessService = SimpleNamespace(
+            can_read_shared_resource=lambda *_args, **_kwargs: True,
+        )
+        result = asyncio.run(module.download_attachment(tenant_id="team-1", attachment_id="good"))
         # SimpleNamespace from our _make_response stub
         assert hasattr(result, "payload") and result.payload == b"PDFDATA"
+        assert storage_reads == [("team-1", "good")]
+
+    def test_existing_session_attachments_are_bound_to_agent_workspace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = _load_agent_api(monkeypatch, storage_get=lambda *_a, **_k: b"")
+        data = {
+            "message": [
+                {
+                    "attachment": {"doc_id": "excel-1", "format": "xlsx"},
+                    "downloads": [
+                        {
+                            "doc_id": "doc-1",
+                            "filename": "report.pdf",
+                            "preview_url": "/api/v1/agents/attachments/doc-1/preview?ext=pdf",
+                        }
+                    ],
+                }
+            ]
+        }
+
+        module._bind_agent_attachments_to_workspace(data, "team-1", "agent-1")
+
+        assert data["message"][0]["attachment"]["workspace_id"] == "team-1"
+        assert data["message"][0]["attachment"]["agent_id"] == "agent-1"
+        assert data["message"][0]["downloads"][0]["workspace_id"] == "team-1"
+        assert data["message"][0]["downloads"][0]["agent_id"] == "agent-1"
+        assert data["message"][0]["downloads"][0]["preview_url"].endswith("&workspace_id=team-1&agent_id=agent-1")
+
+    def test_team_attachment_rejects_agent_from_another_workspace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        storage_reads = []
+        module = _load_agent_api(
+            monkeypatch,
+            storage_get=lambda *args: storage_reads.append(args),
+        )
+        module.request = SimpleNamespace(
+            method="GET",
+            args={"ext": "pdf", "workspace_id": "team-1", "agent_id": "agent-2"},
+        )
+        module.UserCanvasService = SimpleNamespace(
+            get_by_id=lambda _agent_id: (
+                True,
+                SimpleNamespace(id="agent-2", user_id="team-2", permission="team"),
+            )
+        )
+        module.WorkspaceAccessService = SimpleNamespace(
+            can_read_shared_resource=lambda *_args, **_kwargs: True,
+        )
+        module.RetCode = SimpleNamespace(FORBIDDEN=403)
+
+        result = asyncio.run(module.download_attachment(tenant_id="team-1", attachment_id="secret"))
+
+        assert result["kind"] == "error"
+        assert storage_reads == []

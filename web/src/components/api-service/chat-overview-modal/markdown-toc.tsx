@@ -3,20 +3,26 @@ import Anchor, { AnchorItem } from './anchor';
 
 interface MarkdownTocProps {
   content: string;
+  containerId: string;
 }
 
-const MarkdownToc: React.FC<MarkdownTocProps> = ({ content }) => {
+const MarkdownToc: React.FC<MarkdownTocProps> = ({ content, containerId }) => {
   const [items, setItems] = useState<AnchorItem[]>([]);
 
   useEffect(() => {
+    let frameId = 0;
+    let cancelled = false;
+
     const generateTocItems = () => {
-      const headings = document.querySelectorAll(
+      if (cancelled) return;
+      const container = document.getElementById(containerId);
+      const headings = container?.querySelectorAll(
         '.wmde-markdown h2, .wmde-markdown h3',
       );
 
       // If headings haven't rendered yet, wait for next frame
-      if (headings.length === 0) {
-        requestAnimationFrame(generateTocItems);
+      if (!headings?.length) {
+        frameId = requestAnimationFrame(generateTocItems);
         return;
       }
 
@@ -51,32 +57,24 @@ const MarkdownToc: React.FC<MarkdownTocProps> = ({ content }) => {
         }
       });
 
-      setItems(tocItems.slice(1));
+      setItems(tocItems);
     };
 
     // Use requestAnimationFrame to ensure execution after DOM rendering
-    requestAnimationFrame(() => {
-      requestAnimationFrame(generateTocItems);
+    frameId = requestAnimationFrame(() => {
+      frameId = requestAnimationFrame(generateTocItems);
     });
-  }, [content]);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frameId);
+    };
+  }, [containerId, content]);
 
   return (
-    <div
-      className="markdown-toc bg-bg-base text-text-primary shadow shadow-text-secondary"
-      style={{
-        position: 'fixed',
-        right: 30,
-        top: 100,
-        bottom: 150,
-        width: 200,
-        padding: '10px',
-        maxHeight: 'calc(100vh - 170px)',
-        overflowY: 'auto',
-        zIndex: 100,
-      }}
-    >
+    <aside className="markdown-toc max-h-64 w-full shrink-0 overflow-y-auto rounded-md border border-border bg-bg-base p-3 text-text-primary xl:max-h-none xl:w-64">
       <Anchor items={items} />
-    </div>
+    </aside>
   );
 };
 

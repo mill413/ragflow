@@ -14,22 +14,48 @@
 #  limitations under the License.
 #
 from datetime import datetime, timedelta
+
 from quart import request
+
+from api.apps import current_user, login_required
 from api.db.services.api_service import API4ConversationService
-from api.db.services.user_service import UserTenantService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import get_data_error_result, get_json_result, server_error_response
-from api.apps import login_required, current_user
+from common.constants import RetCode
+
+
+ALL_WORKSPACES_ID = "__all__"
+
+
+def _resolve_stats_workspace_ids(user_id: str, requested_workspace_id: str | None) -> list[str]:
+    visible_workspace_ids = WorkspaceAccessService.list_visible_workspace_ids(user_id)
+    if not visible_workspace_ids:
+        return []
+
+    if requested_workspace_id == ALL_WORKSPACES_ID:
+        return visible_workspace_ids
+
+    if requested_workspace_id:
+        return [requested_workspace_id] if requested_workspace_id in visible_workspace_ids else []
+
+    # A request without a filter represents the actor's personal workspace.
+    # Workspace-bound API tokens expose only their bound workspace here.
+    return [user_id] if user_id in visible_workspace_ids else [visible_workspace_ids[0]]
 
 
 @manager.route("/system/stats", methods=["GET"])  # noqa: F821
 @login_required
 def stats():
     try:
-        tenants = UserTenantService.query(user_id=current_user.id)
-        if not tenants:
+        requested_workspace_id = request.args.get("workspace_id")
+        workspace_ids = _resolve_stats_workspace_ids(current_user.id, requested_workspace_id)
+        if not workspace_ids:
+            if requested_workspace_id:
+                return get_json_result(code=RetCode.FORBIDDEN, message="Permission denied for this workspace.")
             return get_data_error_result(message="Tenant not found!")
+
         objs = API4ConversationService.stats(
-            tenants[0].tenant_id,
+            workspace_ids,
             request.args.get("from_date", (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")),
             request.args.get("to_date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             "agent" if "canvas_id" in request.args else None,

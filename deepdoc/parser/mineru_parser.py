@@ -142,11 +142,24 @@ class MinerUParseOptions:
 
 
 class MinerUParser(RAGFlowPdfParser):
-    def __init__(self, mineru_path: str = "mineru", mineru_api: str = "", mineru_server_url: str = ""):
+    def __init__(
+        self,
+        mineru_path: str = "mineru",
+        mineru_api: str = "",
+        mineru_server_url: str = "",
+        api_key: str = "",
+    ):
         self.mineru_api = mineru_api.rstrip("/")
         self.mineru_server_url = mineru_server_url.rstrip("/")
+        self.api_key = api_key.strip()
         self.outlines = []
         self.logger = logging.getLogger(self.__class__.__name__)
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     @staticmethod
     def _is_zipinfo_symlink(member: zipfile.ZipInfo) -> bool:
@@ -202,9 +215,13 @@ class MinerUParser(RAGFlowPdfParser):
                     shutil.copyfileobj(src, dst)
 
     @staticmethod
-    def _is_http_endpoint_valid(url, timeout=5):
+    def _is_http_endpoint_valid(
+        url,
+        timeout=5,
+        headers: Optional[dict[str, str]] = None,
+    ):
         try:
-            response = requests.head(url, timeout=timeout, allow_redirects=True)
+            response = requests.head(url, timeout=timeout, allow_redirects=True, headers=headers)
             return response.status_code in [200, 301, 302, 307, 308]
         except Exception:
             return False
@@ -245,7 +262,7 @@ class MinerUParser(RAGFlowPdfParser):
 
         api_openapi = f"{self.mineru_api}/openapi.json"
         try:
-            api_ok = self._is_http_endpoint_valid(api_openapi)
+            api_ok = self._is_http_endpoint_valid(api_openapi, headers=self._request_headers())
             self.logger.info(f"[MinerU] API openapi.json reachable={api_ok} url={api_openapi}")
             if not api_ok:
                 reason = f"[MinerU] MinerU API not accessible: {api_openapi}"
@@ -317,7 +334,7 @@ class MinerUParser(RAGFlowPdfParser):
         self.logger.info(f"[MinerU] request {data=}")
         self.logger.info(f"[MinerU] request {options=}")
 
-        headers = {"Accept": "application/json"}
+        headers = self._request_headers()
         try:
             self.logger.info(f"[MinerU] invoke api: {self.mineru_api}/file_parse backend={options.backend} server_url={data.get('server_url')}")
             if callback:

@@ -24,7 +24,7 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, ServiceMgr, UserServiceMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.versions import get_ragflow_version
@@ -93,10 +93,14 @@ def create_user():
         username = data["username"]
         password = data["password"]
         role = data.get("role", "user")
+        department_id = data.get("department_id")
+        if department_id:
+            OrganizationMgr.ensure_department_exists(department_id)
 
         res = UserMgr.create_user(username, password, role)
         if res["success"]:
             user_info = res["user_info"]
+            OrganizationMgr.set_user_department(user_info["id"], department_id)
             user_info.pop("password")  # do not return password
             return success_response(user_info, "User created successfully")
         else:
@@ -106,6 +110,31 @@ def create_user():
         return error_response(e.message, e.code)
     except Exception as e:
         return error_response(str(e))
+
+
+@admin_bp.route("/users/<username>/department", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_user_department(username):
+    try:
+        OrganizationMgr.set_user_department_by_email(username, (request.get_json() or {}).get("department_id"))
+        return success_response(True)
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/users/<username>/login-url", methods=["POST"])
+@login_required
+@check_admin_auth
+def get_user_login_url(username):
+    try:
+        return success_response(UserMgr.get_user_login_url(username))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
 
 
 @admin_bp.route("/users/<username>", methods=["DELETE"])
@@ -119,6 +148,24 @@ def delete_user(username):
         else:
             return error_response(res["message"])
 
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/users/<username>", methods=["PATCH"])
+@login_required
+@check_admin_auth
+def update_user(username):
+    try:
+        data = request.get_json() or {}
+        if current_user.email == username:
+            if "is_active" in data and not bool(data["is_active"]):
+                return error_response("Can't deactivate current user", 409)
+            if "is_superuser" in data and not bool(data["is_superuser"]):
+                return error_response("Can't revoke current administrator", 409)
+        return success_response(UserMgr.update_user_profile(username, data))
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:
@@ -234,6 +281,189 @@ def get_user_agents(username):
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_teams():
+    try:
+        return success_response(TeamMgr.get_all_teams())
+    except Exception as e:
+        logging.exception("Failed to list teams")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_team():
+    try:
+        data = request.get_json() or {}
+        if not data.get("owner_id") or not data.get("name"):
+            return error_response("Owner and team name are required", 400)
+        return success_response(TeamMgr.create_team(data["owner_id"], data["name"]))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to create team")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team(team_id):
+    try:
+        data = request.get_json() or {}
+        return success_response(TeamMgr.update_team(team_id, data.get("name"), data.get("owner_id")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_team(team_id):
+    try:
+        return success_response(TeamMgr.delete_team(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_team_members(team_id):
+    try:
+        return success_response(TeamMgr.list_members(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members", methods=["POST"])
+@login_required
+@check_admin_auth
+def add_team_member(team_id):
+    try:
+        data = request.get_json() or {}
+        if not data.get("user_id"):
+            return error_response("User is required", 400)
+        return success_response(TeamMgr.add_member(team_id, data["user_id"], data.get("role", "normal")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members/<user_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team_member(team_id, user_id):
+    try:
+        return success_response(TeamMgr.update_member(team_id, user_id, (request.get_json() or {}).get("role")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/members/<user_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_team_member(team_id, user_id):
+    try:
+        return success_response(TeamMgr.delete_member(team_id, user_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_departments():
+    return success_response(OrganizationMgr.list_departments(request.args.get("q", "")))
+
+
+@admin_bp.route("/departments", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_department():
+    try:
+        data = request.get_json() or {}
+        return success_response(OrganizationMgr.create_department(data.get("name"), data.get("parent_id")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments/<department_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_department(department_id):
+    try:
+        data = request.get_json() or {}
+        return success_response(OrganizationMgr.update_department(department_id, data.get("name"), data.get("parent_id")))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/departments/<department_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_department(department_id):
+    try:
+        return success_response(OrganizationMgr.delete_department(department_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_resources():
+    try:
+        resource_type = request.args.get("type", "dataset")
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        keywords = request.args.get("keywords", "")
+        return success_response(ResourceMgr.list_resources(resource_type, page, page_size, keywords))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list admin resources")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/failures", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_failed_documents():
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        keywords = request.args.get("keywords", "")
+        return success_response(ResourceMgr.list_failed_documents(page, page_size, keywords))
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list failed documents")
         return error_response(str(e), 500)
 
 
@@ -553,6 +783,16 @@ def show_version():
     try:
         res = {"version": get_ragflow_version()}
         return success_response(res)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/monitoring/summary", methods=["GET"])
+@login_required
+@check_admin_auth
+def monitoring_summary():
+    try:
+        return success_response(MonitoringMgr.get_summary())
     except Exception as e:
         return error_response(str(e), 500)
 

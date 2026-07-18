@@ -59,6 +59,7 @@ export function SessionChat({ session }: SessionChatProps) {
   const hasActiveSession = Boolean(
     sessionId || isNew || hasLocalMessageRef.current,
   );
+  const canUpdateSession = session?.capabilities?.update !== false;
 
   const { visible, hideModal, documentId, selectedChunk, clickDocumentButton } =
     useClickDrawer();
@@ -198,8 +199,8 @@ export function SessionChat({ session }: SessionChatProps) {
           <NextMessageInput
             value={value}
             sendLoading={sendLoading}
-            disabled={isWaiting}
-            sendDisabled={sendLoading || isWaiting}
+            disabled={isWaiting || !canUpdateSession}
+            sendDisabled={sendLoading || isWaiting || !canUpdateSession}
             isUploading={isUploading || isWaiting}
             onPressEnter={handleSessionPressEnter}
             onInputChange={handleInputChange}

@@ -225,13 +225,6 @@ const ProfilePage: FC = () => {
             <div className="text-sm text-text-primary border border-border-button flex-1 rounded-md py-1.5 px-2">
               <span className="inline-block translate-y-0.5">********</span>
             </div>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => handleEditClick(EditType.editPassword)}
-            >
-              <PenLine size={12} /> {t('edit')}
-            </Button>
           </div>
         </div>
       </div>

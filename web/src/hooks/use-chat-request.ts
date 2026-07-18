@@ -28,6 +28,7 @@ import {
   useHandleSearchChange,
 } from './logic-hooks';
 import { useHandleSearchStrChange } from './logic-hooks/use-change-search';
+import { useWorkspace } from './use-workspace';
 
 export const enum ChatApiAction {
   FetchChatList = 'fetchChatList',
@@ -63,6 +64,7 @@ export const useGetChatSearchParams = () => {
 };
 
 export const useFetchChatList = () => {
+  const { workspaceId, workspaceFilterId } = useWorkspace();
   const { searchString, handleInputChange } = useHandleSearchChange();
   const { pagination, setPagination } = useGetPaginationWithRouter();
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
@@ -78,10 +80,12 @@ export const useFetchChatList = () => {
       {
         debouncedSearchString,
         filterValue,
+        workspaceId,
         ...pagination,
       },
     ],
     initialData: { chats: [], total: 0 },
+    enabled: Boolean(workspaceId),
     gcTime: 0,
     refetchOnWindowFocus: false,
     queryFn: async () => {
@@ -91,7 +95,7 @@ export const useFetchChatList = () => {
             keywords: debouncedSearchString,
             page_size: pagination.pageSize,
             page: pagination.current,
-            owner_ids: filterValue.owner,
+            owner_ids: workspaceFilterId ? [workspaceFilterId] : undefined,
           },
           data: {},
           paramsSerializer: { indexes: null },
@@ -151,6 +155,7 @@ export const useDeleteChat = () => {
 export const useCreateChat = () => {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { workspaceId } = useWorkspace();
 
   const {
     data,
@@ -159,7 +164,10 @@ export const useCreateChat = () => {
   } = useMutation({
     mutationKey: [ChatApiAction.CreateChat],
     mutationFn: async (params: Record<string, any>) => {
-      const { data } = await chatService.createChat(params);
+      const { data } = await chatService.createChat({
+        ...params,
+        workspace_id: workspaceId,
+      });
       if (data.code === 0) {
         queryClient.invalidateQueries({
           exact: false,

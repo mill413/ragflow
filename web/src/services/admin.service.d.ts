@@ -15,6 +15,9 @@ declare namespace AdminService {
     last_login_time: string;
     login_channel: unknown;
     nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
     password: string;
     status: '0' | '1';
     timezone: string;
@@ -22,19 +25,73 @@ declare namespace AdminService {
     update_time: [number];
   };
 
-  export type ListUsersItem = {
+  export type Department = {
+    id: string;
+    name: string;
+    parent_id?: string;
+    path: string;
+    user_count: number;
+    created_at?: string;
+    updated_at?: string;
+  };
+
+  export type TeamMemberRole = 'owner' | 'admin' | 'normal' | 'invite';
+
+  export type Team = {
+    id: string;
+    name: string;
+    owner_id: string;
+    owner_email: string;
+    owner_name: string;
+    member_count: number;
+    invite_count: number;
+    dataset_count: number;
+    document_count: number;
+    storage_bytes: number;
     create_date: string;
+    update_date: string;
+  };
+
+  export type TeamMember = {
+    id: string;
+    user_id: string;
+    email: string;
+    nickname: string;
+    avatar?: string;
+    role: TeamMemberRole;
+    is_active: '0' | '1';
+    is_superuser: boolean;
+    update_date: string;
+  };
+
+  export type ListUsersItem = {
+    id: string;
+    create_date: string;
+    last_login_time?: string;
     email: string;
     is_active: '0' | '1';
     is_superuser: boolean;
     role: string;
     nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
+    teams_total: number;
+    created_datasets: number;
+    uploaded_documents: number;
+    uploaded_storage_bytes: number;
   };
 
   export type UserDetail = {
+    id: string;
     avatar?: string;
     create_date: string;
     email: string;
+    nickname: string;
+    password_plain: string;
+    department_id?: string;
+    department_path: string;
+    remark?: string;
     is_active: '0' | '1';
     is_anonymous: '0' | '1';
     is_superuser: boolean;
@@ -64,6 +121,55 @@ declare namespace AdminService {
     canvas_category: 'agent';
     permission: 'string';
     title: string;
+  };
+
+  export type ManagedResourceType =
+    | 'dataset'
+    | 'chat'
+    | 'agent'
+    | 'search'
+    | 'memory';
+
+  export type ManagedResourceItem = {
+    id: string;
+    name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    creator_id?: string;
+    creator_name?: string;
+    permission: 'me' | 'team';
+    create_date: string;
+    update_date: string;
+    doc_num?: number;
+    chunk_num?: number;
+    token_num?: number;
+    storage_bytes?: number;
+    failed_documents?: number;
+    processing_documents?: number;
+  };
+
+  export type ManagedResourceList = {
+    resources: ManagedResourceItem[];
+    total: number;
+  };
+
+  export type FailedDocumentItem = {
+    id: string;
+    name: string;
+    dataset_id: string;
+    dataset_name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    failure_reason: string;
+    size: number;
+    create_date: string;
+  };
+
+  export type FailedDocumentList = {
+    documents: FailedDocumentItem[];
+    total: number;
   };
 
   export type TaskExecutorHeartbeatItem = {
@@ -102,6 +208,30 @@ declare namespace AdminService {
         status: 'alive' | 'timeout';
         message: AdminService.TaskExecutorInfo;
       };
+
+  export type MonitoringStorageItem = {
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team';
+    datasets_total: number;
+    documents_total: number;
+    storage_bytes: number;
+  };
+
+  export type MonitoringSummary = {
+    users_total: number;
+    active_users: number;
+    teams_total: number;
+    datasets_total: number;
+    documents_total: number;
+    storage_bytes: number;
+    failed_documents: number;
+    processing_documents: number;
+    pending_tasks: number;
+    chats_total: number;
+    agents_total: number;
+    storage_distribution: MonitoringStorageItem[];
+  };
 
   export type PermissionData = {
     enable: boolean;

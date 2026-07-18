@@ -23,15 +23,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { listRoles } from '@/services/admin-service';
+import { listDepartments, listRoles } from '@/services/admin-service';
 
 import EnterpriseFeature from '../components/enterprise-feature';
+import DepartmentTreeSelect from '../components/department-tree-select';
 import { IS_ENTERPRISE } from '../utils';
 
 interface CreateUserFormData {
   email: string;
   password: string;
   confirmPassword: string;
+  departmentId?: string;
   role?: string;
 }
 
@@ -52,6 +54,11 @@ export const CreateUserForm = ({
     queryKey: ['admin/listRoles'],
     queryFn: async () => (await listRoles()).data.data.roles,
     enabled: IS_ENTERPRISE,
+    retry: false,
+  });
+  const { data: departments } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
     retry: false,
   });
 
@@ -80,6 +87,27 @@ export const CreateUserForm = ({
                 />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="departmentId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-sm font-medium">
+                {t('admin.department')}
+              </FormLabel>
+              <FormControl>
+                <DepartmentTreeSelect
+                  departments={departments ?? []}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder={t('admin.noDepartment')}
+                  className="h-10"
+                />
+              </FormControl>
             </FormItem>
           )}
         />
@@ -188,6 +216,7 @@ function useCreateUserForm(props?: {
           .string()
           .min(1, { message: t('admin.confirmPasswordRequired') }),
         role: z.string().optional(),
+        departmentId: z.string().optional(),
       })
       .refine((data) => data.password === data.confirmPassword, {
         message: t('admin.confirmPasswordDoNotMatch'),
@@ -200,6 +229,7 @@ function useCreateUserForm(props?: {
       email: '',
       password: '',
       confirmPassword: '',
+      departmentId: '',
       ...(props?.defaultValues ?? {}),
     },
     resolver: zodResolver(schema),

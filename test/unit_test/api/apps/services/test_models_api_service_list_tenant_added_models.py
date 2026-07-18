@@ -89,7 +89,7 @@ def _load_module(monkeypatch, *, tenant_model_records, factory_llm_infos=None):
     tenant = SimpleNamespace(id="tenant-1", name="tenant-1")
     provider = SimpleNamespace(
         id="provider-1",
-        provider_name="LM-Studio",
+        provider_name="OpenAI-API-Compatible",
         tenant_id="tenant-1",
     )
     instance = SimpleNamespace(
@@ -135,13 +135,11 @@ def _load_module(monkeypatch, *, tenant_model_records, factory_llm_infos=None):
     )
 
     # joint_services.tenant_model_service is imported by models_api_service at
-    # module load for the three ensure_* helpers; stub it as a no-op.
+    # module load for MinerU initialization and model ID resolution.
     _stub(
         monkeypatch,
         "api.db.joint_services.tenant_model_service",
         ensure_mineru_from_env=lambda *a, **kw: None,
-        ensure_paddleocr_from_env=lambda *a, **kw: None,
-        ensure_opendataloader_from_env=lambda *a, **kw: None,
         resolve_model_id=MagicMock(),
     )
     _stub(
@@ -233,7 +231,7 @@ def test_list_tenant_added_models_handles_at_symbol_in_model_name(monkeypatch):
     assert added["name"] == "text-embedding-nomic-embed-text-v1.5@q8_0"
     assert added["provider_id"] == "provider-1"
     assert added["instance_id"] == "instance-1"
-    assert added["provider_name"] == "LM-Studio"
+    assert added["provider_name"] == "OpenAI-API-Compatible"
     assert added["instance_name"] == "default"
 
 
@@ -295,26 +293,7 @@ def test_list_tenant_added_models_still_works_for_plain_model_names(monkeypatch)
 
 
 @pytest.mark.p2
-def test_get_model_info_two_part_embedded_at(monkeypatch):
-    """Two-part default_model is parsed as model@provider (suffix wins).
-
-    A default_model like `text-embedding-nomic-embed-text-v1.5@q8_0` has
-    exactly one '@'. `_get_model_info`'s 2-segment branch does
-    `default_model.rsplit('@', 2)` and assigns the right-anchored suffix
-    as `provider_name`:
-
-        model_name     = "text-embedding-nomic-embed-text-v1.5"
-        provider_name  = "q8_0"
-        instance_name  = "default"
-
-    So the embedded '@' is interpreted as the provider separator, not
-    preserved within `model_name`. The legacy `tenant_llm`-based bare-model
-    fallback that would have recognised `q8_0` as a quantization suffix
-    was removed per maintainer request; the 2-part branch now always
-    treats the suffix as a provider. The stub returns a matching
-    provider/instance for any provider name, so the function resolves
-    to a valid result.
-    """
+def test_get_model_info_rejects_unsupported_provider(monkeypatch):
     module, _ = _load_module(
         monkeypatch,
         tenant_model_records=[],
@@ -322,10 +301,8 @@ def test_get_model_info_two_part_embedded_at(monkeypatch):
 
     result = module._get_model_info(
         "tenant-1",
-        "text-embedding-nomic-embed-text-v1.5@q8_0",
+        "nomic-embed-text@default@Ollama",
         "embedding",
     )
-    assert result is not None
-    assert result["model_provider"] == "q8_0"
-    assert result["model_name"] == "text-embedding-nomic-embed-text-v1.5"
-    assert result["model_instance"] == "default"
+
+    assert result is None

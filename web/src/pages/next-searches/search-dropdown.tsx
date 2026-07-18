@@ -40,34 +40,40 @@ export function SearchDropdown({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onClick={handleShowChatRenameModal}>
-          {t('common.rename')} <PenLine />
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <ConfirmDeleteDialog
-          onOk={handleDelete}
-          title={t('deleteModal.delSearch')}
-          content={{
-            node: (
-              <ConfirmDeleteDialogNode
-                avatar={{ avatar: dataset.avatar, name: dataset.name }}
-                name={dataset.name}
-              />
-            ),
-          }}
-        >
-          <DropdownMenuItem
-            className="text-state-error"
-            onSelect={(e) => {
-              e.preventDefault();
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
+        {dataset.capabilities?.update && (
+          <DropdownMenuItem onClick={handleShowChatRenameModal}>
+            {t('common.rename')} <PenLine />
+          </DropdownMenuItem>
+        )}
+        {dataset.capabilities?.update && dataset.capabilities?.delete && (
+          <DropdownMenuSeparator />
+        )}
+        {dataset.capabilities?.delete && (
+          <ConfirmDeleteDialog
+            onOk={handleDelete}
+            title={t('deleteModal.delSearch')}
+            content={{
+              node: (
+                <ConfirmDeleteDialogNode
+                  avatar={{ avatar: dataset.avatar, name: dataset.name }}
+                  name={dataset.name}
+                />
+              ),
             }}
           >
-            {t('common.delete')} <Trash2 />
-          </DropdownMenuItem>
-        </ConfirmDeleteDialog>
+            <DropdownMenuItem
+              className="text-state-error"
+              onSelect={(e) => {
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              {t('common.delete')} <Trash2 />
+            </DropdownMenuItem>
+          </ConfirmDeleteDialog>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

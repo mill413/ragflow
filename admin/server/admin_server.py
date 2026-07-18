@@ -52,16 +52,17 @@ if __name__ == "__main__":
 
     app = Flask(__name__)
     app.register_blueprint(admin_bp)
+    settings.init_settings()
     app.config["SESSION_PERMANENT"] = False
     app.config["SESSION_TYPE"] = "filesystem"
     app.config["SESSION_COOKIE_NAME"] = "ragflow_admin_session"
     app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024))
+    app.config["SECRET_KEY"] = settings.get_secret_key()
     Session(app)
     logging.info(f"RAGFlow admin version: {get_ragflow_version()}")
     show_configs()
     login_manager = LoginManager()
     login_manager.init_app(app)
-    settings.init_settings()
     setup_auth(login_manager)
     init_default_admin()
     SERVICE_CONFIGS.configs = load_configurations(SERVICE_CONF)

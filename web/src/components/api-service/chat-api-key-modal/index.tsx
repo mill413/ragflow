@@ -15,18 +15,49 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useTranslate } from '@/hooks/common-hooks';
+import { AllWorkspacesId, useWorkspace } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { formatDate } from '@/utils/date';
 import { Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOperateApiKey } from '../hooks';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const ChatApiKeyModal = ({
   dialogId,
   hideModal,
   idKey,
 }: IModalProps<any> & { dialogId?: string; idKey: string }) => {
+  const { workspaceId: activeWorkspaceId, options } = useWorkspace();
+  const workspaceOptions = useMemo(
+    () =>
+      options.filter(
+        (option) =>
+          option.value !== AllWorkspacesId &&
+          option.capabilities?.create_shared_resource,
+      ),
+    [options],
+  );
+  const [workspaceId, setWorkspaceId] = useState('');
+
+  useEffect(() => {
+    if (workspaceOptions.some((option) => option.value === workspaceId)) return;
+    setWorkspaceId(
+      workspaceOptions.find((option) => option.value === activeWorkspaceId)
+        ?.value ||
+        workspaceOptions[0]?.value ||
+        '',
+    );
+  }, [activeWorkspaceId, workspaceId, workspaceOptions]);
+
   const { createToken, removeToken, tokenList, listLoading, creatingLoading } =
-    useOperateApiKey(idKey, dialogId);
+    useOperateApiKey(idKey, dialogId, workspaceId || undefined);
   const { t } = useTranslate('chat');
 
   return (
@@ -37,6 +68,21 @@ const ChatApiKeyModal = ({
             <DialogTitle>{t('apiKey')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">{t('workspace')}</div>
+              <Select value={workspaceId} onValueChange={setWorkspaceId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaceOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {listLoading ? (
               <div className="flex justify-center py-8">Loading...</div>
             ) : (
@@ -75,7 +121,7 @@ const ChatApiKeyModal = ({
             <Button
               onClick={createToken}
               loading={creatingLoading}
-              disabled={tokenList?.length > 0}
+              disabled={!workspaceId || tokenList?.length > 0}
             >
               {t('createNewKey')}
             </Button>

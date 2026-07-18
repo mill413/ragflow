@@ -193,7 +193,7 @@ def test_upload_file_requires_existing_folder(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     monkeypatch.setattr(module.FileService, "get_by_id", lambda _file_id: (False, None))
 
-    ok, message = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt")]))
+    ok, message = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt")]))
     assert ok is False
     assert message == "Can't find this folder!"
 
@@ -205,7 +205,7 @@ def test_upload_file_respects_user_limit(monkeypatch):
     monkeypatch.setattr(module.DocumentService, "get_doc_count", lambda _uid: 1)
     monkeypatch.setenv("MAX_FILE_NUM_PER_USER", "1")
 
-    ok, message = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt")]))
+    ok, message = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt")]))
     assert ok is False
     assert message == "Exceed the maximum file number of a free user!"
     monkeypatch.delenv("MAX_FILE_NUM_PER_USER", raising=False)
@@ -234,7 +234,7 @@ def test_upload_file_success_uses_new_service_layer(monkeypatch):
         ),
     )
 
-    ok, data = _run(module.upload_file("tenant1", "pf1", [_DummyUploadFile("a.txt", b"hello")]))
+    ok, data = _run(module.upload_file("tenant1", "user1", "pf1", [_DummyUploadFile("a.txt", b"hello")]))
     assert ok is True
     assert data[0]["name"] == "a.txt"
     assert storage_puts == [("pf1", "a.txt", b"hello")]
@@ -245,7 +245,7 @@ def test_create_folder_rejects_duplicate_name(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     monkeypatch.setattr(module.FileService, "query", lambda **_kwargs: [SimpleNamespace(id="existing")])
 
-    ok, message = _run(module.create_folder("tenant1", "dup", "pf1", module.FileType.FOLDER.value))
+    ok, message = _run(module.create_folder("tenant1", "user1", "dup", "pf1", module.FileType.FOLDER.value))
     assert ok is False
     assert message == "Duplicated folder name in the same folder."
 

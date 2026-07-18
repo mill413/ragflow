@@ -31,8 +31,10 @@ export const updateCompilationTemplate = (
   data: IUpdateCompilationTemplateRequestBody,
 ) => request.put(api.compilationTemplate(id), data);
 
-export const listBuiltinCompilationTemplates = () =>
-  request.get(`${api.compilationTemplates}/builtins`);
+export const listBuiltinCompilationTemplates = (workspaceId?: string) =>
+  request.get(`${api.compilationTemplates}/builtins`, {
+    params: { workspace_id: workspaceId },
+  });
 
 export const listWikiPresets = () => request.get(api.wikiPresets);
 

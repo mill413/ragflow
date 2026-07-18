@@ -13,11 +13,13 @@ const LinkDataSourceModal = ({
   open,
   setOpen,
   onSubmit,
+  workspaceId,
 }: {
   selectedList: IConnector[];
   open: boolean;
   setOpen: (open: boolean) => void;
   onSubmit?: (list: IDataSourceBase[] | undefined) => void;
+  workspaceId?: string;
 }) => {
   const [list, setList] = useState<IDataSourceBase[]>();
   const [fileterString, setFileterString] = useState('');
@@ -26,9 +28,8 @@ const LinkDataSourceModal = ({
     setList(selectedList);
   }, [selectedList]);
 
-  const { categorizedList } = useListDataSource();
-  const handleFormSubmit = (values: any) => {
-    console.log(values, selectedList);
+  const { categorizedList } = useListDataSource(workspaceId);
+  const handleFormSubmit = () => {
     onSubmit?.(list);
   };
   return (

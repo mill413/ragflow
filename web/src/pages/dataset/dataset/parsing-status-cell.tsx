@@ -56,9 +56,11 @@ const ParseStatusStateMap = {
 export function ParseDropdownButton({
   record,
   showChangeParserModal,
+  readOnly = false,
   // showSetMetaModal,
 }: {
   record: IDocumentInfo;
+  readOnly?: boolean;
 } & UseChangeDocumentParserShowType) {
   const { t } = useTranslation();
   const { pipeline_id, pipeline_name, chunk_method } = record;
@@ -73,7 +75,12 @@ export function ParseDropdownButton({
         <div>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="static" size="auto" className="capitalize">
+              <Button
+                variant="static"
+                size="auto"
+                className="capitalize"
+                disabled={readOnly}
+              >
                 {pipeline_id
                   ? pipeline_name || pipeline_id
                   : chunk_method === 'naive'
@@ -105,9 +112,11 @@ export function ParseDropdownButton({
 export function ParsingStatusCell({
   record,
   showLog,
+  readOnly = false,
 }: {
   record: IDocumentInfo;
   showLog: (record: IDocumentInfo) => void;
+  readOnly?: boolean;
 } & UseChangeDocumentParserShowType) {
   const { run, progress, chunk_count, id } = record;
   const operationIcon = IconMap[run];
@@ -164,6 +173,7 @@ export function ParsingStatusCell({
               <Button
                 variant="ghost"
                 size="icon-xs"
+                disabled={readOnly}
                 onClick={() => showReparseDialogModal()}
                 // onClick={
                 //   isZeroChunk || isRunning
@@ -179,6 +189,7 @@ export function ParsingStatusCell({
               <Button
                 variant="ghost"
                 size="icon-xs"
+                disabled={readOnly}
                 onClick={() => {
                   showReparseDialogModal();
                 }}

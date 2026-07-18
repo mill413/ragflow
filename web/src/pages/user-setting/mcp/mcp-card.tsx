@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { McpOperation } from './mcp-operation';
 import { UseBulkOperateMCPReturnType } from './use-bulk-operate-mcp';
 import { UseEditMcpReturnType } from './use-edit-mcp';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 
 export type DatasetCardProps = {
   data: IMcpServer;
@@ -45,13 +46,15 @@ export function McpCard({
           </h3>
           <div className="space-x-4">
             {isSelectionMode ? (
-              <Checkbox
-                checked={selectedList.includes(data.id)}
-                onCheckedChange={onCheckedChange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-              />
+              data.capabilities?.delete && (
+                <Checkbox
+                  checked={selectedList.includes(data.id)}
+                  onCheckedChange={onCheckedChange}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                />
+              )
             ) : (
               <McpOperation
                 mcp={data}
@@ -67,6 +70,7 @@ export function McpCard({
             </div>
             <p>{formatDate(data.update_date)}</p>
           </div>
+          <WorkspaceBadge {...data} />
         </div>
       </CardContent>
     </Card>

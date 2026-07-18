@@ -49,6 +49,8 @@ export interface IAttachment {
   doc_id: string;
   format: string;
   file_name: string;
+  workspace_id?: string;
+  agent_id?: string;
 }
 export interface IMessageData {
   content: string;

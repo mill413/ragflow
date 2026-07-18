@@ -28,7 +28,8 @@ const FunctionMap = {
 export function DatasetActionCell({
   record,
   showRenameModal,
-}: { record: IDocumentInfo } & UseRenameDocumentShowType) {
+  readOnly = false,
+}: { record: IDocumentInfo; readOnly?: boolean } & UseRenameDocumentShowType) {
   const { id, run, type } = record;
   const isRunning = isParserRunning(run);
   const isVirtualDocument = type === DocumentType.Virtual;
@@ -66,14 +67,16 @@ export function DatasetActionCell({
       flex gap-2 items-center opacity-0
       transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
     >
-      <Button
-        size="icon-xs"
-        variant="ghost"
-        disabled={isRunning}
-        onClick={handleRename}
-      >
-        <PenLine className="size-[1em]" />
-      </Button>
+      {!readOnly && (
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          disabled={isRunning}
+          onClick={handleRename}
+        >
+          <PenLine className="size-[1em]" />
+        </Button>
+      )}
       <HoverCard>
         <HoverCardTrigger>
           <Button size="icon-xs" variant="ghost" disabled={isRunning}>
@@ -111,16 +114,18 @@ export function DatasetActionCell({
           <Download className="size-[1em]" />
         </Button>
       )}
-      <ConfirmDeleteDialog onOk={handleRemove}>
-        <Button
-          data-testid="document-delete"
-          size="icon-xs"
-          variant="ghost"
-          disabled={isRunning}
-        >
-          <Trash2 className="size-[1em]" />
-        </Button>
-      </ConfirmDeleteDialog>
+      {!readOnly && (
+        <ConfirmDeleteDialog onOk={handleRemove}>
+          <Button
+            data-testid="document-delete"
+            size="icon-xs"
+            variant="ghost"
+            disabled={isRunning}
+          >
+            <Trash2 className="size-[1em]" />
+          </Button>
+        </ConfirmDeleteDialog>
+      )}
     </div>
   );
 }

@@ -19,11 +19,12 @@ import time
 
 from quart import request, g
 from common.constants import RetCode
-from common.exceptions import ArgumentException, NotFoundException
+from common.exceptions import ArgumentException, NotFoundException, ResourceInUseException
 from api.apps import login_required, current_user
-from api.utils.api_utils import validate_request, get_request_json, get_error_argument_result, get_json_result
+from api.utils.api_utils import validate_request, get_request_json, get_error_argument_result, get_json_result, get_resource_in_use_result
 from api.apps.services import memory_api_service
 from api.db.joint_services.tenant_model_service import ensure_tenant_model_ids_for_params
+from api.db.services.memory_service import MemoryService
 from api.utils.pagination_utils import validate_rest_api_page_size
 
 
@@ -37,12 +38,13 @@ async def create_memory():
     t_parsed = time.perf_counter() if timing_enabled else None
     try:
         # Resolve tenant_model IDs from model names
-        tenant_id = current_user.id
+        tenant_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
         memory_info = {
             "name": req["name"],
             "memory_type": req["memory_type"],
             "embd_id": req["embd_id"],
-            "llm_id": req["llm_id"]
+            "llm_id": req["llm_id"],
+            "workspace_id": tenant_id,
         }
         ensure_tenant_model_ids_for_params(tenant_id, memory_info)
         success, res = await memory_api_service.create_memory(memory_info)
@@ -89,7 +91,9 @@ async def create_memory():
 async def update_memory(memory_id):
     req = await get_request_json()
     # Resolve tenant_model IDs from model names when name is provided but id is not
-    ensure_tenant_model_ids_for_params(current_user.id, req)
+    memory = MemoryService.get_by_memory_id(memory_id)
+    req.pop("workspace_id", None)
+    ensure_tenant_model_ids_for_params(memory.tenant_id if memory else current_user.id, req)
     new_settings = {k: req[k] for k in [
         "name", "permissions", "llm_id", "embd_id", "memory_type", "memory_size", "forgetting_policy", "temperature",
         "avatar", "description", "system_prompt", "user_prompt", "tenant_llm_id", "tenant_embd_id"
@@ -120,6 +124,8 @@ async def delete_memory(memory_id):
     except NotFoundException as not_found_exception:
         logging.error(not_found_exception)
         return get_json_result(code=RetCode.NOT_FOUND, message=str(not_found_exception))
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.error(e)
         return get_json_result(code=RetCode.SERVER_ERROR, message="Internal server error")

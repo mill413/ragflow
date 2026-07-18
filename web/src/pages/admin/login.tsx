@@ -34,6 +34,7 @@ import { login } from '@/services/admin-service';
 
 import ThemeSwitch from '../../components/theme-switch';
 import { BgSvg } from '../login-next/bg';
+import { changeLanguageAsync, resolveLanguageCode } from '@/locales/config';
 
 import { CurrentUserInfoContext } from './layouts/root-layout';
 
@@ -52,7 +53,7 @@ function AdminLogin() {
         password: rsaPassWord,
       });
     },
-    onSuccess: (request) => {
+    onSuccess: async (request) => {
       const { data: req, headers } = request;
 
       if (req?.code === 0) {
@@ -75,6 +76,8 @@ function AdminLogin() {
             name: req.data.nickname,
           }),
         });
+
+        await changeLanguageAsync(resolveLanguageCode(req.data.language));
 
         navigate('/admin/services');
       }

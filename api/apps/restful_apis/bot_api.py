@@ -406,7 +406,7 @@ async def retrieval_test_embedded(tenant_id=None):
                     tenant_ids.append(tenant.tenant_id)
                     break
             else:
-                return get_json_result(data=False, message="Only owner of dataset authorized for this operation.", code=RetCode.OPERATING_ERROR)
+                return get_json_result(data=False, message="No authorization to access this dataset.", code=RetCode.OPERATING_ERROR)
 
         e, kb = await thread_pool_exec(KnowledgebaseService.get_by_id, kb_ids[0])
         if not e:

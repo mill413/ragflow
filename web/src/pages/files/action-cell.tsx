@@ -5,7 +5,7 @@ import {
 import { FileIcon } from '@/components/icon-font';
 import NewDocumentLink from '@/components/new-document-link';
 import { Button } from '@/components/ui/button';
-import { useDownloadFile } from '@/hooks/use-file-request';
+import { useDownloadFile, useFileWorkspace } from '@/hooks/use-file-request';
 import { IFile } from '@/interfaces/database/file-manager';
 import { cn } from '@/lib/utils';
 import {
@@ -34,13 +34,16 @@ import { isFolderType, isKnowledgeBaseType } from './util';
 type IProps = Pick<CellContext<IFile, unknown>, 'row'> &
   Pick<UseHandleConnectToKnowledgeReturnType, 'showConnectToKnowledgeModal'> &
   Pick<UseRenameCurrentFileReturnType, 'showFileRenameModal'> &
-  UseMoveDocumentShowType;
+  UseMoveDocumentShowType & {
+    readOnly: boolean;
+  };
 
 export function ActionCell({
   row,
   showConnectToKnowledgeModal,
   showFileRenameModal,
   showMoveFileModal,
+  readOnly,
 }: IProps) {
   const record = row.original;
   const documentId = record.id;
@@ -48,6 +51,7 @@ export function ActionCell({
   const type = record.type;
 
   const { downloadFile } = useDownloadFile();
+  const { targetWorkspaceId } = useFileWorkspace();
   const isFolder = isFolderType(record.type);
   const isSkillsFolder = isFolder && record.name.toLowerCase() === 'skills';
   const extension = getExtension(record.name);
@@ -78,13 +82,13 @@ export function ActionCell({
     handleRemoveFile([documentId]);
   }, [handleRemoveFile, documentId]);
 
-  if (isSkillsFolder) {
+  if (isSkillsFolder || record.source_type === 'workspace') {
     return null;
   }
 
   return (
     <section className="flex gap-2 items-center text-text-sub-title-invert opacity-0 group-hover:opacity-100 transition-opacity">
-      {isKnowledgeBase || (
+      {isKnowledgeBase || readOnly || (
         <Button
           variant="transparent"
           className="border-none hover:bg-bg-card text-text-primary"
@@ -94,7 +98,7 @@ export function ActionCell({
           <Link2 />
         </Button>
       )}
-      {isKnowledgeBase || (
+      {isKnowledgeBase || readOnly || (
         <Button
           variant="transparent"
           className="border-none hover:bg-bg-card text-text-primary"
@@ -104,7 +108,7 @@ export function ActionCell({
           <FolderInput />
         </Button>
       )}
-      {isKnowledgeBase || (
+      {isKnowledgeBase || readOnly || (
         <Button
           variant="transparent"
           className="border-none hover:bg-bg-card text-text-primary"
@@ -130,6 +134,7 @@ export function ActionCell({
           documentId={documentId}
           documentName={record.name}
           resource="files"
+          workspaceId={targetWorkspaceId}
           className="text-text-sub-title-invert"
         >
           <Button
@@ -165,7 +170,7 @@ export function ActionCell({
           )}
         </DropdownMenuContent>
       </DropdownMenu> */}
-      {isKnowledgeBase || (
+      {isKnowledgeBase || readOnly || (
         <ConfirmDeleteDialog
           onOk={onRemoveFile}
           title={t('deleteModal.delFile')}

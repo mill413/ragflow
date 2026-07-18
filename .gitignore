@@ -246,6 +246,9 @@ bin/*
 .omc/
 .marscode/
 
+# Local design and discussion records
+.discussion/
+
 # Parser test fixtures and python tools
 internal/deepdoc/parser/pdf/testdata/
 internal/deepdoc/parser/pdf/tools-py/

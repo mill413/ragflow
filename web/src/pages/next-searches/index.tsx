@@ -5,7 +5,9 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useTranslate } from '@/hooks/common-hooks';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
@@ -15,6 +17,11 @@ import { useFetchSearchList, useRenameSearch } from './hooks';
 import { SearchCard } from './search-card';
 
 export default function SearchList() {
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('search');
   const { t: tc } = useTranslate('common');
@@ -50,9 +57,8 @@ export default function SearchList() {
     });
   };
   const openCreateModalFun = useCallback(() => {
-    // setIsEdit(false);
-    showSearchRenameModal();
-  }, [showSearchRenameModal]);
+    runInWritableWorkspace(showSearchRenameModal);
+  }, [runInWritableWorkspace, showSearchRenameModal]);
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
       setPagination({ page, pageSize });
@@ -63,15 +69,22 @@ export default function SearchList() {
   const [searchUrl, setSearchUrl] = useSearchParams();
   const isCreate = searchUrl.get('isCreate') === 'true';
   useEffect(() => {
-    if (isCreate) {
+    if (isCreate && canRunInWritableWorkspace) {
       openCreateModalFun();
       searchUrl.delete('isCreate');
       setSearchUrl(searchUrl);
     }
-  }, [isCreate, openCreateModalFun, searchUrl, setSearchUrl]);
+  }, [
+    isCreate,
+    canRunInWritableWorkspace,
+    openCreateModalFun,
+    searchUrl,
+    setSearchUrl,
+  ]);
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {list?.data?.search_apps?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -87,13 +100,15 @@ export default function SearchList() {
               onChange={handleFilterSubmit}
               filters={owners}
             >
-              <Button
-                data-testid="create-search"
-                onClick={() => openCreateModalFun()}
-              >
-                <Plus className="size-[1em]" />
-                {t('createSearch')}
-              </Button>
+              {canRunInWritableWorkspace && (
+                <Button
+                  data-testid="create-search"
+                  onClick={() => openCreateModalFun()}
+                >
+                  <Plus className="size-[1em]" />
+                  {t('createSearch')}
+                </Button>
+              )}
             </ListFilterBar>
           </header>
 
@@ -144,7 +159,9 @@ export default function SearchList() {
             size="large"
             className="w-[480px] p-14"
             type={EmptyCardType.Search}
-            onClick={() => openCreateModalFun()}
+            onClick={
+              canRunInWritableWorkspace ? () => openCreateModalFun() : undefined
+            }
             testId="search-empty-create"
           />
         </article>

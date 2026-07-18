@@ -26,14 +26,18 @@ const DocumentViewer = () => {
   const ext = currentQueryParameters.get('ext');
   const resource =
     currentQueryParameters.get('resource') === 'files' ? 'files' : 'document';
+  const workspaceId = currentQueryParameters.get('workspace_id');
+  const workspaceQuery = workspaceId
+    ? `?workspace_id=${encodeURIComponent(workspaceId)}`
+    : '';
   const api =
     resource === 'files'
-      ? `${restAPIv1}/files/${documentId}`
+      ? `${restAPIv1}/files/${documentId}${workspaceQuery}`
       : `${restAPIv1}/documents/${documentId}/preview`;
   // request.head
 
   if (ext === 'html' && documentId) {
-    previewHtmlFile(documentId, resource);
+    previewHtmlFile(documentId, resource, workspaceId || undefined);
     return;
   }
 

@@ -1,15 +1,20 @@
-import { useContext, useMemo } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import {
-  LucideMonitor,
+  LucideBoxes,
+  LucideBuilding2,
+  LucideLogOut,
+  LucidePanelLeftClose,
+  LucidePanelLeftOpen,
   LucideServerCrash,
   LucideSquareUserRound,
   LucideUserCog,
   LucideUserStar,
+  LucideUsersRound,
   LucideZap,
 } from 'lucide-react';
 
@@ -24,10 +29,16 @@ import ThemeSwitch from '../../../components/theme-switch';
 import { IS_ENTERPRISE } from '../utils';
 import { CurrentUserInfoContext } from './root-layout';
 
+const ADMIN_SIDEBAR_COLLAPSED_KEY = 'admin-sidebar-collapsed';
+
 const AdminNavigationLayout = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [, setCurrentUserInfo] = useContext(CurrentUserInfoContext);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY) !== 'false';
+  });
 
   const { data: version } = useQuery({
     queryKey: ['admin/version'],
@@ -47,6 +58,21 @@ const AdminNavigationLayout = () => {
         icon: <LucideUserCog className="size-[1em]" />,
       },
       {
+        path: Routes.AdminTeamManagement,
+        name: t('admin.teamManagement.title'),
+        icon: <LucideUsersRound className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminDepartments,
+        name: t('admin.departmentManagement'),
+        icon: <LucideBuilding2 className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminResourceManagement,
+        name: t('admin.resourceManagement'),
+        icon: <LucideBoxes className="size-[1em]" />,
+      },
+      {
         path: Routes.AdminSandboxSettings,
         name: t('admin.sandboxSettings'),
         icon: <LucideZap className="size-[1em]" />,
@@ -62,11 +88,6 @@ const AdminNavigationLayout = () => {
               path: Routes.AdminRoles,
               name: t('admin.roles'),
               icon: <LucideSquareUserRound className="size-[1em]" />,
-            },
-            {
-              path: Routes.AdminMonitoring,
-              name: t('admin.monitoring'),
-              icon: <LucideMonitor className="size-[1em]" />,
             },
           ]
         : []),
@@ -88,12 +109,62 @@ const AdminNavigationLayout = () => {
     retry: false,
   });
 
+  const toggleSidebar = () => {
+    setSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      window.localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_KEY, String(next));
+      return next;
+    });
+  };
+
   return (
-    <main className="w-screen h-screen flex flex-row px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
-      <aside className="w-72 mr-6 flex flex-col gap-6">
-        <div className="flex items-center mb-6">
-          <img className="size-8 mr-5" src="/logo.svg" alt="logo" />
-          <span className="text-xl font-bold">{t('admin.title')}</span>
+    <main className="w-screen h-screen flex flex-row gap-6 px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
+      <aside
+        className={cn(
+          'shrink-0 flex flex-col gap-6 transition-[width] duration-200 ease-out',
+          sidebarCollapsed ? 'w-14' : 'w-[200px]',
+        )}
+      >
+        <div
+          className={cn(
+            'flex h-8 items-center mb-6',
+            sidebarCollapsed && 'justify-center',
+          )}
+        >
+          {!sidebarCollapsed && (
+            <>
+              <img
+                className="mr-3 size-8 shrink-0"
+                src="/logo.svg"
+                alt="logo"
+              />
+              <span className="min-w-0 truncate text-lg font-bold">
+                {t('admin.title')}
+              </span>
+            </>
+          )}
+          <Button
+            size="icon"
+            variant="transparent"
+            className={cn('shrink-0 border-0', !sidebarCollapsed && 'ml-auto')}
+            title={
+              sidebarCollapsed
+                ? t('admin.expandSidebar')
+                : t('admin.collapseSidebar')
+            }
+            aria-label={
+              sidebarCollapsed
+                ? t('admin.expandSidebar')
+                : t('admin.collapseSidebar')
+            }
+            onClick={toggleSidebar}
+          >
+            {sidebarCollapsed ? (
+              <LucidePanelLeftOpen />
+            ) : (
+              <LucidePanelLeftClose />
+            )}
+          </Button>
         </div>
 
         <nav>
@@ -110,14 +181,18 @@ const AdminNavigationLayout = () => {
                       'hover:text-text-primary focus:text-text-primary focus-visible:text-text-primary',
                       'active:text-text-primary',
                       'transition-colors',
+                      sidebarCollapsed && 'justify-center px-0',
                       {
                         'bg-bg-card text-text-primary': isActive,
                       },
                     )
                   }
+                  title={sidebarCollapsed ? it.name : undefined}
                 >
                   {it.icon}
-                  <span className="ml-3">{it.name}</span>
+                  {!sidebarCollapsed && (
+                    <span className="ml-3 whitespace-nowrap">{it.name}</span>
+                  )}
                 </NavLink>
               </li>
             ))}
@@ -125,26 +200,37 @@ const AdminNavigationLayout = () => {
         </nav>
 
         <div className="mt-auto space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="leading-none text-xs text-accent-primary">
-              {version}
-            </span>
+          <div
+            className={cn(
+              'flex items-center',
+              sidebarCollapsed
+                ? 'justify-center overflow-hidden'
+                : 'justify-between',
+            )}
+          >
+            {!sidebarCollapsed && (
+              <span className="leading-none text-xs text-accent-primary">
+                {version}
+              </span>
+            )}
 
-            <ThemeSwitch />
+            <ThemeSwitch className={cn(sidebarCollapsed && 'scale-75')} />
           </div>
 
           <Button
             size="lg"
             variant="transparent"
             block
+            title={sidebarCollapsed ? t('header.logout') : undefined}
+            aria-label={t('header.logout')}
             onClick={() => logoutMutation.mutate()}
           >
-            {t('header.logout')}
+            {sidebarCollapsed ? <LucideLogOut /> : t('header.logout')}
           </Button>
         </div>
       </aside>
 
-      <section className="flex-1 h-full">
+      <section className="min-w-0 flex-1 h-full">
         <Outlet />
       </section>
     </main>

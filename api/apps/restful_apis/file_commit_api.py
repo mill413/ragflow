@@ -20,7 +20,9 @@ from quart import request
 from api.apps import login_required, current_user
 from api.utils.api_utils import get_json_result, get_data_error_result, get_request_json, server_error_response, validate_request
 from api.db.services.file_commit_service import FileCommitService
+from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.workspace_service import WorkspaceAccessService
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,22 @@ def _resolve_folder_id(entity_type, entity_id):
     if resolver is None:
         return None
     return resolver(entity_id)
+
+
+def _can_access_commit_scope(entity_type, entity_id, *, write=False):
+    if entity_type == "datasets":
+        exists, knowledgebase = KnowledgebaseService.get_by_id(entity_id)
+        if not exists:
+            return False
+        check = WorkspaceAccessService.can_update_knowledgebase if write else WorkspaceAccessService.can_read_knowledgebase
+        return check(current_user.id, knowledgebase)
+
+    exists, folder = FileService.get_by_id(entity_id)
+    if not exists:
+        return False
+    if write:
+        return WorkspaceAccessService.can_manage_file(current_user.id, folder)
+    return WorkspaceAccessService.can_read_shared_resource(current_user.id, folder)
 
 
 @_register_resolver("datasets")
@@ -95,12 +113,13 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     _route_suffix[0] += 1
     _n = _route_suffix[0]
 
-    def _resolve(entity_id):
+    def _resolve(entity_id, *, write=False):
         if resolver_type is None:
-            return entity_id  # already a folder_id
-        folder_id = _resolve_folder_id(resolver_type, entity_id)
-        if folder_id is None:
-            raise ValueError(f"Could not resolve {resolver_type} '{entity_id}' to a folder")
+            folder_id = entity_id
+        else:
+            folder_id = _resolve_folder_id(resolver_type, entity_id)
+        if folder_id is None or not _can_access_commit_scope(resolver_type, entity_id, write=write):
+            return None
         return folder_id
 
     # ── Create commit ──────────────────────────────────────────────────────
@@ -108,7 +127,9 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     @validate_request("message", "files")
     async def create_commit(entity_id):
-        folder_id = _resolve(entity_id)
+        folder_id = _resolve(entity_id, write=True)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         req = await get_request_json()
         try:
             commit = FileCommitService.create_commit(
@@ -141,6 +162,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def list_commits(entity_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             page = int(request.args.get("page", 1))
             page_size = int(request.args.get("page_size", 15))
@@ -200,6 +223,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def get_commit(entity_id, commit_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             commit = FileCommitService.get_commit(commit_id)
             if not commit:
@@ -250,6 +275,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def list_commit_files(entity_id, commit_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             commit = FileCommitService.get_commit(commit_id)
             if not commit:
@@ -281,6 +308,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def diff_commits(entity_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         from_id = request.args.get("from")
         to_id = request.args.get("to")
         if not from_id or not to_id:
@@ -302,6 +331,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def get_uncommitted_changes(entity_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             changes = FileCommitService.get_uncommitted_changes(folder_id)
             return get_json_result(data=changes)
@@ -313,6 +344,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def get_commit_tree(entity_id, commit_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             commit = FileCommitService.get_commit(commit_id)
             if not commit:
@@ -329,6 +362,8 @@ def _register_commit_routes(prefix, param_name, resolver_type=None):
     @login_required
     async def get_commit_file_content(entity_id, commit_id, file_id):
         folder_id = _resolve(entity_id)
+        if not folder_id:
+            return get_data_error_result("Commit scope not found")
         try:
             commit = FileCommitService.get_commit(commit_id)
             if not commit:
@@ -371,6 +406,9 @@ _register_commit_routes("/folders/<entity_id>", "entity_id")  # direct — entit
 @login_required
 async def get_file_version_history(file_id):
     try:
+        exists, file = FileService.get_by_id(file_id)
+        if not exists or not WorkspaceAccessService.can_read_shared_resource(current_user.id, file):
+            return get_data_error_result("File not found")
         versions = FileCommitService.get_file_version_history(file_id)
         return get_json_result(data=versions)
     except Exception as e:

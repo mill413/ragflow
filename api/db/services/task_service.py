@@ -613,7 +613,32 @@ def has_canceled(task_id):
     return False
 
 
-def queue_dataflow(tenant_id: str, flow_id: str, task_id: str, doc_id: str = CANVAS_DEBUG_DOC_ID, file: dict = None, priority: int = 0, rerun: bool = False) -> tuple[bool, str]:
+def task_authorization_key(task_id: str) -> str:
+    return f"task:{task_id}:authorization"
+
+
+def register_task_authorization(task_id: str, workspace_id: str, resource_id: str, actor_id: str, *, expires: int = 7 * 24 * 3600) -> bool:
+    return REDIS_CONN.set_obj(
+        task_authorization_key(task_id),
+        {
+            "workspace_id": workspace_id,
+            "resource_id": resource_id,
+            "actor_id": actor_id,
+        },
+        exp=expires,
+    )
+
+
+def queue_dataflow(
+    tenant_id: str,
+    flow_id: str,
+    task_id: str,
+    doc_id: str = CANVAS_DEBUG_DOC_ID,
+    file: dict = None,
+    priority: int = 0,
+    rerun: bool = False,
+    actor_id: str | None = None,
+) -> tuple[bool, str]:
 
     task = dict(
         id=task_id,
@@ -633,6 +658,9 @@ def queue_dataflow(tenant_id: str, flow_id: str, task_id: str, doc_id: str = CAN
     task["tenant_id"] = tenant_id
     task["dataflow_id"] = flow_id
     task["file"] = file
+
+    if doc_id == CANVAS_DEBUG_DOC_ID:
+        register_task_authorization(task_id, tenant_id, flow_id, actor_id or tenant_id)
 
     if not REDIS_CONN.queue_product(settings.get_svr_queue_name(priority, "common"), message=task):
         return False, "Can't access Redis. Please check the Redis' status."

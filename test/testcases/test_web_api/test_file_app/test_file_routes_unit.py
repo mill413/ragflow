@@ -105,6 +105,10 @@ def _load_file_api_module(monkeypatch):
     monkeypatch.setitem(sys.modules, "api.apps", apps_pkg)
     api_pkg.apps = apps_pkg
 
+    workspace_access_mod = ModuleType("api.apps.workspace_access")
+    workspace_access_mod.workspace_required = lambda **_kwargs: lambda func: func
+    monkeypatch.setitem(sys.modules, "api.apps.workspace_access", workspace_access_mod)
+
     services_pkg = ModuleType("api.apps.services")
     services_pkg.__path__ = [str(repo_root / "api" / "apps" / "services")]
     monkeypatch.setitem(sys.modules, "api.apps.services", services_pkg)
@@ -112,10 +116,10 @@ def _load_file_api_module(monkeypatch):
 
     file_api_service_mod = ModuleType("api.apps.services.file_api_service")
 
-    async def _upload_file(_tenant_id, _pf_id, _file_objs):
+    async def _upload_file(_workspace_id, _actor_id, _pf_id, _file_objs):
         return True, [{"id": "f1"}]
 
-    async def _create_folder(_tenant_id, _name, _parent_id=None, _file_type=None):
+    async def _create_folder(_workspace_id, _actor_id, _name, _parent_id=None, _file_type=None):
         return True, {"id": "folder1"}
 
     async def _delete_files(_tenant_id, _ids):
@@ -129,12 +133,12 @@ def _load_file_api_module(monkeypatch):
     file_api_service_mod.list_files = lambda _tenant_id, _args: (True, {"files": [], "total": 0})
     file_api_service_mod.delete_files = _delete_files
     file_api_service_mod.move_files = _move_files
-    file_api_service_mod.get_file_content = lambda _tenant_id, _file_id: (
+    file_api_service_mod.get_file_content = lambda _user_id, _file_id, _tenant_id=None: (
         True,
         SimpleNamespace(parent_id="bucket1", location="path1", name="doc.txt", type="doc"),
     )
-    file_api_service_mod.get_parent_folder = lambda _file_id, user_id=None: (True, {"parent_folder": {"id": "parent1"}})
-    file_api_service_mod.get_all_parent_folders = lambda _file_id, user_id=None: (True, {"parent_folders": [{"id": "root"}]})
+    file_api_service_mod.get_parent_folder = lambda _file_id, user_id=None, tenant_id=None: (True, {"parent_folder": {"id": "parent1"}})
+    file_api_service_mod.get_all_parent_folders = lambda _file_id, user_id=None, tenant_id=None: (True, {"parent_folders": [{"id": "root"}]})
     monkeypatch.setitem(sys.modules, "api.apps.services.file_api_service", file_api_service_mod)
     services_pkg.file_api_service = file_api_service_mod
 
@@ -219,18 +223,18 @@ def test_create_or_upload_multipart_requires_file(monkeypatch):
 def test_create_or_upload_uploads_via_new_service(monkeypatch):
     module = _load_file_api_module(monkeypatch)
     files = _DummyFiles([_DummyUploadFile("a.txt")])
-    monkeypatch.setattr(module, "request", _DummyRequest(content_type="multipart/form-data", form={"parent_id": "pf1"}, files=files))
+    monkeypatch.setattr(module, "request", _DummyRequest(content_type="multipart/form-data", form={"workspace_id": "team1", "parent_id": "pf1"}, files=files))
 
     seen = {}
 
-    async def _upload_file(tenant_id, pf_id, file_objs):
-        seen["args"] = (tenant_id, pf_id, [f.filename for f in file_objs])
+    async def _upload_file(workspace_id, actor_id, pf_id, file_objs):
+        seen["args"] = (workspace_id, actor_id, pf_id, [f.filename for f in file_objs])
         return True, [{"id": "f1"}]
 
     monkeypatch.setattr(module.file_api_service, "upload_file", _upload_file)
-    res = _run(module.create_or_upload("tenant1"))
+    res = _run(module.create_or_upload("user1"))
 
-    assert seen["args"] == ("tenant1", "pf1", ["a.txt"])
+    assert seen["args"] == ("team1", "user1", "pf1", ["a.txt"])
     assert res["code"] == 0
     assert res["data"] == [{"id": "f1"}]
 
@@ -241,17 +245,18 @@ def test_create_or_upload_creates_folder_from_json(monkeypatch):
     monkeypatch.setattr(module, "request", _DummyRequest(content_type="application/json"))
 
     async def _validate(_request, _schema):
-        return {"name": "folder-a", "parent_id": "pf1", "type": "folder"}, None
+        return {"workspace_id": "team1", "name": "folder-a", "parent_id": "pf1", "type": "folder"}, None
 
-    async def _create_folder(tenant_id, name, parent_id=None, file_type=None):
-        return True, {"tenant_id": tenant_id, "name": name, "parent_id": parent_id, "type": file_type}
+    async def _create_folder(workspace_id, actor_id, name, parent_id=None, file_type=None):
+        return True, {"tenant_id": workspace_id, "created_by": actor_id, "name": name, "parent_id": parent_id, "type": file_type}
 
     monkeypatch.setattr(module, "validate_and_parse_json_request", _validate)
     monkeypatch.setattr(module.file_api_service, "create_folder", _create_folder)
 
-    res = _run(module.create_or_upload("tenant1"))
+    res = _run(module.create_or_upload("user1"))
     assert res["code"] == 0
-    assert res["data"]["tenant_id"] == "tenant1"
+    assert res["data"]["tenant_id"] == "team1"
+    assert res["data"]["created_by"] == "user1"
     assert res["data"]["name"] == "folder-a"
 
 

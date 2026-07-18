@@ -1,5 +1,6 @@
 import { RunningStatus } from '@/constants/knowledge';
 import { DataSourceKey } from './constant';
+import { IWorkspaceResource } from '@/interfaces/database/workspace';
 
 export interface IDataSorceInfo {
   id: DataSourceKey;
@@ -20,10 +21,13 @@ export type IDataSource = IDataSourceBase & {
   update_time: number;
 };
 
-export interface IDataSourceBase {
+export interface IDataSourceBase extends IWorkspaceResource {
   id: string;
+  tenant_id?: string;
   name: string;
   source: DataSourceKey;
+  auto_parse?: '0' | '1';
+  status?: RunningStatus;
 }
 
 export interface IDataSourceLog {

@@ -6,6 +6,7 @@ import authorizationUtil, {
   redirectToLogin,
 } from '@/utils/authorization-util';
 import notification from '@/utils/notification';
+import { formatResourceReferenceConflict } from '@/utils/resource-reference';
 import axios from 'axios';
 import { convertTheKeysOfTheObjectToSnake, isFormData } from './common-util';
 import { setCachedLlmList } from './llm-cache';
@@ -116,6 +117,7 @@ request.interceptors.response.use(
       return response;
     }
     const data = response?.data;
+    const resourceReferenceConflict = formatResourceReferenceConflict(data);
 
     // Update LLM list cache when fetching my_llm or llm_list
     if (data?.code === 0 && data?.data) {
@@ -138,6 +140,12 @@ request.interceptors.response.use(
         authorizationUtil.removeAll();
         redirectToLogin();
       }
+    } else if (resourceReferenceConflict) {
+      notification.error({
+        message: resourceReferenceConflict.title,
+        description: resourceReferenceConflict.description,
+        duration: 12,
+      });
     } else if (data?.code !== 0) {
       notification.error({
         message: `${i18n.t('message.hint')} : ${data?.code}`,

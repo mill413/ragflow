@@ -16,7 +16,6 @@
 import logging
 import uuid
 
-from api.utils.api_utils import group_by
 from api.db import FileType, UserTenantRole
 from api.db.services.api_service import APITokenService, API4ConversationService
 from api.db.services.canvas_service import UserCanvasService
@@ -226,59 +225,7 @@ def delete_user_data(user_id: str) -> dict:
             done_msg += f"- Deleted {tenant_delete_res} tenant.\n"
         # step2 delete user-tenant relation
         if tenants:
-            # step2.1 delete docs and files in joined team
-            joined_tenants = [t for t in tenants if t["role"] == UserTenantRole.NORMAL.value]
-            if joined_tenants:
-                done_msg += "Start to delete data in joined tenants.\n"
-                created_documents = DocumentService.get_all_docs_by_creator_id(usr.id)
-                if created_documents:
-                    # step2.1.1 delete files
-                    doc_file_info = File2DocumentService.get_by_document_ids([d["id"] for d in created_documents])
-                    created_files = FileService.get_by_ids([f["file_id"] for f in doc_file_info])
-                    if created_files:
-                        # step2.1.1.1 delete file in storage
-                        for f in created_files:
-                            settings.STORAGE_IMPL.rm(f.parent_id, f.location)
-                        done_msg += f"- Deleted {len(created_files)} uploaded file.\n"
-                        # step2.1.1.2 delete file record
-                        file_delete_res = FileService.delete_by_ids([f.id for f in created_files])
-                        done_msg += f"- Deleted {file_delete_res} file records.\n"
-                    # step2.1.2 delete document-file relation record
-                    file2doc_delete_res = File2DocumentService.delete_by_document_ids_or_file_ids([d["id"] for d in created_documents], [f.id for f in created_files])
-                    done_msg += f"- Deleted {file2doc_delete_res} document-file relation records.\n"
-                    # step2.1.3 delete chunks
-                    doc_groups = group_by(created_documents, "tenant_id")
-                    kb_grouped_doc = {k: group_by(v, "kb_id") for k, v in doc_groups.items()}
-                    # chunks in {'tenant_id': {'kb_id': [{'id': doc_id}]}} structure
-                    chunk_delete_res = 0
-                    kb_doc_info = {}
-                    for _tenant_id, kb_doc in kb_grouped_doc.items():
-                        for _kb_id, docs in kb_doc.items():
-                            chunk_delete_res += settings.docStoreConn.delete({"doc_id": [d["id"] for d in docs]}, search.index_name(_tenant_id), _kb_id)
-                            # record doc info
-                            if _kb_id in kb_doc_info.keys():
-                                kb_doc_info[_kb_id]["doc_num"] += 1
-                                kb_doc_info[_kb_id]["token_num"] += sum([d["token_num"] for d in docs])
-                                kb_doc_info[_kb_id]["chunk_num"] += sum([d["chunk_num"] for d in docs])
-                            else:
-                                kb_doc_info[_kb_id] = {"doc_num": 1, "token_num": sum([d["token_num"] for d in docs]), "chunk_num": sum([d["chunk_num"] for d in docs])}
-                    done_msg += f"- Deleted {chunk_delete_res} chunks.\n"
-                    # step2.1.4 delete tasks
-                    task_delete_res = TaskService.delete_by_doc_ids([d["id"] for d in created_documents])
-                    done_msg += f"- Deleted {task_delete_res} tasks.\n"
-                    # step2.1.5 delete document record
-                    doc_delete_res = DocumentService.delete_by_ids([d["id"] for d in created_documents])
-                    done_msg += f"- Deleted {doc_delete_res} documents.\n"
-                    for doc in created_documents:
-                        try:
-                            DocMetadataService.delete_document_metadata(doc["id"], doc["kb_id"], doc["tenant_id"])
-                        except Exception as e:
-                            logging.warning(f"Failed to delete metadata for document {doc['id']}: {e}")
-                    # step2.1.6 update dataset doc&chunk&token cnt
-                    for kb_id, doc_num in kb_doc_info.items():
-                        KnowledgebaseService.decrease_document_num_in_delete(kb_id, doc_num)
-
-            # step2.2 delete relation
+            # Resources in joined teams belong to the team and survive account deletion.
             user_tenant_delete_res = UserTenantService.delete_by_ids([t["id"] for t in tenants])
             done_msg += f"- Deleted {user_tenant_delete_res} user-tenant records.\n"
         # step3 finally delete user

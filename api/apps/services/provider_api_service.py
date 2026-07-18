@@ -20,10 +20,12 @@ import asyncio
 
 from common.constants import LLMType, ActiveStatusEnum, ModelVerifyStatusEnum
 from common.settings import FACTORY_LLM_INFOS
+from api.constants import SUPPORTED_MODEL_PROVIDERS
 from api.db.joint_services.tenant_model_service import resolve_model_config, delete_models_by_instance_ids, delete_instances_by_provider_ids
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
 from api.db.services.tenant_model_service import TenantModelService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.utils.model_utils import get_model_type_human, calculate_model_type
 from rag.llm import ChatModel, CvModel, EmbeddingModel, ModelMeta, OcrModel, RerankModel, Seq2txtModel, TTSModel
 
@@ -80,7 +82,7 @@ def list_providers(tenant_id: str, all_available: bool = False):
     if all_available:
         providers = []
         for factory_info in FACTORY_LLM_INFOS:
-            if factory_info["name"] in ["Youdao", "FastEmbed", "BAAI", "Builtin", "siliconflow_intl"]:
+            if factory_info["name"] not in SUPPORTED_MODEL_PROVIDERS:
                 continue
             model_types = sorted(set(model_type for llm in factory_info.get("llm", []) for model_type in _factory_model_types(llm))) if factory_info.get("llm", []) else []
             if factory_info["name"] in ["MinerU", "PaddleOCR", "OpenDataLoader"]:
@@ -100,7 +102,7 @@ def list_providers(tenant_id: str, all_available: bool = False):
     providers = []
     factory_info_mapping = {f["name"]: f for f in FACTORY_LLM_INFOS}
     for name in factory_names:
-        if name not in ["Youdao", "FastEmbed", "BAAI", "Builtin", "siliconflow_intl"] and factory_info_mapping.get(name):
+        if name in SUPPORTED_MODEL_PROVIDERS and factory_info_mapping.get(name):
             factory_info = factory_info_mapping[name]
             provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, name)
             has_instance = bool(provider_obj and TenantModelInstanceService.get_all_by_provider_id(provider_obj.id))
@@ -129,7 +131,7 @@ def add_provider(tenant_id: str, provider_name: str):
     if not FACTORY_LLM_INFOS:
         return False, "No providers found"
     # Check if factory is allowed
-    allowed_factories = [f["name"] for f in FACTORY_LLM_INFOS]
+    allowed_factories = [f["name"] for f in FACTORY_LLM_INFOS if f["name"] in SUPPORTED_MODEL_PROVIDERS]
     if provider_name not in allowed_factories:
         return False, f"Provider '{provider_name}' is not allowed"
 
@@ -157,6 +159,8 @@ def delete_provider(tenant_id: str, provider_id_or_name: str):
     instance_objs = TenantModelInstanceService.get_all_by_provider_id(provider_obj.id)
     if instance_objs:
         instance_ids = [instance_obj.id for instance_obj in instance_objs]
+        model_objs = TenantModelService.get_models_by_provider_ids_and_instance_ids([provider_obj.id], instance_ids)
+        ResourceReferenceService.ensure_models_not_referenced(tenant_id, model_objs)
         delete_models_by_instance_ids(instance_ids)
         delete_instances_by_provider_ids([provider_obj.id])
     TenantModelProviderService.delete_by_tenant_id_and_provider_name(tenant_id, provider_obj.provider_name)
@@ -320,6 +324,14 @@ async def update_provider_instance(
         if not success:
             return False, msg
 
+    existing_model_objs = TenantModelService.get_models_by_instance_id(instance_obj.id)
+    existing_model_names = {model_obj.model_name: model_obj for model_obj in existing_model_objs}
+    submitted_model_names = {model.get("model_name") for model in model_info or [] if model.get("model_name")}
+    model_objs_to_remove = [
+        model_obj for model_name, model_obj in existing_model_names.items() if model_name not in submitted_model_names
+    ]
+    ResourceReferenceService.ensure_models_not_referenced(tenant_id, model_objs_to_remove)
+
     # Update instance record
     update_dict = {
         "api_key": api_key_str,
@@ -342,19 +354,8 @@ async def update_provider_instance(
     effective_instance_name = instance_name
 
     # Upsert models: add new ones, update existing ones, remove ones no longer selected
-    existing_model_objs = TenantModelService.get_models_by_instance_id(instance_obj.id)
-    existing_model_names = {model_obj.model_name: model_obj for model_obj in existing_model_objs}
-
-    # Delete models that are no longer in the submitted model_info
-    submitted_model_names = set()
-    if model_info:
-        submitted_model_names = {m.get("model_name") for m in model_info if m.get("model_name")}
-    elif model_info is not None:
-        # model_info is explicitly an empty list — remove all models
-        submitted_model_names = set()
-    models_to_remove = set(existing_model_names.keys()) - submitted_model_names
-    if models_to_remove:
-        TenantModelService.delete_by_ids([existing_model_names[n].id for n in models_to_remove])
+    if model_objs_to_remove:
+        TenantModelService.delete_by_ids([model_obj.id for model_obj in model_objs_to_remove])
 
     msg = ""
     if model_info:
@@ -912,6 +913,8 @@ def drop_provider_instances(tenant_id: str, provider_id_or_name: str, instance_i
         instance_ids.append(instance_obj.id)
     if not_exist_instances:
         return False, f"No instance found for provider '{provider_id_or_name}' and instance '{not_exist_instances}'"
+    model_objs = TenantModelService.get_models_by_provider_ids_and_instance_ids([provider_id], instance_ids)
+    ResourceReferenceService.ensure_models_not_referenced(tenant_id, model_objs)
     delete_models_by_instance_ids(instance_ids)
     TenantModelInstanceService.delete_by_ids(instance_ids)
     return True, None
@@ -1151,7 +1154,9 @@ async def delete_models_from_instance(tenant_id: str, provider_id_or_name: str, 
     if not_exist_models:
         return False, f"Models {not_exist_models} not found for provider '{provider_id_or_name}' and instance '{instance_id_or_name}'"
 
-    TenantModelService.delete_by_ids([model_obj.id for model_obj in model_objs if model_obj.model_name in model_name])
+    models_to_delete = [model_obj for model_obj in model_objs if model_obj.model_name in model_name]
+    ResourceReferenceService.ensure_models_not_referenced(tenant_id, models_to_delete)
+    TenantModelService.delete_by_ids([model_obj.id for model_obj in models_to_delete])
 
     return True, "success"
 

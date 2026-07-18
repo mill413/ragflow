@@ -1,7 +1,7 @@
 import { HomeCard } from '@/components/home-card';
 import { MoreButton } from '@/components/more-button';
-import { SharedBadge } from '@/components/shared-badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { WorkspaceBadge } from '@/components/workspace-badge';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { IDataset } from '@/interfaces/database/dataset';
 import { t } from 'i18next';
@@ -26,14 +26,22 @@ export function DatasetCard({
         description: `${dataset.document_count} ${t('knowledgeDetails.files')}`,
       }}
       moreDropdown={
-        <DatasetDropdown
-          showDatasetRenameModal={showDatasetRenameModal}
-          dataset={dataset}
-        >
-          <MoreButton></MoreButton>
-        </DatasetDropdown>
+        dataset.capabilities?.update || dataset.capabilities?.delete ? (
+          <DatasetDropdown
+            showDatasetRenameModal={showDatasetRenameModal}
+            dataset={dataset}
+          >
+            <MoreButton></MoreButton>
+          </DatasetDropdown>
+        ) : undefined
       }
-      sharedBadge={<SharedBadge>{dataset.nickname}</SharedBadge>}
+      sharedBadge={
+        <WorkspaceBadge
+          workspace_type={dataset.workspace_type}
+          workspace_name={dataset.workspace_name || dataset.nickname}
+          creator_name={dataset.creator_name || dataset.nickname}
+        />
+      }
       onClick={navigateToDataset(dataset.id)}
     />
   );

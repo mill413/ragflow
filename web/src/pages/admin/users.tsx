@@ -1,4 +1,10 @@
-import { useContext, useLayoutEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 
@@ -20,14 +26,19 @@ import {
 } from '@tanstack/react-query';
 
 import {
+  HardDrive,
+  Library,
   LucideClipboardList,
-  LucideDot,
+  LucideExternalLink,
   LucideTrash2,
   LucideUserLock,
   LucideUserPlus,
+  UserCheck,
+  UsersRound,
 } from 'lucide-react';
 
 import { rsaPsw } from '@/utils';
+import { cn, formatBytes } from '@/lib/utils';
 
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
@@ -77,15 +88,19 @@ import { LucideFilter, LucideSearch } from 'lucide-react';
 
 import useChangePasswordForm from './forms/change-password-form';
 import useCreateUserForm from './forms/user-form';
+import { UserStatusBadge, UserStatusText } from './components/user-status';
 
 import {
   createUser,
   deleteUser,
   grantSuperuser,
+  getUserLoginUrl,
+  listDepartments,
   listRoles,
   listUsers,
   revokeSuperuser,
   updateUserPassword,
+  updateUserDepartment,
   updateUserRole,
   updateUserStatus,
 } from '@/services/admin-service';
@@ -94,6 +109,7 @@ import {
   createColumnFilterFn,
   createFuzzySearchFn,
   EMPTY_DATA,
+  getSortIcon,
   IS_ENTERPRISE,
   parseBooleanish,
 } from './utils';
@@ -106,12 +122,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import EnterpriseFeature from './components/enterprise-feature';
+import DepartmentTreeSelect from './components/department-tree-select';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 
 const columnHelper = createColumnHelper<AdminService.ListUsersItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListUsersItem>([
   'email',
   'nickname',
+  'department_path',
 ]);
 
 const STATUS_FILTER_OPTIONS = [
@@ -119,6 +137,20 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'active', label: 'admin.active' },
   { value: 'inactive', label: 'admin.inactive' },
 ];
+
+const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
+  email: 'min-w-44',
+  nickname: 'min-w-24',
+  password_plain: 'min-w-40',
+  department_path: 'min-w-40',
+  is_active: 'w-32 min-w-32',
+  is_superuser: 'w-36 min-w-36',
+  teams_total: 'w-24 min-w-24 text-center',
+  created_datasets: 'w-28 min-w-28 text-center',
+  uploaded_documents: 'w-24 min-w-24 text-center',
+  uploaded_storage_bytes: 'w-28 min-w-28 text-center',
+  actions: 'w-44 min-w-44',
+};
 
 function AdminUserManagement() {
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
@@ -149,6 +181,11 @@ function AdminUserManagement() {
     queryFn: async () => (await listUsers()).data.data,
     retry: false,
     placeholderData: keepPreviousData,
+  });
+  const { data: departments } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
+    retry: false,
   });
 
   // Delete user mutation
@@ -191,12 +228,14 @@ function AdminUserManagement() {
       email,
       password,
       role,
+      departmentId,
     }: {
       email: string;
       password: string;
       role?: string;
+      departmentId?: string;
     }) => {
-      await createUser(email, rsaPsw(password) as string);
+      await createUser(email, rsaPsw(password) as string, departmentId);
 
       if (IS_ENTERPRISE && role) {
         await updateUserRoleMutation.mutateAsync({ email, role });
@@ -227,6 +266,32 @@ function AdminUserManagement() {
     retry: false,
   });
 
+  const updateDepartmentMutation = useMutation({
+    mutationFn: ({
+      email,
+      departmentId,
+    }: {
+      email: string;
+      departmentId?: string;
+    }) => updateUserDepartment(email, departmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
+    },
+    retry: false,
+  });
+
+  const openUserHome = useCallback(async (email: string) => {
+    const target = window.open('about:blank', '_blank');
+    try {
+      const { url } = (await getUserLoginUrl(email)).data.data;
+      if (target)
+        target.location.href = new URL(url, window.location.origin).toString();
+    } catch (error) {
+      target?.close();
+      throw error;
+    }
+  }, []);
+
   // Update user status mutation
   const updateUserStatusMutation = useMutation({
     mutationFn: (data: { email: string; isActive: boolean }) =>
@@ -244,6 +309,34 @@ function AdminUserManagement() {
       }),
       columnHelper.accessor('nickname', {
         header: t('admin.nickname'),
+      }),
+
+      columnHelper.accessor('password_plain', {
+        header: t('admin.password'),
+        cell: ({ cell }) => cell.getValue() || '-',
+      }),
+
+      columnHelper.accessor('department_path', {
+        header: t('admin.department'),
+        cell: ({ row }) => (
+          <DepartmentTreeSelect
+            departments={departments ?? []}
+            disabled={updateDepartmentMutation.isPending}
+            value={row.original.department_id}
+            placeholder={t('admin.noDepartment')}
+            className="w-40"
+            onChange={(departmentId) =>
+              updateDepartmentMutation.mutate({
+                email: row.original.email,
+                departmentId: departmentId || undefined,
+              })
+            }
+          />
+        ),
+        filterFn: createColumnFilterFn(
+          (row, id, filterValue) => row.getValue(id) === filterValue,
+          { autoRemove: (value) => !value },
+        ),
       }),
 
       ...(IS_ENTERPRISE
@@ -291,18 +384,7 @@ function AdminUserManagement() {
           const isMe = row.original.email === userInfo?.email;
 
           if (isMe) {
-            return (
-              <Badge
-                variant={
-                  parseBooleanish(cell.getValue()) ? 'success' : 'destructive'
-                }
-              >
-                <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                {parseBooleanish(cell.getValue())
-                  ? t('admin.active')
-                  : t('admin.inactive')}
-              </Badge>
-            );
+            return <UserStatusBadge active={cell.getValue()} />;
           }
 
           return (
@@ -316,23 +398,17 @@ function AdminUserManagement() {
                 })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-32 [&>span]:truncate">
                 <SelectValue />
               </SelectTrigger>
 
               <SelectContent>
                 <SelectItem value="0">
-                  <div className="flex items-center">
-                    <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                    {t('admin.inactive')}
-                  </div>
+                  <UserStatusText active={false} />
                 </SelectItem>
 
                 <SelectItem value="1">
-                  <div className="flex items-center text-state-success">
-                    <LucideDot className="size-[1em] stroke-[8] mr-1" />
-                    {t('admin.active')}
-                  </div>
+                  <UserStatusText active />
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -371,7 +447,7 @@ function AdminUserManagement() {
                 });
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-36 [&>span]:truncate">
                 <SelectValue />
               </SelectTrigger>
 
@@ -386,6 +462,23 @@ function AdminUserManagement() {
         },
       }),
 
+      columnHelper.accessor('teams_total', {
+        header: t('admin.userMonitoring.teams'),
+      }),
+
+      columnHelper.accessor('created_datasets', {
+        header: t('admin.userMonitoring.datasets'),
+      }),
+
+      columnHelper.accessor('uploaded_documents', {
+        header: t('admin.userMonitoring.documents'),
+      }),
+
+      columnHelper.accessor('uploaded_storage_bytes', {
+        header: t('admin.userMonitoring.storage'),
+        cell: ({ cell }) => formatBytes(cell.getValue(), { decimals: 1 }),
+      }),
+
       columnHelper.display({
         id: 'actions',
         header: t('admin.actions'),
@@ -393,11 +486,13 @@ function AdminUserManagement() {
           const isMe = row.original.email === userInfo?.email;
 
           return (
-            <div className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
+            <div className="flex items-center whitespace-nowrap opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
               <Button
                 variant="transparent"
                 size="icon"
                 className="border-0"
+                title={t('admin.userDetails')}
+                aria-label={t('admin.userDetails')}
                 onClick={() =>
                   navigate(
                     `${Routes.AdminUserManagement}/${row.original.email}`,
@@ -407,12 +502,25 @@ function AdminUserManagement() {
                 <LucideClipboardList />
               </Button>
 
+              <Button
+                variant="transparent"
+                size="icon"
+                className="border-0"
+                title={t('admin.openRagflow')}
+                aria-label={t('admin.openRagflow')}
+                onClick={() => openUserHome(row.original.email)}
+              >
+                <LucideExternalLink />
+              </Button>
+
               {!isMe && (
                 <>
                   <Button
                     variant="transparent"
                     size="icon"
                     className="border-0"
+                    title={t('admin.changePassword')}
+                    aria-label={t('admin.changePassword')}
                     onClick={() => {
                       setUserToMakeAction(row.original);
                       setPasswordModalOpen(true);
@@ -424,6 +532,8 @@ function AdminUserManagement() {
                     variant="danger"
                     size="icon"
                     className="border-0"
+                    title={t('admin.deleteUser')}
+                    aria-label={t('admin.deleteUser')}
                     onClick={() => {
                       setUserToMakeAction(row.original);
                       setDeleteModalOpen(true);
@@ -445,6 +555,9 @@ function AdminUserManagement() {
       userInfo?.email,
       updateUserStatusMutation,
       setSuperuserMutation,
+      updateDepartmentMutation,
+      departments,
+      openUserHome,
       navigate,
     ],
   );
@@ -469,14 +582,30 @@ function AdminUserManagement() {
     }
   }, [usersList, table]);
 
+  const totalUsers = usersList?.length ?? 0;
+  const activeUsers =
+    usersList?.filter((user) => parseBooleanish(user.is_active)).length ?? 0;
+  const createdDatasets =
+    usersList?.reduce((total, user) => total + user.created_datasets, 0) ?? 0;
+  const uploadedStorage =
+    usersList?.reduce(
+      (total, user) => total + user.uploaded_storage_bytes,
+      0,
+    ) ?? 0;
+
   return (
     <>
       <Card className="!shadow-none relative h-full bg-transparent overflow-hidden">
         <Spotlight />
 
         <ScrollArea className="size-full">
-          <CardHeader className="space-y-0 flex flex-row justify-between items-center">
-            <CardTitle>{t('admin.userManagement')}</CardTitle>
+          <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-5">
+            <div>
+              <CardTitle>{t('admin.userManagement')}</CardTitle>
+              <div className="mt-2 text-sm text-text-secondary">
+                {t('admin.userMonitoring.description')}
+              </div>
+            </div>
 
             <div className="ml-auto flex justify-end gap-4">
               <Popover>
@@ -529,6 +658,34 @@ function AdminUserManagement() {
                         </section>
                       )}
                     </EnterpriseFeature>
+
+                    <section>
+                      <div className="font-bold mb-3">
+                        {t('admin.department')}
+                      </div>
+                      <DepartmentTreeSelect
+                        departments={departments ?? []}
+                        value={
+                          departments?.find(
+                            (department) =>
+                              department.path ===
+                              table
+                                .getColumn('department_path')
+                                ?.getFilterValue(),
+                          )?.id
+                        }
+                        placeholder={t('admin.all')}
+                        onChange={(departmentId) =>
+                          table
+                            .getColumn('department_path')
+                            ?.setFilterValue(
+                              departments?.find(
+                                (department) => department.id === departmentId,
+                              )?.path ?? '',
+                            )
+                        }
+                      />
+                    </section>
 
                     <section>
                       <div className="font-bold mb-3">{t('admin.status')}</div>
@@ -590,34 +747,76 @@ function AdminUserManagement() {
                 {t('admin.newUser')}
               </Button>
             </div>
+
+            <div className="col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                [
+                  t('admin.userMonitoring.totalUsersLabel'),
+                  totalUsers,
+                  UsersRound,
+                ],
+                [
+                  t('admin.userMonitoring.activeUsersLabel'),
+                  activeUsers,
+                  UserCheck,
+                ],
+                [t('admin.userMonitoring.datasets'), createdDatasets, Library],
+                [
+                  t('admin.userMonitoring.storage'),
+                  formatBytes(uploadedStorage, { decimals: 1 }),
+                  HardDrive,
+                ],
+              ].map(([label, value, Icon]) => {
+                const MetricIcon = Icon as typeof UsersRound;
+                return (
+                  <div
+                    key={String(label)}
+                    className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
+                  >
+                    <div className="flex items-center justify-between text-xs text-text-secondary">
+                      <span>{String(label)}</span>
+                      <MetricIcon className="size-4" />
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold">
+                      {String(value)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </CardHeader>
 
           <CardContent>
-            <Table>
-              <colgroup>
-                <col width="*" />
-                <col className="w-[22%]" />
-
-                <EnterpriseFeature>
-                  {() => <col className="w-24" />}
-                </EnterpriseFeature>
-
-                <col className="w-40" />
-                <col className="w-40" />
-                <col className="w-52" />
-              </colgroup>
-
+            <Table className="min-w-[1660px]">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
+                      <TableHead
+                        key={header.id}
+                        className={cn(
+                          'whitespace-nowrap px-3',
+                          USER_TABLE_COLUMN_CLASSES[header.column.id],
+                        )}
+                      >
+                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                          <Button
+                            variant="ghost"
+                            className="-ml-3 whitespace-nowrap"
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            {flexRender(
                               header.column.columnDef.header,
                               header.getContext(),
                             )}
+                            {getSortIcon(header.column.getIsSorted())}
+                          </Button>
+                        ) : (
+                          flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )
+                        )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -629,7 +828,13 @@ function AdminUserManagement() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} className="group/row">
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          className={cn(
+                            'whitespace-nowrap px-3',
+                            USER_TABLE_COLUMN_CLASSES[cell.column.id],
+                          )}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),

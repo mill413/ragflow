@@ -56,8 +56,9 @@ export interface ICompilationTemplateBuiltin {
   config: ICompilationTemplateConfig;
 }
 
-export interface ICompilationTemplateGroup {
+export interface ICompilationTemplateGroup extends IWorkspaceResource {
   id: string;
+  tenant_id: string;
   name: string;
   description?: string;
   scope?: string;
@@ -73,3 +74,4 @@ export interface IWikiPreset {
   instruction: string;
   page_example: string;
 }
+import { IWorkspaceResource } from './workspace';

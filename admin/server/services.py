@@ -14,56 +14,326 @@
 #  limitations under the License.
 #
 
+import base64
+import binascii
 import json
 import os
 import logging
 import re
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from werkzeug.security import check_password_hash
-from common.constants import ActiveEnum
-from api.db.services import UserService
+from peewee import Case, fn
+
+from common.constants import ActiveEnum, StatusEnum
+from api.db import CanvasCategory, TenantPermission, UserTenantRole, WorkspaceType
+from api.db.services import UserService, generate_access_token
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.user_service import TenantService, UserTenantService
+from api.db.services.workspace_service import TeamService, WorkspaceAccessService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken
-from api.utils.crypt import decrypt
+from api.db.db_models import APIToken, DB, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
+from api.utils.crypt import check_password_hash, decrypt
 from api.utils import health_utils
 
 from api.common.exceptions import AdminException, UserAlreadyExistsError, UserNotFoundError
 from config import SERVICE_CONFIGS
 
 
+class OrganizationMgr:
+    SETTING_NAME = "admin.organization"
+
+    @classmethod
+    def _load(cls):
+        settings = SystemSettingsService.get_by_name(cls.SETTING_NAME)
+        if not settings:
+            return {"departments": [], "user_departments": {}, "user_metadata": {}}
+        try:
+            data = json.loads(settings[0].value)
+        except (TypeError, json.JSONDecodeError):
+            data = {}
+        return {
+            "departments": data.get("departments", []),
+            "user_departments": data.get("user_departments", {}),
+            "user_metadata": data.get("user_metadata", {}),
+        }
+
+    @classmethod
+    def _save(cls, data):
+        value = json.dumps(data, ensure_ascii=False)
+        settings = SystemSettingsService.get_by_name(cls.SETTING_NAME)
+        if settings:
+            setting = settings[0].to_dict()
+            setting["value"] = value
+            SystemSettingsService.update_by_name(cls.SETTING_NAME, setting)
+        else:
+            SystemSettingsService.save(
+                name=cls.SETTING_NAME,
+                source="admin",
+                data_type="json",
+                value=value,
+            )
+
+    @staticmethod
+    def _department_map(data):
+        return {department["id"]: department for department in data["departments"]}
+
+    @classmethod
+    def _build_path(cls, data, name, parent_id):
+        if not parent_id:
+            return name
+        parent = cls._department_map(data).get(parent_id)
+        if not parent:
+            raise AdminException("Parent department not found", 404)
+        return f'{parent["path"]}/{name}'
+
+    @classmethod
+    def list_departments(cls, query=""):
+        data = cls._load()
+        user_counts = {}
+        for department_id in data["user_departments"].values():
+            user_counts[department_id] = user_counts.get(department_id, 0) + 1
+        departments = [
+            {**department, "user_count": user_counts.get(department["id"], 0)}
+            for department in data["departments"]
+        ]
+        query = str(query or "").strip().casefold()
+        if query:
+            departments = [
+                department for department in departments if query in str(department.get("name", "")).casefold()
+            ]
+        return sorted(departments, key=lambda department: department["path"])
+
+    @classmethod
+    def ensure_department_exists(cls, department_id):
+        if department_id not in cls._department_map(cls._load()):
+            raise AdminException("Department not found", 404)
+
+    @classmethod
+    def create_department(cls, name, parent_id=None):
+        data = cls._load()
+        name = str(name or "").strip()
+        if not name:
+            raise AdminException("Department name is required", 400)
+        now = datetime.now(timezone.utc).isoformat()
+        department = {
+            "id": uuid.uuid4().hex,
+            "name": name,
+            "parent_id": parent_id or None,
+            "path": cls._build_path(data, name, parent_id),
+            "created_at": now,
+            "updated_at": now,
+        }
+        data["departments"].append(department)
+        cls._save(data)
+        return department
+
+    @classmethod
+    def update_department(cls, department_id, name, parent_id=None):
+        data = cls._load()
+        departments = cls._department_map(data)
+        department = departments.get(department_id)
+        if not department:
+            raise AdminException("Department not found", 404)
+        if parent_id == department_id:
+            raise AdminException("Department cannot be its own parent", 400)
+        if parent_id:
+            ancestor = departments.get(parent_id)
+            while ancestor:
+                if ancestor["id"] == department_id:
+                    raise AdminException("Department cannot be moved below its child", 400)
+                ancestor = departments.get(ancestor.get("parent_id"))
+        old_path = department["path"]
+        department["name"] = str(name or department["name"]).strip()
+        department["parent_id"] = parent_id or None
+        department["path"] = cls._build_path(data, department["name"], parent_id)
+        department["updated_at"] = datetime.now(timezone.utc).isoformat()
+        for child in data["departments"]:
+            if child["path"].startswith(f"{old_path}/"):
+                child["path"] = f'{department["path"]}{child["path"][len(old_path):]}'
+        cls._save(data)
+        return department
+
+    @classmethod
+    def delete_department(cls, department_id):
+        data = cls._load()
+        if department_id not in cls._department_map(data):
+            raise AdminException("Department not found", 404)
+        if any(department.get("parent_id") == department_id for department in data["departments"]):
+            raise AdminException("Department still has child departments", 409)
+        if department_id in data["user_departments"].values():
+            raise AdminException("Department still has users", 409)
+        data["departments"] = [department for department in data["departments"] if department["id"] != department_id]
+        cls._save(data)
+        return True
+
+    @classmethod
+    def set_user_department(cls, user_id, department_id=None):
+        data = cls._load()
+        if department_id and department_id not in cls._department_map(data):
+            raise AdminException("Department not found", 404)
+        if department_id:
+            data["user_departments"][user_id] = department_id
+        else:
+            data["user_departments"].pop(user_id, None)
+        cls._save(data)
+
+    @classmethod
+    def set_user_department_by_email(cls, email, department_id=None):
+        users = UserService.query_user_by_email(email)
+        if not users:
+            raise UserNotFoundError(email)
+        cls.set_user_department(users[0].id, department_id)
+
+    @classmethod
+    def get_user_departments(cls):
+        data = cls._load()
+        departments = cls._department_map(data)
+        return {
+            user_id: {
+                "department_id": department_id,
+                "department_path": departments.get(department_id, {}).get("path", ""),
+            }
+            for user_id, department_id in data["user_departments"].items()
+        }
+
+    @classmethod
+    def get_user_metadata(cls, user_id):
+        return cls._load()["user_metadata"].get(user_id, {})
+
+    @classmethod
+    def set_user_metadata(cls, user_id, metadata):
+        data = cls._load()
+        cleaned = {key: value for key, value in metadata.items() if value not in (None, "")}
+        if cleaned:
+            data["user_metadata"][user_id] = cleaned
+        else:
+            data["user_metadata"].pop(user_id, None)
+        cls._save(data)
+
+    @classmethod
+    def remove_user(cls, user_id):
+        data = cls._load()
+        data["user_departments"].pop(user_id, None)
+        data["user_metadata"].pop(user_id, None)
+        cls._save(data)
+
+
 class UserMgr:
     @staticmethod
     def get_all_users():
         users = UserService.get_all_users()
+        usage_by_user = UserMgr.get_user_usage([user.id for user in users])
+        departments_by_user = OrganizationMgr.get_user_departments()
         result = []
         for user in users:
             result.append(
                 {
+                    "id": user.id,
                     "email": user.email,
                     "nickname": user.nickname,
                     "create_date": user.create_date,
+                    "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
                     "is_superuser": user.is_superuser,
+                    "password_plain": UserMgr.get_plain_password(user.password),
+                    **departments_by_user.get(user.id, {"department_id": None, "department_path": ""}),
+                    **usage_by_user[user.id],
                 }
             )
         return result
+
+    @staticmethod
+    def get_plain_password(password):
+        prefix = "{noop}"
+        password = str(password or "")
+        if not password.startswith(prefix):
+            return ""
+        encoded = password[len(prefix) :]
+        try:
+            return base64.b64decode(encoded, validate=True).decode("utf-8")
+        except (binascii.Error, ValueError, UnicodeDecodeError):
+            return encoded
+
+    @staticmethod
+    def get_user_login_url(username):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        user = users[0]
+        if user.is_active == ActiveEnum.INACTIVE.value:
+            raise AdminException("User is inactive", 409)
+        user.access_token = generate_access_token(user.id)
+        user.save()
+        return {"url": f"/?auth={user.get_id()}", "email": user.email}
+
+    @staticmethod
+    def get_user_usage(user_ids):
+        if not user_ids:
+            return {}
+
+        valid = StatusEnum.VALID.value
+        team_counts = {user_id: 0 for user_id in user_ids}
+        for membership in UserTenant.select(UserTenant.user_id, UserTenant.tenant_id).where(
+            (UserTenant.user_id.in_(user_ids)) & (UserTenant.status == valid)
+        ):
+            if membership.tenant_id != membership.user_id:
+                team_counts[membership.user_id] += 1
+
+        dataset_usage = {
+            row["user_id"]: int(row["created_datasets"] or 0)
+            for row in (
+                Knowledgebase.select(
+                    Knowledgebase.created_by.alias("user_id"),
+                    fn.COUNT(Knowledgebase.id).alias("created_datasets"),
+                )
+                .where((Knowledgebase.created_by.in_(user_ids)) & (Knowledgebase.status == valid))
+                .group_by(Knowledgebase.created_by)
+                .dicts()
+            )
+        }
+        document_usage = {
+            row["user_id"]: row
+            for row in (
+                Document.select(
+                    Document.created_by.alias("user_id"),
+                    fn.COUNT(Document.id).alias("uploaded_documents"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("uploaded_storage_bytes"),
+                )
+                .where((Document.created_by.in_(user_ids)) & (Document.status == valid))
+                .group_by(Document.created_by)
+                .dicts()
+            )
+        }
+
+        return {
+            user_id: {
+                "teams_total": team_counts[user_id],
+                "created_datasets": dataset_usage.get(user_id, 0),
+                "uploaded_documents": int(document_usage.get(user_id, {}).get("uploaded_documents", 0) or 0),
+                "uploaded_storage_bytes": int(document_usage.get(user_id, {}).get("uploaded_storage_bytes", 0) or 0),
+            }
+            for user_id in user_ids
+        }
 
     @staticmethod
     def get_user_details(username):
         # use email to query
         users = UserService.query_user_by_email(username)
         result = []
+        departments = OrganizationMgr.get_user_departments()
         for user in users:
             result.append(
                 {
+                    "id": user.id,
                     "avatar": user.avatar,
                     "email": user.email,
+                    "nickname": user.nickname,
+                    "password_plain": UserMgr.get_plain_password(user.password),
                     "language": user.language,
                     "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
@@ -73,9 +343,53 @@ class UserMgr:
                     "is_superuser": user.is_superuser,
                     "create_date": user.create_date,
                     "update_date": user.update_date,
+                    **departments.get(user.id, {"department_id": None, "department_path": ""}),
+                    "remark": OrganizationMgr.get_user_metadata(user.id).get("remark", ""),
                 }
             )
         return result
+
+    @staticmethod
+    def update_user_profile(username, data):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        if len(users) > 1:
+            raise AdminException(f"Exist more than 1 user: {username}!")
+        user = users[0]
+
+        if "email" in data:
+            raise AdminException("Email cannot be changed", 400)
+
+        department_id = data.get("department_id")
+        if department_id:
+            OrganizationMgr.ensure_department_exists(department_id)
+        password = decrypt(data["password"]) if data.get("password") else None
+        remark = str(data.get("remark") or "").strip()
+        if len(remark) > 2000:
+            raise AdminException("Remark must be at most 2000 characters", 400)
+
+        updates = {}
+        if "nickname" in data:
+            nickname = str(data.get("nickname") or "").strip()
+            if len(nickname) > 100:
+                raise AdminException("Nickname must be at most 100 characters", 400)
+            updates["nickname"] = nickname
+        if "is_active" in data:
+            updates["is_active"] = ActiveEnum.ACTIVE.value if data["is_active"] else ActiveEnum.INACTIVE.value
+        if "is_superuser" in data:
+            updates["is_superuser"] = bool(data["is_superuser"])
+        UserService.update_user(user.id, updates)
+
+        if password is not None:
+            UserService.update_user_password(user.id, password)
+        if "department_id" in data:
+            OrganizationMgr.set_user_department(user.id, department_id)
+        if "remark" in data:
+            OrganizationMgr.set_user_metadata(user.id, {"remark": remark})
+
+        refreshed = UserService.filter_by_id(user.id)
+        return {"email": refreshed.email, "id": refreshed.id}
 
     @staticmethod
     def create_user(username, password, role="user") -> dict:
@@ -104,7 +418,10 @@ class UserMgr:
         if len(user_list) > 1:
             raise AdminException(f"Exist more than 1 user: {username}!")
         usr = user_list[0]
-        return delete_user_data(usr.id)
+        result = delete_user_data(usr.id)
+        if result.get("success"):
+            OrganizationMgr.remove_user(usr.id)
+        return result
 
     @staticmethod
     def update_user_password(username, new_password) -> str:
@@ -226,6 +543,168 @@ class UserMgr:
         return "Revoke successfully!"
 
 
+class TeamMgr:
+    MEMBER_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
+    EDITABLE_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
+
+    @staticmethod
+    def _ensure_team(team_id):
+        if WorkspaceAccessService.get_workspace_type(team_id) != WorkspaceType.TEAM:
+            raise AdminException("Team not found", 404)
+
+    @staticmethod
+    def _owner_id(team_id):
+        owner = UserTenant.select().where((UserTenant.tenant_id == team_id) & (UserTenant.role == UserTenantRole.OWNER) & (UserTenant.status == StatusEnum.VALID.value)).first()
+        if not owner:
+            raise AdminException("Team owner not found", 409)
+        return owner.user_id
+
+    @classmethod
+    def _members(cls, team_id):
+        cls._ensure_team(team_id)
+        return TeamService.list_members(cls._owner_id(team_id), team_id)
+
+    @classmethod
+    def get_all_teams(cls):
+        teams = []
+        tenants = Tenant.select().where(Tenant.status == StatusEnum.VALID.value).order_by(Tenant.name)
+        for tenant in tenants:
+            if WorkspaceAccessService.get_workspace_type(tenant.id) != WorkspaceType.TEAM:
+                continue
+            members = cls._members(tenant.id)
+            owner = next((member for member in members if member["role"] == UserTenantRole.OWNER), {})
+            dataset_query = Knowledgebase.select().where(
+                (Knowledgebase.tenant_id == tenant.id) & (Knowledgebase.permission == TenantPermission.TEAM) & (Knowledgebase.status == StatusEnum.VALID.value)
+            )
+            document_stats = (
+                Document.select(
+                    fn.COUNT(Document.id).alias("document_count"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                )
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .where(
+                    (Knowledgebase.tenant_id == tenant.id)
+                    & (Knowledgebase.permission == TenantPermission.TEAM)
+                    & (Knowledgebase.status == StatusEnum.VALID.value)
+                    & (Document.status == StatusEnum.VALID.value)
+                )
+                .dicts()
+                .first()
+                or {}
+            )
+            teams.append(
+                {
+                    "id": tenant.id,
+                    "name": tenant.name,
+                    "owner_id": owner.get("user_id", ""),
+                    "owner_email": owner.get("email", ""),
+                    "owner_name": owner.get("nickname", ""),
+                    "member_count": sum(member["role"] in cls.MEMBER_ROLES for member in members),
+                    "invite_count": sum(member["role"] == UserTenantRole.INVITE for member in members),
+                    "dataset_count": dataset_query.count(),
+                    "document_count": int(document_stats.get("document_count", 0) or 0),
+                    "storage_bytes": int(document_stats.get("storage_bytes", 0) or 0),
+                    "create_date": tenant.create_date,
+                    "update_date": tenant.update_date,
+                }
+            )
+        return teams
+
+    @classmethod
+    def create_team(cls, owner_id, name):
+        exists, user = UserService.get_by_id(owner_id)
+        if not exists or user.status != StatusEnum.VALID.value:
+            raise AdminException("Owner not found", 404)
+        try:
+            return TeamService.create(owner_id, name)
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def update_team(cls, team_id, name, owner_id=None):
+        cls._ensure_team(team_id)
+        current_owner_id = cls._owner_id(team_id)
+        try:
+            with DB.atomic():
+                team = TeamService.update(current_owner_id, team_id, name)
+                if owner_id and owner_id != current_owner_id:
+                    TeamService.transfer_ownership(current_owner_id, team_id, owner_id)
+                    team = TeamService.get(owner_id, team_id)
+                return team
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def delete_team(cls, team_id):
+        cls._ensure_team(team_id)
+        try:
+            TeamService.delete(cls._owner_id(team_id), team_id)
+            return True
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 409) from exc
+
+    @classmethod
+    def list_members(cls, team_id):
+        return cls._members(team_id)
+
+    @classmethod
+    def add_member(cls, team_id, user_id, role):
+        cls._ensure_team(team_id)
+        if role not in {UserTenantRole.ADMIN, UserTenantRole.NORMAL}:
+            raise AdminException("Role must be admin or normal", 400)
+        exists, user = UserService.get_by_id(user_id)
+        if not exists or user.status != StatusEnum.VALID.value:
+            raise AdminException("User not found", 404)
+        membership = WorkspaceAccessService.get_membership(user_id, team_id)
+        try:
+            if not membership:
+                TeamService.invite(cls._owner_id(team_id), team_id, user.email)
+            elif membership.role != UserTenantRole.INVITE:
+                raise AdminException("User is already a team member", 409)
+            TeamService.accept_invitation(user_id, team_id)
+            if role == UserTenantRole.ADMIN:
+                TeamService.update_member_role(cls._owner_id(team_id), team_id, user_id, role)
+            return True
+        except AdminException:
+            raise
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def update_member(cls, team_id, user_id, role):
+        cls._ensure_team(team_id)
+        if role not in cls.EDITABLE_ROLES:
+            raise AdminException("Invalid team role", 400)
+        membership = WorkspaceAccessService.get_membership(user_id, team_id)
+        if not membership:
+            raise AdminException("Membership not found", 404)
+        owner_id = cls._owner_id(team_id)
+        try:
+            if membership.role == UserTenantRole.INVITE:
+                TeamService.accept_invitation(user_id, team_id)
+                membership = WorkspaceAccessService.get_membership(user_id, team_id)
+            if role == UserTenantRole.OWNER:
+                TeamService.transfer_ownership(owner_id, team_id, user_id)
+            elif membership.role == UserTenantRole.OWNER:
+                raise AdminException("Transfer ownership before changing the owner role", 409)
+            else:
+                TeamService.update_member_role(cls._owner_id(team_id), team_id, user_id, role)
+            return True
+        except AdminException:
+            raise
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
+
+    @classmethod
+    def delete_member(cls, team_id, user_id):
+        cls._ensure_team(team_id)
+        try:
+            TeamService.remove_member(cls._owner_id(team_id), team_id, user_id)
+            return True
+        except (LookupError, PermissionError, ValueError) as exc:
+            raise AdminException(str(exc), 409) from exc
+
+
 class UserServiceMgr:
     @staticmethod
     def get_user_datasets(username):
@@ -237,7 +716,7 @@ class UserServiceMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         # find tenants
         usr = user_list[0]
-        tenants = TenantService.get_joined_tenants_by_user_id(usr.id)
+        tenants = TenantService.list_accessible_by_user_id(usr.id)
         tenant_ids = [m["tenant_id"] for m in tenants]
         # filter permitted kb and owned kb
         return KnowledgebaseService.get_all_kb_by_tenant_ids(tenant_ids, usr.id)
@@ -252,7 +731,7 @@ class UserServiceMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         # find tenants
         usr = user_list[0]
-        tenants = TenantService.get_joined_tenants_by_user_id(usr.id)
+        tenants = TenantService.list_accessible_by_user_id(usr.id)
         tenant_ids = [m["tenant_id"] for m in tenants]
         # filter permitted agents and owned agents
         res = UserCanvasService.get_all_agents_by_tenant_ids(tenant_ids, usr.id)
@@ -265,8 +744,186 @@ class UserServiceMgr:
             raise UserNotFoundError(email)
         user: Any = users[0]
 
-        tenants: list[dict[str, Any]] = UserTenantService.get_tenants_by_user_id(user.id)
+        tenants: list[dict[str, Any]] = UserTenantService.list_memberships_by_user_id(user.id)
         return tenants
+
+
+class ResourceMgr:
+    """Read-only global resource inventory for the admin console."""
+
+    RESOURCE_SPECS = {
+        "dataset": {
+            "model": Knowledgebase,
+            "name_field": Knowledgebase.name,
+            "workspace_field": Knowledgebase.tenant_id,
+            "permission_field": Knowledgebase.permission,
+            "creator_field": Knowledgebase.created_by,
+        },
+        "chat": {
+            "model": Dialog,
+            "name_field": Dialog.name,
+            "workspace_field": Dialog.tenant_id,
+        },
+        "agent": {
+            "model": UserCanvas,
+            "name_field": UserCanvas.title,
+            "workspace_field": UserCanvas.user_id,
+            "permission_field": UserCanvas.permission,
+            "extra_filter": UserCanvas.canvas_category == CanvasCategory.Agent.value,
+        },
+        "search": {
+            "model": Search,
+            "name_field": Search.name,
+            "workspace_field": Search.tenant_id,
+            "creator_field": Search.created_by,
+        },
+        "memory": {
+            "model": Memory,
+            "name_field": Memory.name,
+            "workspace_field": Memory.tenant_id,
+            "permission_field": Memory.permissions,
+        },
+    }
+
+    @classmethod
+    def list_resources(cls, resource_type: str, page: int, page_size: int, keywords: str = "") -> dict[str, Any]:
+        spec = cls.RESOURCE_SPECS.get(resource_type)
+        if not spec:
+            raise AdminException(f"Unsupported resource type: {resource_type}")
+
+        model = spec["model"]
+        name_field = spec["name_field"]
+        workspace_field = spec["workspace_field"]
+        permission_field = spec.get("permission_field")
+        creator_field = spec.get("creator_field")
+
+        fields = [
+            model.id,
+            name_field.alias("name"),
+            workspace_field.alias("workspace_id"),
+            model.create_date,
+            model.update_date,
+        ]
+        if permission_field is not None:
+            fields.append(permission_field.alias("permission"))
+        if creator_field is not None:
+            fields.append(creator_field.alias("creator_id"))
+        if resource_type == "dataset":
+            fields.extend([Knowledgebase.doc_num, Knowledgebase.chunk_num, Knowledgebase.token_num])
+
+        query = model.select(*fields)
+        if hasattr(model, "status"):
+            query = query.where(model.status == StatusEnum.VALID.value)
+        if spec.get("extra_filter") is not None:
+            query = query.where(spec["extra_filter"])
+        keywords = str(keywords or "").strip().lower()
+        if keywords:
+            query = query.where(fn.LOWER(name_field).contains(keywords))
+
+        total = query.count()
+        rows = list(query.order_by(model.create_time.desc()).paginate(page, page_size).dicts())
+        cls._attach_ownership(rows)
+        if resource_type == "dataset":
+            cls._attach_dataset_metrics(rows)
+        for row in rows:
+            if not row.get("permission"):
+                row["permission"] = (
+                    TenantPermission.ME.value if row["workspace_type"] == "personal" else TenantPermission.TEAM.value
+                )
+
+        return {"resources": rows, "total": total}
+
+    @staticmethod
+    def _attach_dataset_metrics(rows):
+        if not rows:
+            return
+        dataset_ids = [row["id"] for row in rows]
+        metrics = {
+            row["dataset_id"]: row
+            for row in (
+                Document.select(
+                    Document.kb_id.alias("dataset_id"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                    fn.COALESCE(fn.SUM(Case(None, [(Document.progress < 0, 1)], 0)), 0).alias("failed_documents"),
+                    fn.COALESCE(
+                        fn.SUM(Case(None, [((Document.progress >= 0) & (Document.progress < 1), 1)], 0)),
+                        0,
+                    ).alias("processing_documents"),
+                )
+                .where((Document.kb_id.in_(dataset_ids)) & (Document.status == StatusEnum.VALID.value))
+                .group_by(Document.kb_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            metric = metrics.get(row["id"], {})
+            row["storage_bytes"] = int(metric.get("storage_bytes", 0) or 0)
+            row["failed_documents"] = int(metric.get("failed_documents", 0) or 0)
+            row["processing_documents"] = int(metric.get("processing_documents", 0) or 0)
+
+    @staticmethod
+    def list_failed_documents(page, page_size, keywords=""):
+        valid = StatusEnum.VALID.value
+        query = (
+            Document.select(
+                Document.id,
+                Document.name,
+                Document.kb_id.alias("dataset_id"),
+                Knowledgebase.name.alias("dataset_name"),
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                Document.progress_msg.alias("failure_reason"),
+                Document.size,
+                Document.create_date,
+            )
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .where((Document.status == valid) & (Knowledgebase.status == valid) & (Document.progress < 0))
+        )
+        keywords = str(keywords or "").strip().lower()
+        if keywords:
+            query = query.where(
+                fn.LOWER(Document.name).contains(keywords)
+                | fn.LOWER(Knowledgebase.name).contains(keywords)
+                | fn.LOWER(Document.progress_msg).contains(keywords)
+            )
+        total = query.count()
+        rows = list(query.order_by(Document.create_time.desc()).paginate(page, page_size).dicts())
+        ResourceMgr._attach_ownership(rows)
+        return {"documents": rows, "total": total}
+
+    @staticmethod
+    def _attach_ownership(rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+
+        workspace_ids = {row["workspace_id"] for row in rows}
+        creator_ids = {row.get("creator_id") for row in rows if row.get("creator_id")}
+        user_ids = workspace_ids | creator_ids
+
+        users = {
+            user.id: user
+            for user in User.select(User.id, User.nickname, User.email).where(
+                (User.id.in_(user_ids)) & (User.status == StatusEnum.VALID.value)
+            )
+        }
+        tenants = {
+            tenant.id: tenant.name
+            for tenant in Tenant.select(Tenant.id, Tenant.name).where(
+                (Tenant.id.in_(workspace_ids)) & (Tenant.status == StatusEnum.VALID.value)
+            )
+        }
+
+        for row in rows:
+            workspace_id = row["workspace_id"]
+            personal_owner = users.get(workspace_id)
+            if personal_owner:
+                row["workspace_type"] = "personal"
+                row["workspace_name"] = personal_owner.nickname or personal_owner.email
+            else:
+                row["workspace_type"] = "team"
+                row["workspace_name"] = tenants.get(workspace_id) or workspace_id
+
+            creator = users.get(row.get("creator_id"))
+            row["creator_name"] = (creator.nickname or creator.email) if creator else ""
 
 
 class ServiceMgr:
@@ -329,6 +986,78 @@ class ServiceMgr:
     @staticmethod
     def restart_service(service_id: int):
         raise AdminException("restart_service: not implemented")
+
+
+class MonitoringMgr:
+    """Build a real-time operational overview without persisting snapshots."""
+
+    @staticmethod
+    def get_summary():
+        valid = StatusEnum.VALID.value
+        users_total = User.select().where(User.status == valid).count()
+        active_users = User.select().where((User.status == valid) & (User.is_active == ActiveEnum.ACTIVE.value)).count()
+        teams_total = (
+            Tenant.select()
+            .where((Tenant.status == valid) & ~(Tenant.id.in_(User.select(User.id))))
+            .count()
+        )
+        datasets_total = Knowledgebase.select().where(Knowledgebase.status == valid).count()
+        documents = Document.select().where(Document.status == valid)
+        documents_total = documents.count()
+        storage_bytes = documents.select(fn.COALESCE(fn.SUM(Document.size), 0)).scalar() or 0
+        failed_documents = documents.where(Document.progress < 0).count()
+        processing_documents = documents.where((Document.progress >= 0) & (Document.progress < 1)).count()
+        pending_tasks = Task.select().where((Task.progress >= 0) & (Task.progress < 1)).count()
+        chats_total = Dialog.select().where(Dialog.status == valid).count()
+        agents_total = UserCanvas.select().where(UserCanvas.canvas_category == CanvasCategory.Agent.value).count()
+
+        return {
+            "users_total": users_total,
+            "active_users": active_users,
+            "teams_total": teams_total,
+            "datasets_total": datasets_total,
+            "documents_total": documents_total,
+            "storage_bytes": int(storage_bytes),
+            "failed_documents": failed_documents,
+            "processing_documents": processing_documents,
+            "pending_tasks": pending_tasks,
+            "chats_total": chats_total,
+            "agents_total": agents_total,
+            "storage_distribution": MonitoringMgr.get_storage_distribution(),
+        }
+
+    @staticmethod
+    def get_storage_distribution(limit=8):
+        valid = StatusEnum.VALID.value
+        dataset_counts = {
+            row["workspace_id"]: row["datasets_total"]
+            for row in (
+                Knowledgebase.select(
+                    Knowledgebase.tenant_id.alias("workspace_id"),
+                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
+                )
+                .where(Knowledgebase.status == valid)
+                .group_by(Knowledgebase.tenant_id)
+                .dicts()
+            )
+        }
+        rows = list(
+            Document.select(
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                fn.COUNT(Document.id).alias("documents_total"),
+                fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+            )
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .where((Document.status == valid) & (Knowledgebase.status == valid))
+            .group_by(Knowledgebase.tenant_id)
+            .order_by(fn.SUM(Document.size).desc())
+            .limit(limit)
+            .dicts()
+        )
+        ResourceMgr._attach_ownership(rows)
+        for row in rows:
+            row["datasets_total"] = dataset_counts.get(row["workspace_id"], 0)
+        return rows
 
 
 class SettingsMgr:

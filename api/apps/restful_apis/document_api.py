@@ -45,8 +45,8 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
-from api.common.check_team_permission import check_kb_team_permission
 from api.db.services.task_service import TaskService, cancel_all_task_of
 from api.utils.api_utils import (
     construct_json_result,
@@ -54,12 +54,14 @@ from api.utils.api_utils import (
     get_error_data_result,
     get_result,
     get_json_result,
+    get_resource_in_use_result,
     server_error_response,
     add_tenant_id_to_kwargs,
     get_request_json,
     get_error_argument_result,
     check_duplicate_ids,
 )
+from common.exceptions import ResourceInUseException
 from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.validation_utils import (
     UpdateDocumentReq,
@@ -222,8 +224,8 @@ async def update_document(tenant_id, dataset_id, document_id):
     req = await get_request_json()
 
     # Verify ownership and existence of dataset and document
-    if not KnowledgebaseService.query(id=dataset_id, tenant_id=tenant_id):
-        return get_error_data_result(message="You don't own the dataset.")
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
+        return get_error_data_result(message="No authorization.")
     e, kb = KnowledgebaseService.get_by_id(dataset_id)
     if not e:
         return get_error_data_result(message="Can't find this dataset!")
@@ -269,6 +271,12 @@ async def update_document(tenant_id, dataset_id, document_id):
         old_parser_config = dict(doc.parser_config or {})
         req["parser_config"].update(update_doc_req.parser_config.ext)
         parser_config_template_group_touched = _normalize_parser_config_compilation_template_group_ids(req["parser_config"])
+        group_ids = WorkspaceAccessService.extract_reference_ids(
+            req["parser_config"],
+            {"compilation_template_group_id", "compilation_template_group_ids"},
+        )
+        if not WorkspaceAccessService.can_reference_compilation_template_groups(current_user.id, kb.tenant_id, group_ids):
+            return get_error_data_result(message="Compilation templates and datasets must belong to the same workspace.")
         parser_config_template_group_changed = parser_config_template_group_touched and _compilation_template_group_id_changed(old_parser_config, req["parser_config"])
         DocumentService.update_parser_config(doc.id, req["parser_config"])
 
@@ -377,7 +385,7 @@ async def metadata_batch_update(dataset_id, tenant_id):
       200:
         description: Metadata updated successfully.
     """
-    if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
         return get_error_data_result(message=f"You don't own the dataset {dataset_id}. ")
 
     req = await get_request_json()
@@ -501,7 +509,7 @@ async def upload_document(dataset_id, tenant_id):
         logging.error(f"Can't find the dataset with ID {dataset_id}!")
         return get_error_data_result(message=f"Can't find the dataset with ID {dataset_id}!", code=RetCode.DATA_ERROR)
 
-    if not check_kb_team_permission(kb, tenant_id):
+    if not KnowledgebaseService.modifiable(kb.id, tenant_id):
         logging.error("No authorization.")
         return get_error_data_result(message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
@@ -1153,7 +1161,7 @@ async def delete_documents(tenant_id, dataset_id):
 
     try:
         # Validate dataset exists and user has permission
-        if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
+        if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
             return get_error_data_result(message=f"You don't own the dataset {dataset_id}. ")
 
         # Get documents to delete
@@ -1186,6 +1194,8 @@ async def delete_documents(tenant_id, dataset_id):
             return get_error_data_result(message=str(errors))
 
         return get_result(data={"deleted": len(doc_ids)})
+    except ResourceInUseException as e:
+        return get_resource_in_use_result(e)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")
@@ -1233,8 +1243,8 @@ async def update_metadata_config(tenant_id, dataset_id, document_id):
         description: Document updated successfully.
     """
     # Verify ownership and existence of dataset
-    if not KnowledgebaseService.query(id=dataset_id, tenant_id=tenant_id):
-        return get_error_data_result(message="You don't own the dataset.")
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
+        return get_error_data_result(message="No authorization.")
 
     # Verify document exists in the dataset
     doc = DocumentService.query(id=document_id, kb_id=dataset_id)
@@ -1369,7 +1379,7 @@ async def update_metadata(tenant_id, dataset_id):
         description: Metadata updated successfully.
     """
     # Verify ownership of dataset
-    if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
         return get_error_data_result(message=f"You don't own the dataset {dataset_id}.")
 
     # Get request body
@@ -1451,7 +1461,8 @@ async def ingest(tenant_id):
 
 def _run_sync(user_id: str, req):
     for doc_id in req["doc_ids"]:
-        if not DocumentService.accessible(doc_id, user_id):
+        kb_id = DocumentService.get_knowledgebase_id(doc_id)
+        if not kb_id or not KnowledgebaseService.modifiable(kb_id, user_id):
             return RetCode.AUTHENTICATION_ERROR, "No authorization."
 
     kb_table_num_map = {}
@@ -1544,7 +1555,7 @@ async def parse_documents(tenant_id, dataset_id):
       200:
         description: Successful operation.
     """
-    if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
         return get_error_data_result(message=f"You don't own the dataset {dataset_id}.")
 
     req = await get_request_json()
@@ -1657,7 +1668,7 @@ async def stop_parse_documents(tenant_id, dataset_id):
       200:
         description: Successful operation.
     """
-    if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
         return get_error_data_result(message=f"You don't own the dataset {dataset_id}.")
 
     req = await get_request_json()
@@ -1980,8 +1991,8 @@ async def batch_update_document_status(tenant_id, dataset_id):
         return get_error_argument_result(message=f'"Status" must be either 0 or 1:{status}!')
 
     # Verify dataset ownership
-    if not KnowledgebaseService.query(id=dataset_id, tenant_id=tenant_id):
-        return get_error_data_result(message="You don't own the dataset.")
+    if not KnowledgebaseService.modifiable(kb_id=dataset_id, user_id=tenant_id):
+        return get_error_data_result(message="No authorization.")
 
     e, kb = KnowledgebaseService.get_by_id(dataset_id)
     if not e:

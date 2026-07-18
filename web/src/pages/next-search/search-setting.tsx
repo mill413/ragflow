@@ -14,6 +14,7 @@ import {
 } from '@/components/metadata-filter';
 import { ModelTreeSelect } from '@/components/model-tree-select';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
+import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
 import { SingleFormSlider } from '@/components/ui/dual-range-slider';
 import {
@@ -29,7 +30,6 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { Spin } from '@/components/ui/spin';
 import { Switch } from '@/components/ui/switch';
 import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
-import { useFetchTenantInfo } from '@/hooks/use-user-setting-request';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X } from 'lucide-react';
@@ -111,6 +111,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
 }) => {
   const [width0, setWidth0] = useState('w-[440px]');
   const { search_config } = data || {};
+  const readOnly = data?.capabilities?.update !== true;
   const { llm_setting } = search_config || {};
   const formMethods = useForm<SearchSettingFormData>({
     resolver: zodResolver(SearchSettingFormSchema),
@@ -251,10 +252,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
 
   const { updateSearch } = useUpdateSearch();
   const [formSubmitLoading, setFormSubmitLoading] = useState(false);
-  const { data: systemSetting } = useFetchTenantInfo();
-  const onSubmit = async (
-    formData: IUpdateSearchProps & { tenant_id: string },
-  ) => {
+  const onSubmit = async (formData: IUpdateSearchProps) => {
     try {
       setFormSubmitLoading(true);
       const {
@@ -266,7 +264,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
         maxTokensEnabled: _maxTokensEnabled,
         ...other_formdata
       } = formData as IUpdateSearchProps & {
-        tenant_id: string;
         temperatureEnabled?: boolean;
         topPEnabled?: boolean;
         presencePenaltyEnabled?: boolean;
@@ -314,7 +311,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
           rerank_id: use_rerank ? rerank_id : '',
           llm_setting: { ...llmSetting },
         },
-        tenant_id: systemSetting.tenant_id,
       });
       setOpen(false);
     } catch (error) {
@@ -353,10 +349,10 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
             className="space-y-6"
           >
             <AvatarNameDescription avatarField="avatar" />
-
             <KnowledgeBaseFormField
               name="search_config.kb_ids"
               required
+              workspaceId={data.tenant_id}
             ></KnowledgeBaseFormField>
             <MetadataFilter prefix="search_config."></MetadataFilter>
             <FormField
@@ -451,6 +447,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
                       <FormControl>
                         <ModelTreeSelect
                           modelTypes={['rerank']}
+                          ownerTenantId={data.tenant_id}
                           {...field}
                           placeholder={t('chat.model')}
                         />
@@ -519,6 +516,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               // ></LlmSettingFieldItems>
               <LlmSettingFieldItems
                 prefix="search_config.llm_setting"
+                ownerTenantId={data.tenant_id}
                 showFields={[
                   'temperature',
                   'top_p',
@@ -587,18 +585,20 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               >
                 {t('search.cancelText')}
               </Button>
-              <Button
-                data-testid="search-settings-save"
-                type="submit"
-                disabled={formSubmitLoading}
-              >
-                {formSubmitLoading && (
-                  <div className="size-4">
-                    <Spin size="small" />
-                  </div>
-                )}
-                {t('search.okText')}
-              </Button>
+              <ReadOnlySaveTooltip readOnly={readOnly}>
+                <Button
+                  data-testid="search-settings-save"
+                  type="submit"
+                  disabled={formSubmitLoading || readOnly}
+                >
+                  {formSubmitLoading && (
+                    <div className="size-4">
+                      <Spin size="small" />
+                    </div>
+                  )}
+                  {t('search.okText')}
+                </Button>
+              </ReadOnlySaveTooltip>
             </div>
           </form>
         </Form>

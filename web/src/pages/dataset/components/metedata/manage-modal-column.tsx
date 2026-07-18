@@ -73,14 +73,12 @@ export const useMetadataColumns = ({
   };
 
   const saveEditedValue = useCallback(
-    (
-      newValue?: {
-        field: string;
-        value: string;
-        newValue: string;
-        valueType: MetadataValueType;
-      },
-    ) => {
+    (newValue?: {
+      field: string;
+      value: string;
+      newValue: string;
+      valueType: MetadataValueType;
+    }) => {
       const realValue = newValue || editingValue;
       if (realValue) {
         setTableData((prev) => {
@@ -308,7 +306,8 @@ export const useMetadataColumns = ({
                         handleEditValue(
                           row.getValue('field'),
                           value,
-                          row.original.valueType || metadataValueTypeEnum.string,
+                          row.original.valueType ||
+                            metadataValueTypeEnum.string,
                         )
                       }
                       aria-label="Edit"
@@ -316,7 +315,7 @@ export const useMetadataColumns = ({
                       <div className="flex gap-1 items-center">
                         <div className="text-sm truncate max-w-24">
                           {row.original.valueType === metadataValueTypeEnum.time
-                            ? formatDate(value, 'DD/MM/YYYY HH:mm:ss')
+                            ? formatDate(value)
                             : value}
                         </div>
                         {isDeleteSingleValue && (

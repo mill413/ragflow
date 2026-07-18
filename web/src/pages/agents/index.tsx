@@ -11,9 +11,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
+import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { useFetchAgentListByPage } from '@/hooks/use-agent-request';
-import { Routes } from '@/routes';
+import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { t } from 'i18next';
 import { pick } from 'lodash';
 import { Clipboard, ClipboardPlus, FileInput, Plus } from 'lucide-react';
@@ -28,6 +29,11 @@ import { useHandleImportJsonFile } from './use-import-json';
 import { useRenameAgent } from './use-rename-agent';
 
 export default function Agents() {
+  const {
+    canRunInWritableWorkspace,
+    runInWritableWorkspace,
+    workspaceDialogProps,
+  } = useWritableWorkspaceAction('create_collaborative_resource');
   const {
     data,
     pagination,
@@ -64,6 +70,19 @@ export default function Agents() {
     hideFileUploadModal,
   } = useHandleImportJsonFile();
 
+  const openCreateAgent = useCallback(
+    () => runInWritableWorkspace(showCreatingModal),
+    [runInWritableWorkspace, showCreatingModal],
+  );
+  const openAgentTemplates = useCallback(
+    () => runInWritableWorkspace(navigateToAgentTemplates),
+    [navigateToAgentTemplates, runInWritableWorkspace],
+  );
+  const openImportAgent = useCallback(
+    () => runInWritableWorkspace(handleImportJson),
+    [handleImportJson, runInWritableWorkspace],
+  );
+
   const filters = useSelectFilters();
 
   const handlePageChange = useCallback(
@@ -76,15 +95,22 @@ export default function Agents() {
   const isCreate = searchUrl.get('isCreate') === 'true';
 
   useEffect(() => {
-    if (isCreate) {
-      showCreatingModal();
+    if (isCreate && canRunInWritableWorkspace) {
+      openCreateAgent();
       searchUrl.delete('isCreate');
       setSearchUrl(searchUrl);
     }
-  }, [isCreate, showCreatingModal, searchUrl, setSearchUrl]);
+  }, [
+    isCreate,
+    canRunInWritableWorkspace,
+    openCreateAgent,
+    searchUrl,
+    setSearchUrl,
+  ]);
 
   return (
     <>
+      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -100,38 +126,40 @@ export default function Agents() {
               onChange={handleFilterSubmit}
               value={filterValue}
             >
-              <DropdownMenu>
-                <DropdownMenuTrigger data-testid="create-agent" asChild>
-                  <Button>
-                    <Plus className="size-[1em]" />
-                    {t('flow.createGraph')}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent data-testid="agent-create-menu">
-                  <DropdownMenuItem
-                    justifyBetween={false}
-                    onClick={showCreatingModal}
-                  >
-                    <Clipboard />
-                    {t('flow.createFromBlank')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    justifyBetween={false}
-                    onClick={() => navigateToAgentTemplates()}
-                  >
-                    <ClipboardPlus />
-                    {t('flow.createFromTemplate')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    data-testid="agent-import-json"
-                    justifyBetween={false}
-                    onClick={handleImportJson}
-                  >
-                    <FileInput />
-                    {t('flow.importJsonFile')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {canRunInWritableWorkspace && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger data-testid="create-agent" asChild>
+                    <Button>
+                      <Plus className="size-[1em]" />
+                      {t('flow.createGraph')}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent data-testid="agent-create-menu">
+                    <DropdownMenuItem
+                      justifyBetween={false}
+                      onClick={openCreateAgent}
+                    >
+                      <Clipboard />
+                      {t('flow.createFromBlank')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      justifyBetween={false}
+                      onClick={openAgentTemplates}
+                    >
+                      <ClipboardPlus />
+                      {t('flow.createFromTemplate')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-testid="agent-import-json"
+                      justifyBetween={false}
+                      onClick={openImportAgent}
+                    >
+                      <FileInput />
+                      {t('flow.importJsonFile')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </ListFilterBar>
           </header>
 
@@ -165,7 +193,11 @@ export default function Agents() {
                 className="w-[480px] p-14"
                 isSearch
                 type={EmptyCardType.Agent}
-                onClick={() => showCreatingModal()}
+                onClick={
+                  canRunInWritableWorkspace
+                    ? () => openCreateAgent()
+                    : undefined
+                }
               />
             </div>
           )}
@@ -183,37 +215,42 @@ export default function Agents() {
             tabIndex={-1}
             // onClick={() => showCreatingModal()}
           >
-            <ul className="flex flex-col gap-y-5 text-text-secondary text-sm pt-5">
-              <li data-testid="agents-empty-create">
-                <Button
-                  variant="static"
-                  size="auto"
-                  onClick={showCreatingModal}
-                >
-                  <Clipboard className="size-[1em]" />
-                  {t('flow.createFromBlank')}
-                </Button>
-              </li>
+            {canRunInWritableWorkspace && (
+              <ul className="flex flex-col gap-y-5 text-text-secondary text-sm pt-5">
+                <li data-testid="agents-empty-create">
+                  <Button
+                    variant="static"
+                    size="auto"
+                    onClick={openCreateAgent}
+                  >
+                    <Clipboard className="size-[1em]" />
+                    {t('flow.createFromBlank')}
+                  </Button>
+                </li>
 
-              <li>
-                <Button
-                  asLink
-                  variant="static"
-                  size="auto"
-                  to={Routes.AgentTemplates}
-                >
-                  <ClipboardPlus className="size-[1em]" />
-                  {t('flow.createFromTemplate')}
-                </Button>
-              </li>
+                <li>
+                  <Button
+                    variant="static"
+                    size="auto"
+                    onClick={openAgentTemplates}
+                  >
+                    <ClipboardPlus className="size-[1em]" />
+                    {t('flow.createFromTemplate')}
+                  </Button>
+                </li>
 
-              <li>
-                <Button variant="static" size="auto" onClick={handleImportJson}>
-                  <FileInput className="size-[1em]" />
-                  {t('flow.importJsonFile')}
-                </Button>
-              </li>
-            </ul>
+                <li>
+                  <Button
+                    variant="static"
+                    size="auto"
+                    onClick={openImportAgent}
+                  >
+                    <FileInput className="size-[1em]" />
+                    {t('flow.importJsonFile')}
+                  </Button>
+                </li>
+              </ul>
+            )}
           </EmptyAppCard>
         </article>
       )}

@@ -1,11 +1,14 @@
 import { MessageType } from '@/constants/chat';
 import { IAttachment } from '@/hooks/use-send-message';
+import { IWorkspaceResource } from './workspace';
 
 export interface IDocumentDownloadInfo {
   doc_id: string;
   filename: string;
   mime_type: string;
   size?: number;
+  workspace_id?: string;
+  agent_id?: string;
 }
 
 export interface PromptConfig {
@@ -50,7 +53,7 @@ export interface Variable {
   model_type?: string;
 }
 
-export interface IDialog {
+export interface IDialog extends IWorkspaceResource {
   create_date: string;
   create_time: number;
   description: string;
@@ -102,6 +105,8 @@ export interface IConversation {
   update_date: string;
   update_time: number;
   is_new: true;
+  user_id?: string;
+  capabilities?: { read: boolean; update: boolean; delete: boolean };
 }
 
 export interface Message {

@@ -117,12 +117,16 @@ function AdminSandboxSettings() {
       config: Record<string, unknown>;
     }) => (await setSandboxConfig(params)).data,
     onSuccess: () => {
-      message.success('Sandbox configuration updated successfully');
+      message.success(t('admin.sandboxSettingsPage.configurationUpdated'));
       // queryClient.invalidateQueries({ queryKey: ['admin/getSandboxConfig'] });
       refetchConfig();
     },
     onError: (error: Error) => {
-      message.error(`Failed to update configuration: ${error.message}`);
+      message.error(
+        t('admin.sandboxSettingsPage.configurationUpdateFailed', {
+          message: error.message,
+        }),
+      );
     },
   });
 
@@ -256,6 +260,35 @@ function AdminSandboxSettings() {
     });
   };
 
+  const getProviderName = (provider: AdminService.SandboxProvider) =>
+    t(`admin.sandboxSettingsPage.providers.${provider.id}.name`, {
+      defaultValue: provider.name,
+    });
+
+  const getProviderDescription = (provider: AdminService.SandboxProvider) =>
+    t(`admin.sandboxSettingsPage.providers.${provider.id}.description`, {
+      defaultValue: provider.description,
+    });
+
+  const getProviderTag = (tag: string) =>
+    t(`admin.sandboxSettingsPage.tags.${tag}`, { defaultValue: tag });
+
+  const getFieldLabel = (
+    fieldName: string,
+    schema: AdminService.SandboxConfigField,
+  ) =>
+    t(`admin.sandboxSettingsPage.fields.${fieldName}`, {
+      defaultValue: schema.label || fieldName.replaceAll('_', ' '),
+    });
+
+  const getFieldPlaceholder = (
+    fieldName: string,
+    schema: AdminService.SandboxConfigField,
+  ) =>
+    t(`admin.sandboxSettingsPage.fieldPlaceholders.${fieldName}`, {
+      defaultValue: schema.placeholder || '',
+    });
+
   // Render config field based on schema
   const renderConfigField = (
     fieldName: string,
@@ -269,7 +302,7 @@ function AdminSandboxSettings() {
           return (
             <Textarea
               id={fieldName}
-              placeholder={schema.placeholder}
+              placeholder={getFieldPlaceholder(fieldName, schema)}
               value={value as string}
               disabled={schema.readonly}
               onChange={(e) =>
@@ -285,7 +318,7 @@ function AdminSandboxSettings() {
               type="password"
               id={fieldName}
               className="h-10"
-              placeholder={schema.placeholder}
+              placeholder={getFieldPlaceholder(fieldName, schema)}
               value={value as string}
               disabled={schema.readonly}
               onChange={(e) =>
@@ -298,7 +331,7 @@ function AdminSandboxSettings() {
           <Input
             id={fieldName}
             className="h-10"
-            placeholder={schema.placeholder}
+            placeholder={getFieldPlaceholder(fieldName, schema)}
             value={value as string}
             disabled={schema.readonly}
             onChange={(e) => handleConfigValueChange(fieldName, e.target.value)}
@@ -346,6 +379,21 @@ function AdminSandboxSettings() {
       return true;
     }
     return Boolean(schema.required);
+  };
+
+  const renderFieldBounds = (schema: AdminService.SandboxConfigField) => {
+    if (schema.type !== 'integer') return null;
+    if (schema.min === undefined && schema.max === undefined) return null;
+
+    return (
+      <p className="text-xs text-text-disabled">
+        {schema.min !== undefined &&
+          t('admin.sandboxSettingsPage.minimum', { value: schema.min })}
+        {schema.min !== undefined && schema.max !== undefined && ' • '}
+        {schema.max !== undefined &&
+          t('admin.sandboxSettingsPage.maximum', { value: schema.max })}
+      </p>
+    );
   };
 
   const getFieldPriority = (
@@ -491,11 +539,11 @@ function AdminSandboxSettings() {
 
                               <div className="flex-1 min-w-0">
                                 <h4 className="text-sm font-medium">
-                                  {provider.name}
+                                  {getProviderName(provider)}
                                 </h4>
 
                                 <p className="text-xs text-text-secondary mt-1">
-                                  {provider.description}
+                                  {getProviderDescription(provider)}
                                 </p>
 
                                 <div className="flex flex-wrap gap-1 mt-2">
@@ -504,7 +552,7 @@ function AdminSandboxSettings() {
                                       key={tag}
                                       className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-bg-card text-text-secondary"
                                     >
-                                      {tag}
+                                      {getProviderTag(tag)}
                                     </span>
                                   ))}
                                 </div>
@@ -528,14 +576,18 @@ function AdminSandboxSettings() {
 
                                 {t(
                                   'admin.sandboxSettingsPage.namedProviderConfiguration',
-                                  { name: selectedProviderData.name },
+                                  {
+                                    name: getProviderName(selectedProviderData),
+                                  },
                                 )}
                               </h3>
 
                               <p className="text-sm text-text-secondary">
                                 {t(
                                   'admin.sandboxSettingsPage.namedProviderConfigurationDescription',
-                                  { name: selectedProviderData.name },
+                                  {
+                                    name: getProviderName(selectedProviderData),
+                                  },
                                 )}
                               </p>
                             </div>
@@ -588,7 +640,9 @@ function AdminSandboxSettings() {
                                 <CollapsibleTrigger className="group w-full text-left">
                                   <div className="flex items-center justify-between rounded-md border border-border-button px-4 py-3 transition-colors hover:bg-bg-card">
                                     <h4 className="text-sm font-medium text-text-primary">
-                                      Runtime Settings
+                                      {t(
+                                        'admin.sandboxSettingsPage.runtimeSettings',
+                                      )}
                                     </h4>
                                     <LucideChevronDown className="size-4 text-text-secondary transition-transform group-data-[state=open]:rotate-180" />
                                   </div>
@@ -615,8 +669,7 @@ function AdminSandboxSettings() {
                                                   *
                                                 </span>
                                               )}
-                                              {schema.label ||
-                                                fieldName.replaceAll('_', ' ')}
+                                              {getFieldLabel(fieldName, schema)}
                                             </Label>
 
                                             <div>
@@ -626,19 +679,7 @@ function AdminSandboxSettings() {
                                               )}
                                             </div>
 
-                                            {schema.type === 'integer' &&
-                                              (schema.min !== undefined ||
-                                                schema.max !== undefined) && (
-                                                <p className="text-xs text-text-disabled">
-                                                  {schema.min !== undefined &&
-                                                    `Minimum: ${schema.min}`}
-                                                  {schema.min !== undefined &&
-                                                    schema.max !== undefined &&
-                                                    ' • '}
-                                                  {schema.max !== undefined &&
-                                                    `Maximum: ${schema.max}`}
-                                                </p>
-                                              )}
+                                            {renderFieldBounds(schema)}
                                           </div>
                                         ),
                                       )}
@@ -652,11 +693,14 @@ function AdminSandboxSettings() {
                                               <span className="text-state-error">
                                                 *
                                               </span>
-                                              Authentication
+                                              {t(
+                                                'admin.sandboxSettingsPage.authentication',
+                                              )}
                                             </h4>
                                             <p className="text-xs text-text-secondary mt-1">
-                                              Choose one authentication method
-                                              for the SSH connection.
+                                              {t(
+                                                'admin.sandboxSettingsPage.authenticationDescription',
+                                              )}
                                             </p>
                                           </div>
 
@@ -673,10 +717,14 @@ function AdminSandboxSettings() {
                                           >
                                             <TabsList className="grid w-full grid-cols-2">
                                               <TabsTrigger value="password">
-                                                Password
+                                                {t(
+                                                  'admin.sandboxSettingsPage.passwordAuthentication',
+                                                )}
                                               </TabsTrigger>
                                               <TabsTrigger value="private_key">
-                                                Private Key
+                                                {t(
+                                                  'admin.sandboxSettingsPage.privateKeyAuthentication',
+                                                )}
                                               </TabsTrigger>
                                             </TabsList>
 
@@ -702,11 +750,10 @@ function AdminSandboxSettings() {
                                                           *
                                                         </span>
                                                       )}
-                                                      {schema.label ||
-                                                        fieldName.replaceAll(
-                                                          '_',
-                                                          ' ',
-                                                        )}
+                                                      {getFieldLabel(
+                                                        fieldName,
+                                                        schema,
+                                                      )}
                                                     </Label>
 
                                                     <div>
@@ -742,11 +789,10 @@ function AdminSandboxSettings() {
                                                           *
                                                         </span>
                                                       )}
-                                                      {schema.label ||
-                                                        fieldName.replaceAll(
-                                                          '_',
-                                                          ' ',
-                                                        )}
+                                                      {getFieldLabel(
+                                                        fieldName,
+                                                        schema,
+                                                      )}
                                                     </Label>
 
                                                     <div>
@@ -759,9 +805,9 @@ function AdminSandboxSettings() {
                                                     {fieldName ===
                                                       'passphrase' && (
                                                       <p className="text-xs text-text-secondary">
-                                                        Only required when the
-                                                        private key itself is
-                                                        encrypted.
+                                                        {t(
+                                                          'admin.sandboxSettingsPage.encryptedPrivateKeyTip',
+                                                        )}
                                                       </p>
                                                     )}
                                                   </div>
@@ -776,12 +822,14 @@ function AdminSandboxSettings() {
                                         <div className="space-y-4 rounded-md border border-border-button p-4">
                                           <div>
                                             <h4 className="text-sm font-medium text-text-primary">
-                                              Execution
+                                              {t(
+                                                'admin.sandboxSettingsPage.execution',
+                                              )}
                                             </h4>
                                             <p className="text-xs text-text-secondary mt-1">
-                                              Configure the remote workspace and
-                                              language runtimes used on the SSH
-                                              host.
+                                              {t(
+                                                'admin.sandboxSettingsPage.executionDescription',
+                                              )}
                                             </p>
                                           </div>
 
@@ -803,11 +851,10 @@ function AdminSandboxSettings() {
                                                       *
                                                     </span>
                                                   )}
-                                                  {schema.label ||
-                                                    fieldName.replaceAll(
-                                                      '_',
-                                                      ' ',
-                                                    )}
+                                                  {getFieldLabel(
+                                                    fieldName,
+                                                    schema,
+                                                  )}
                                                 </Label>
 
                                                 <div>
@@ -838,27 +885,14 @@ function AdminSandboxSettings() {
                                             *
                                           </span>
                                         )}
-                                        {schema.label ||
-                                          fieldName.replaceAll('_', ' ')}
+                                        {getFieldLabel(fieldName, schema)}
                                       </Label>
 
                                       <div>
                                         {renderConfigField(fieldName, schema)}
                                       </div>
 
-                                      {schema.type === 'integer' &&
-                                        (schema.min !== undefined ||
-                                          schema.max !== undefined) && (
-                                          <p className="text-xs text-text-disabled">
-                                            {schema.min !== undefined &&
-                                              `Minimum: ${schema.min}`}
-                                            {schema.min !== undefined &&
-                                              schema.max !== undefined &&
-                                              ' • '}
-                                            {schema.max !== undefined &&
-                                              `Maximum: ${schema.max}`}
-                                          </p>
-                                        )}
+                                      {renderFieldBounds(schema)}
                                     </div>
                                   ))}
                                 </CollapsibleContent>
@@ -871,12 +905,14 @@ function AdminSandboxSettings() {
                                   <div className="flex items-center justify-between rounded-md border border-border-button px-4 py-3 transition-colors hover:bg-bg-card">
                                     <div>
                                       <h4 className="text-sm font-medium">
-                                        Deployment Defaults
+                                        {t(
+                                          'admin.sandboxSettingsPage.deploymentDefaults',
+                                        )}
                                       </h4>
                                       <p className="text-xs text-text-secondary mt-1">
-                                        Read-only values loaded from the current
-                                        environment for the default
-                                        executor-manager deployment.
+                                        {t(
+                                          'admin.sandboxSettingsPage.deploymentDefaultsDescription',
+                                        )}
                                       </p>
                                     </div>
                                     <LucideChevronDown className="size-4 text-text-secondary transition-transform group-data-[state=open]:rotate-180" />
@@ -894,27 +930,14 @@ function AdminSandboxSettings() {
                                           htmlFor={fieldName}
                                           className="text-text-primary"
                                         >
-                                          {schema.label ||
-                                            fieldName.replaceAll('_', ' ')}
+                                          {getFieldLabel(fieldName, schema)}
                                         </Label>
 
                                         <div>
                                           {renderConfigField(fieldName, schema)}
                                         </div>
 
-                                        {schema.type === 'integer' &&
-                                          (schema.min !== undefined ||
-                                            schema.max !== undefined) && (
-                                            <p className="text-xs text-text-disabled">
-                                              {schema.min !== undefined &&
-                                                `Minimum: ${schema.min}`}
-                                              {schema.min !== undefined &&
-                                                schema.max !== undefined &&
-                                                ' • '}
-                                              {schema.max !== undefined &&
-                                                `Maximum: ${schema.max}`}
-                                            </p>
-                                          )}
+                                        {renderFieldBounds(schema)}
                                       </div>
                                     ),
                                   )}

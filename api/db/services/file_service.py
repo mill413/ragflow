@@ -673,8 +673,29 @@ class FileService(CommonService):
         return settings.STORAGE_IMPL.put(bname, location, blob)
 
     @classmethod
+    def ensure_document_files_not_referenced(cls, doc_ids):
+        from api.db.services.resource_reference_service import ResourceReferenceService
+
+        if not doc_ids:
+            return
+        file_ids = {
+            relation["file_id"]
+            for relation in File2DocumentService.get_by_document_ids(doc_ids)
+            if relation.get("file_id")
+        }
+        if not file_ids:
+            return
+        files = [
+            file
+            for file in cls.get_by_ids(list(file_ids))
+            if file.source_type == FileSource.KNOWLEDGEBASE
+        ]
+        ResourceReferenceService.ensure_not_referenced("file", files)
+
+    @classmethod
     @DB.connection_context()
     def delete_docs(cls, doc_ids, tenant_id):
+        cls.ensure_document_files_not_referenced(doc_ids)
         root_folder = FileService.get_root_folder(tenant_id)
         pf_id = root_folder["id"]
         FileService.init_knowledgebase_docs(pf_id, tenant_id)
@@ -834,9 +855,11 @@ class FileService(CommonService):
         return structured(file.filename, filename_type(file.filename), file.read(), file.content_type)
 
     @staticmethod
-    def get_files(files: Union[None, list[dict]], raw: bool = False, layout_recognize: str = None) -> Union[list[str], tuple[list[str], list[dict]]]:
+    def get_files(files: Union[None, list[dict]], raw: bool = False, layout_recognize: str = None, tenant_id: str = None) -> Union[list[str], tuple[list[str], list[dict]]]:
         if not files:
             return []
+        if tenant_id and any(not isinstance(file, dict) or not file.get("id") or file.get("created_by") != tenant_id for file in files):
+            raise PermissionError("Files can only be read from the same workspace.")
 
         def image_to_base64(file):
             return "data:{};base64,{}".format(file["mime_type"], base64.b64encode(FileService.get_blob(file["created_by"], file["id"])).decode("utf-8"))
