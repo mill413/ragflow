@@ -246,24 +246,35 @@ const AdminNavigationLayout = () => {
                     <span className="ml-3 whitespace-nowrap">{it.name}</span>
                   )}
                 </NavLink>
-                {it.children && !sidebarCollapsed && (
-                  <ul className="mt-1 space-y-1 border-l border-border-button ml-6 pl-3">
+                {it.children && (
+                  <ul
+                    className={cn(
+                      'mt-1 space-y-1',
+                      !sidebarCollapsed &&
+                        'ml-6 border-l border-border-button pl-3',
+                    )}
+                  >
                     {it.children.map((child) => (
                       <li key={child.path}>
                         <NavLink
                           to={child.path}
+                          title={sidebarCollapsed ? child.name : undefined}
+                          aria-label={child.name}
                           className={({ isActive }) =>
                             cn(
                               'flex w-full items-center rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors',
                               'hover:bg-bg-card hover:text-text-primary focus-visible:bg-bg-card focus-visible:text-text-primary',
+                              sidebarCollapsed && 'justify-center px-0',
                               isActive && 'bg-bg-card text-text-primary',
                             )
                           }
                         >
                           {child.icon}
-                          <span className="ml-3 whitespace-nowrap">
-                            {child.name}
-                          </span>
+                          {!sidebarCollapsed && (
+                            <span className="ml-3 whitespace-nowrap">
+                              {child.name}
+                            </span>
+                          )}
                         </NavLink>
                       </li>
                     ))}
