@@ -261,6 +261,19 @@ def get_dataset(dataset_id: str, tenant_id: str):
     response_data = remap_dictionary_keys(kb.to_dict())
     response_data["size"] = DocumentService.get_total_size_by_kb_id(dataset_id)
     response_data["connectors"] = list(Connector2KbService.list_connectors(dataset_id))
+    workspace_exists, workspace = TenantService.get_by_id(kb.tenant_id)
+    creator_exists, creator = UserService.get_by_id(kb.created_by)
+    response_data.update(
+        {
+            "nickname": workspace.name if workspace_exists else "",
+            "tenant_avatar": "",
+            "workspace_name": workspace.name if workspace_exists else "",
+            "workspace_type": WorkspaceAccessService.get_workspace_type(kb.tenant_id),
+            "creator_name": creator.nickname if creator_exists else "",
+            "creator_avatar": creator.avatar if creator_exists else "",
+            "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
+        }
+    )
     return True, response_data
 
 

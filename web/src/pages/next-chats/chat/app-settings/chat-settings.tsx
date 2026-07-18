@@ -211,7 +211,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
                   </Button>
                   <SavingButton
                     loading={loading}
-                    readOnly={data?.capabilities?.update === false}
+                    readOnly={data?.capabilities?.update !== true}
                   ></SavingButton>
                 </div>
               </form>

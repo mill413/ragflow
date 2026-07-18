@@ -48,7 +48,7 @@ export default function MemoryMessage() {
     } as unknown as IMemory,
   });
   const { data } = useFetchMemoryBaseConfiguration();
-  const readOnly = data?.capabilities?.update === false;
+  const readOnly = data?.capabilities?.update !== true;
   const { onMemoryRenameOk, loading } = useUpdateMemoryConfig();
 
   useEffect(() => {

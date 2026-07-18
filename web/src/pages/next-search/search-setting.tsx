@@ -113,7 +113,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
 }) => {
   const [width0, setWidth0] = useState('w-[440px]');
   const { search_config } = data || {};
-  const readOnly = data?.capabilities?.update === false;
+  const readOnly = data?.capabilities?.update !== true;
   const { llm_setting } = search_config || {};
   const formMethods = useForm<SearchSettingFormData>({
     resolver: zodResolver(SearchSettingFormSchema),

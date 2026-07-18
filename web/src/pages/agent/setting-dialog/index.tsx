@@ -21,7 +21,7 @@ export function SettingDialog({ hideModal }: IModalProps<any>) {
   const { t } = useTranslation();
   const { setAgent } = useSetAgent();
   const { data } = useFetchAgent();
-  const readOnly = data?.capabilities?.update === false;
+  const readOnly = data?.capabilities?.update !== true;
 
   const submit = useCallback(
     async (values: SettingFormSchemaType) => {

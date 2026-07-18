@@ -15,7 +15,7 @@ export function GeneralSavingButton() {
   const { id: kb_id } = useParams();
   const { t } = useTranslation();
   const { knowledgeBase } = useKnowledgeBaseContext();
-  const readOnly = knowledgeBase?.capabilities?.update === false;
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
 
   const defaultValues = useMemo(
     () => form.formState.defaultValues ?? {},
@@ -62,7 +62,7 @@ export function SavingButton() {
   const { id: kb_id } = useParams();
   const { t } = useTranslation();
   const { knowledgeBase } = useKnowledgeBaseContext();
-  const readOnly = knowledgeBase?.capabilities?.update === false;
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
 
   return (
     <ReadOnlySaveTooltip readOnly={readOnly}>
