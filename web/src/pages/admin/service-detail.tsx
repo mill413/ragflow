@@ -36,6 +36,17 @@ function ServiceDetail({ content }: ServiceDetailProps) {
       content.every(isPlainObject)
     ) {
       const headers = Object.keys(content[0]);
+      const numericHeaders = new Set(
+        headers.filter((header) => {
+          const values = content
+            .map((row) => row[header])
+            .filter((value) => value !== null && value !== undefined);
+          return (
+            values.length > 0 &&
+            values.every((value) => typeof value === 'number')
+          );
+        }),
+      );
       const filteredRows = content.filter((row) =>
         headers.every((header) =>
           matchesSelectedFilter(
@@ -75,7 +86,12 @@ function ServiceDetail({ content }: ServiceDetailProps) {
             <TableHeader>
               <TableRow>
                 {headers.map((header) => (
-                  <TableHead key={header}>
+                  <TableHead
+                    key={header}
+                    className={
+                      numericHeaders.has(header) ? 'text-center' : undefined
+                    }
+                  >
                     <Button
                       variant="ghost"
                       onClick={() =>
@@ -103,7 +119,14 @@ function ServiceDetail({ content }: ServiceDetailProps) {
               {rows.map((item, index) => (
                 <TableRow key={(item.id as string) ?? index}>
                   {headers.map((header: string) => (
-                    <TableCell key={header}>{item[header] as string}</TableCell>
+                    <TableCell
+                      key={header}
+                      className={
+                        numericHeaders.has(header) ? 'text-center' : undefined
+                      }
+                    >
+                      {item[header] as string}
+                    </TableCell>
                   ))}
                 </TableRow>
               ))}

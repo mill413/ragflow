@@ -87,6 +87,7 @@ type SortState = { key: string; direction: 'asc' | 'desc' };
 type ResourceColumn = {
   key: string;
   label: string;
+  numeric?: boolean;
   render: (resource: AdminService.ManagedResourceItem) => ReactNode;
 };
 type ResourceTableRow = {
@@ -420,24 +421,28 @@ export default function AdminResources() {
           {
             key: 'doc_num',
             label: t('admin.knowledgeMonitoring.documentCount'),
+            numeric: true,
             render: (resource) => resource.doc_num ?? 0,
           },
           {
             key: 'chunk_num',
             label: t('admin.knowledgeMonitoring.chunkCount'),
+            numeric: true,
             render: (resource) => resource.chunk_num ?? 0,
           },
           {
             key: 'storage_bytes',
             label: t('admin.knowledgeMonitoring.storage'),
+            numeric: true,
             render: (resource) =>
               formatBytes(resource.storage_bytes ?? 0, { decimals: 1 }),
           },
           {
             key: 'failed_documents',
             label: t('admin.knowledgeMonitoring.parseStatus'),
+            numeric: true,
             render: (resource) => (
-              <div className="flex gap-2">
+              <div className="flex justify-center gap-2">
                 <Badge
                   variant={
                     (resource.failed_documents ?? 0) > 0
@@ -465,11 +470,13 @@ export default function AdminResources() {
           {
             key: 'dataset_count',
             label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
             render: (resource) => resource.dataset_count ?? 0,
           },
           {
             key: 'session_count',
             label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
             render: (resource) => resource.session_count ?? 0,
           },
         ];
@@ -478,11 +485,13 @@ export default function AdminResources() {
           {
             key: 'dataset_count',
             label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
             render: (resource) => resource.dataset_count ?? 0,
           },
           {
             key: 'document_count',
             label: t('admin.resourceManagementPage.referencedDocuments'),
+            numeric: true,
             render: (resource) => resource.document_count ?? 0,
           },
           {
@@ -514,6 +523,7 @@ export default function AdminResources() {
           {
             key: 'session_count',
             label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
             render: (resource) => resource.session_count ?? 0,
           },
         ];
@@ -522,6 +532,7 @@ export default function AdminResources() {
           {
             key: 'memory_type',
             label: t('admin.resourceManagementPage.memoryType'),
+            numeric: true,
             render: (resource) => resource.memory_type ?? '-',
           },
           {
@@ -532,6 +543,7 @@ export default function AdminResources() {
           {
             key: 'memory_size',
             label: t('admin.resourceManagementPage.capacity'),
+            numeric: true,
             render: (resource) =>
               formatBytes(resource.memory_size ?? 0, { decimals: 1 }),
           },
@@ -546,6 +558,7 @@ export default function AdminResources() {
           {
             key: 'size',
             label: t('admin.knowledgeMonitoring.fileSize'),
+            numeric: true,
             render: (resource) =>
               formatBytes(resource.size ?? 0, { decimals: 1 }),
           },
@@ -822,7 +835,10 @@ export default function AdminResources() {
                       )}
                     </TableHead>
                     {resourceColumns.map((column) => (
-                      <TableHead key={column.key}>
+                      <TableHead
+                        key={column.key}
+                        className={column.numeric ? 'text-center' : undefined}
+                      >
                         {sortButton(
                           column.label,
                           resourceSort,
@@ -955,7 +971,12 @@ export default function AdminResources() {
                             </Badge>
                           </TableCell>
                           {resourceColumns.map((column) => (
-                            <TableCell key={column.key}>
+                            <TableCell
+                              key={column.key}
+                              className={
+                                column.numeric ? 'text-center' : undefined
+                              }
+                            >
                               {column.render(resource)}
                             </TableCell>
                           ))}
@@ -1063,7 +1084,7 @@ export default function AdminResources() {
                             'workspace_name',
                           )}
                         </TableHead>
-                        <TableHead>
+                        <TableHead className="text-center">
                           {sortButton(
                             t('admin.knowledgeMonitoring.fileSize'),
                             failureSort,
@@ -1123,7 +1144,7 @@ export default function AdminResources() {
                                 -{document.workspace_name}
                               </Badge>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="text-center">
                               {formatBytes(document.size ?? 0, { decimals: 1 })}
                             </TableCell>
                             <TableCell className="max-w-md whitespace-normal text-state-error">

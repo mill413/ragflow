@@ -433,25 +433,25 @@ export default function AdminTeams() {
                 <TableHead>
                   {sortButton(t('admin.teamManagement.owner'), 'owner_email')}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.members'),
                     'member_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.datasets'),
                     'dataset_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.documents'),
                     'document_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.storage'),
                     'storage_bytes',
@@ -485,7 +485,7 @@ export default function AdminTeams() {
                       {team.owner_email}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     {team.member_count}
                     {team.invite_count > 0 && (
                       <Badge className="ml-2" variant="outline">
@@ -495,9 +495,15 @@ export default function AdminTeams() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell>{team.dataset_count}</TableCell>
-                  <TableCell>{team.document_count}</TableCell>
-                  <TableCell>{formatBytes(team.storage_bytes)}</TableCell>
+                  <TableCell className="text-center">
+                    {team.dataset_count}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {team.document_count}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {formatBytes(team.storage_bytes)}
+                  </TableCell>
                   <TableCell>{formatDate(team.update_date) || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">

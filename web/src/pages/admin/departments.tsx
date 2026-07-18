@@ -306,7 +306,7 @@ export default function AdminDepartments() {
                     {getSortIcon(sort.key === 'path' ? sort.direction : false)}
                   </Button>
                 </TableHead>
-                <TableHead className="w-[13%]">
+                <TableHead className="w-[13%] text-center">
                   <Button
                     variant="ghost"
                     onClick={() => toggleSort('user_count')}
@@ -360,7 +360,9 @@ export default function AdminDepartments() {
                         </div>
                       </TableCell>
                       <TableCell>{department.path}</TableCell>
-                      <TableCell>{department.user_count ?? 0}</TableCell>
+                      <TableCell className="text-center">
+                        {department.user_count ?? 0}
+                      </TableCell>
                       <TableCell>
                         {department.created_at
                           ? formatDate(department.created_at)

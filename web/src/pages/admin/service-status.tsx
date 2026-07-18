@@ -76,6 +76,7 @@ const SERVICE_TYPE_FILTER_OPTIONS = [
   { value: 'retrieval', label: 'retrieval' },
   { value: 'message_queue', label: 'message_queue' },
 ];
+const NUMERIC_SERVICE_COLUMNS = new Set(['id', 'port']);
 
 function AdminServiceStatus() {
   const { t } = useTranslation();
@@ -268,7 +269,14 @@ function AdminServiceStatus() {
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        className={
+                          NUMERIC_SERVICE_COLUMNS.has(header.column.id)
+                            ? 'text-center'
+                            : undefined
+                        }
+                      >
                         {header.isPlaceholder ? null : header.column.getCanSort() ? (
                           <Button
                             variant="ghost"
@@ -296,7 +304,14 @@ function AdminServiceStatus() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} className="group/row">
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          className={
+                            NUMERIC_SERVICE_COLUMNS.has(cell.column.id)
+                              ? 'text-center'
+                              : undefined
+                          }
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),

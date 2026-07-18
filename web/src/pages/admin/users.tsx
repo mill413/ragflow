@@ -141,6 +141,12 @@ const USER_TABLE_COLUMN_CLASSES: Record<string, string> = {
   uploaded_storage_bytes: 'w-28 min-w-28 text-center',
   actions: 'w-44 min-w-44',
 };
+const NUMERIC_USER_COLUMNS = new Set([
+  'teams_total',
+  'created_datasets',
+  'uploaded_documents',
+  'uploaded_storage_bytes',
+]);
 
 function isInteractiveTarget(target: EventTarget | null) {
   return (
@@ -747,7 +753,12 @@ function AdminUserManagement() {
                           {header.isPlaceholder ? null : header.column.getCanSort() ? (
                             <Button
                               variant="ghost"
-                              className="-ml-3 whitespace-nowrap"
+                              className={cn(
+                                'whitespace-nowrap',
+                                NUMERIC_USER_COLUMNS.has(header.column.id)
+                                  ? 'w-full justify-center'
+                                  : '-ml-3',
+                              )}
                               onClick={header.column.getToggleSortingHandler()}
                             >
                               {flexRender(
