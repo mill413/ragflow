@@ -22,10 +22,12 @@ from api.apps import current_user, login_required
 from api.db import InputType
 from api.db.services.connector_service import ConnectorService, SyncLogsService
 from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.workspace_service import WorkspaceAccessService
-from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json
+from api.utils.api_utils import get_data_error_result, get_json_result, get_request_json, get_resource_in_use_result
 from api.utils.pagination_utils import validate_rest_api_page_size
 from common.constants import RetCode, SUPPORTED_DATA_SOURCES, TaskStatus
+from common.exceptions import ResourceInUseException
 from common.misc_utils import get_uuid
 
 LOGGER = logging.getLogger(__name__)
@@ -219,5 +221,9 @@ def rm_connector(connector_id):
     if conn is None:
         return get_data_error_result(message="Can't find this Connector!")
 
-    ConnectorService.delete_connector(connector_id)
-    return get_json_result(data=True)
+    try:
+        ResourceReferenceService.ensure_not_referenced("data_source", [connector])
+        ConnectorService.delete_connector(connector_id)
+        return get_json_result(data=True)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)

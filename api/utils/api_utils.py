@@ -256,6 +256,18 @@ def get_json_result(code: RetCode = RetCode.SUCCESS, message="success", data=Non
     return _safe_jsonify(response)
 
 
+def get_resource_in_use_result(error):
+    return get_json_result(
+        code=RetCode.CONFLICT,
+        message="Resource is referenced and cannot be deleted.",
+        data={
+            "reason": "resource_in_use",
+            "targets": error.targets,
+            "references": error.references,
+        },
+    )
+
+
 def build_error_result(code=RetCode.FORBIDDEN, message="success"):
     response = {"code": code, "message": message}
     response = _safe_jsonify(response)

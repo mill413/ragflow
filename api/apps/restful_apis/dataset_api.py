@@ -18,8 +18,9 @@ import logging
 from peewee import OperationalError
 from quart import request
 from common.constants import RetCode
+from common.exceptions import ResourceInUseException
 from api.apps import login_required, current_user
-from api.utils.api_utils import get_error_argument_result, get_error_data_result, get_json_result, get_result, add_tenant_id_to_kwargs
+from api.utils.api_utils import add_tenant_id_to_kwargs, get_error_argument_result, get_error_data_result, get_json_result, get_resource_in_use_result, get_result
 from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.validation_utils import (
     CreateDatasetReq,
@@ -208,6 +209,8 @@ async def delete(tenant_id):
             return get_result(data=result)
         else:
             return get_error_data_result(message=result)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except OperationalError as e:
         logging.exception(e)
         return get_error_data_result(message="Database operation failed")

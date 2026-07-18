@@ -16,6 +16,7 @@
 from api.apps import current_user
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.memory_service import MemoryService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService
@@ -270,6 +271,7 @@ async def update_memory(memory_id: str, new_memory_setting: dict):
 
 async def delete_memory(memory_id):
     memory = _require_memory_access(memory_id, manage=True)
+    ResourceReferenceService.ensure_not_referenced("memory", [memory])
     MemoryService.delete_memory(memory_id)
     if MessageService.has_index(memory.tenant_id, memory_id):
         MessageService.delete_message({"memory_id": memory_id}, memory.tenant_id, memory_id)

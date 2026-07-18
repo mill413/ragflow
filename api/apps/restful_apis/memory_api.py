@@ -19,9 +19,9 @@ import time
 
 from quart import request, g
 from common.constants import RetCode
-from common.exceptions import ArgumentException, NotFoundException
+from common.exceptions import ArgumentException, NotFoundException, ResourceInUseException
 from api.apps import login_required, current_user
-from api.utils.api_utils import validate_request, get_request_json, get_error_argument_result, get_json_result
+from api.utils.api_utils import validate_request, get_request_json, get_error_argument_result, get_json_result, get_resource_in_use_result
 from api.apps.services import memory_api_service
 from api.db.joint_services.tenant_model_service import ensure_tenant_model_ids_for_params
 from api.db.services.memory_service import MemoryService
@@ -124,6 +124,8 @@ async def delete_memory(memory_id):
     except NotFoundException as not_found_exception:
         logging.error(not_found_exception)
         return get_json_result(code=RetCode.NOT_FOUND, message=str(not_found_exception))
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.error(e)
         return get_json_result(code=RetCode.SERVER_ERROR, message="Internal server error")

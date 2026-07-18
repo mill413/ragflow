@@ -26,6 +26,7 @@ from api.db.services.document_service import DocumentService, queue_raptor_o_gra
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.tenant_model_service import TenantModelService
@@ -172,6 +173,8 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
         kb_id_instance_pairs.append((kb_id, kb))
     if len(error_kb_ids) > 0:
         return False, f"""User '{user_id}' lacks permission for datasets: '{", ".join(error_kb_ids)}'"""
+
+    ResourceReferenceService.ensure_not_referenced("dataset", [kb for _, kb in kb_id_instance_pairs])
 
     errors = []
     success_count = 0

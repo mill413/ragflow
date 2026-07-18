@@ -22,15 +22,18 @@ from api.db.services.compilation_template_group_service import (
     CompilationTemplateGroupService,
     GroupValidationError,
 )
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import (
     get_data_error_result,
     get_json_result,
     get_request_json,
+    get_resource_in_use_result,
     server_error_response,
     validate_request,
 )
 from api.utils.pagination_utils import validate_rest_api_page_size
+from common.exceptions import ResourceInUseException
 
 
 _GROUP_NAME_MAX = 128
@@ -188,9 +191,12 @@ def delete(group_id: str) -> Response:
         exists, stored_group = CompilationTemplateGroupService.get_by_id(group_id)
         if not exists or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, stored_group):
             return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
+        ResourceReferenceService.ensure_not_referenced("compilation_template", [stored_group])
         ok = CompilationTemplateGroupService.delete_group(group_id, stored_group.tenant_id)
         if not ok:
             return get_data_error_result(message=f"Cannot find compilation template group {group_id}.")
         return get_json_result(data=True)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as exc:
         return server_error_response(exc)

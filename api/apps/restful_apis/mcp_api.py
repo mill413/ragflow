@@ -19,12 +19,14 @@ from quart import Response, request
 from api.apps import current_user, login_required
 from api.db.db_models import MCPServer
 from api.db.services.mcp_server_service import MCPServerService
+from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
-from api.utils.api_utils import get_data_error_result, get_json_result, get_mcp_tools, get_request_json, server_error_response, validate_request
+from api.utils.api_utils import get_data_error_result, get_json_result, get_mcp_tools, get_request_json, get_resource_in_use_result, server_error_response, validate_request
 from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.web_utils import get_float, safe_json_parse
 from common.constants import VALID_MCP_SERVER_TYPES
+from common.exceptions import ResourceInUseException
 from common.mcp_tool_call_conn import MCPToolCallSession, close_multiple_mcp_toolcall_sessions
 from common.misc_utils import get_uuid, thread_pool_exec
 from common.ssrf_guard import assert_url_is_safe, pin_dns_global
@@ -262,10 +264,13 @@ async def rm(mcp_id: str) -> Response:
         e, mcp_server = MCPServerService.get_by_id(mcp_id)
         if not e or not WorkspaceAccessService.can_manage_workspace_resource(current_user.id, mcp_server):
             return get_data_error_result(message=f"Cannot find MCP server {mcp_id} for user {current_user.id}")
+        ResourceReferenceService.ensure_not_referenced("mcp", [mcp_server])
         if not MCPServerService.delete_by_ids([mcp_id]):
             return get_data_error_result(message=f"Failed to delete MCP servers {[mcp_id]}")
 
         return get_json_result(data=True)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         return server_error_response(e)
 
