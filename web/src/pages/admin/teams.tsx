@@ -549,9 +549,9 @@ export default function AdminTeams() {
         <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
             <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
-            <SheetDescription>
-              {selectedTeamDetails?.owner_name} /{' '}
-              {selectedTeamDetails?.owner_email}
+            <SheetDescription className="font-mono text-xs">
+              {t('admin.teamManagement.teamId')}：
+              {selectedTeamDetails?.id || '-'}
             </SheetDescription>
           </SheetHeader>
           <ScrollArea className="h-[calc(100vh-97px)] px-6">
@@ -559,12 +559,16 @@ export default function AdminTeams() {
               <div className="mb-3 text-sm font-medium">
                 {t('admin.teamManagement.teamInformation')}
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  [t('admin.teamManagement.teamId'), selectedTeamDetails?.id],
                   [
                     t('admin.teamManagement.owner'),
-                    selectedTeamDetails?.owner_name || '-',
+                    [
+                      selectedTeamDetails?.owner_name,
+                      selectedTeamDetails?.owner_email,
+                    ]
+                      .filter(Boolean)
+                      .join(' / ') || '-',
                   ],
                   [
                     t('admin.teamManagement.members'),
@@ -595,19 +599,19 @@ export default function AdminTeams() {
                     formatDate(selectedTeamDetails?.update_date) || '-',
                   ],
                 ].map(([label, value]) => (
-                  <div key={String(label)} className="min-w-0">
+                  <div
+                    key={String(label)}
+                    className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
+                  >
                     <div className="text-xs text-text-secondary">{label}</div>
                     <div
-                      className="mt-1 truncate text-sm text-text-primary"
+                      className="mt-2 truncate text-sm font-medium text-text-primary"
                       title={String(value || '')}
                     >
                       {value}
                     </div>
                   </div>
                 ))}
-              </div>
-              <div className="mt-4 text-xs text-text-secondary">
-                {selectedTeamDetails?.owner_email}
               </div>
             </section>
             <div className="flex items-center justify-between py-4">
