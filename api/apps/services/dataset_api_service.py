@@ -29,7 +29,7 @@ from api.db.services.knowledgebase_service import KnowledgebaseService, validate
 from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.tenant_model_service import TenantModelService
-from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db.services.user_service import TenantService, UserService
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
 from common.constants import FileSource, StatusEnum
@@ -557,7 +557,7 @@ def delete_knowledge_graph(dataset_id: str, tenant_id: str):
     :param tenant_id: tenant ID
     :return: (success, result) or (success, error_message)
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
     from rag.nlp import search
@@ -589,7 +589,7 @@ def run_index(dataset_id: str, tenant_id: str, index_type: str):
 
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -682,11 +682,10 @@ def list_tags(dataset_id: str, tenant_id: str):
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
         return False, "No authorization."
 
-    tenants = UserTenantService.list_memberships_by_user_id(tenant_id)
-    tags = []
-    for tenant in tenants:
-        tags += settings.retriever.all_tags(tenant["tenant_id"], [dataset_id])
-    return True, tags
+    exists, knowledgebase = KnowledgebaseService.get_by_id(dataset_id)
+    if not exists:
+        return False, "Invalid Dataset ID"
+    return True, settings.retriever.all_tags(knowledgebase.tenant_id, [dataset_id])
 
 
 def aggregate_tags(dataset_ids: list[str], tenant_id: str):
@@ -789,7 +788,7 @@ def delete_tags(dataset_id: str, tenant_id: str, tags: list[str]):
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -920,7 +919,7 @@ def delete_index(dataset_id: str, tenant_id: str, index_type: str, wipe: bool = 
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -977,7 +976,7 @@ def rename_tag(dataset_id: str, tenant_id: str, from_tag: str, to_tag: str):
     if not dataset_id:
         return False, 'Lack of "Dataset ID"'
 
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
 
     ok, kb = KnowledgebaseService.get_by_id(dataset_id)
@@ -1004,7 +1003,6 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
     from api.db.services.doc_metadata_service import DocMetadataService
     from api.db.services.llm_service import LLMBundle
     from api.db.services.search_service import SearchService
-    from api.db.services.user_service import UserTenantService
     from common.constants import LLMType
     from common.metadata_utils import apply_meta_data_filter
     from rag.app.tag import label_question
@@ -1049,6 +1047,10 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         if not search_detail:
             logging.warning("search config not found: search_id=%s", search_id)
             return False, "Invalid search_id"
+        if not WorkspaceAccessService.can_read_shared_resource(tenant_id, search_detail):
+            return False, "No authorization for search application."
+        if search_detail.get("tenant_id") != kb.tenant_id:
+            return False, "Search application and dataset must belong to the same workspace."
         search_config = search_detail.get("search_config", {})
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
@@ -1068,15 +1070,15 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
             if chat_id:
-                chat_model_config = resolve_model_config(tenant_id, LLMType.CHAT, search_config["chat_id"])
+                chat_model_config = resolve_model_config(kb.tenant_id, LLMType.CHAT, search_config["chat_id"])
             else:
-                chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+                chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kb.tenant_id, chat_model_config)
     else:
         meta_data_filter = req.get("meta_data_filter") or {}
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
-            chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+            chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kb.tenant_id, chat_model_config)
 
     if meta_data_filter:
         local_doc_ids = await apply_meta_data_filter(
@@ -1089,14 +1091,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
             metas_loader=lambda: DocMetadataService.get_flatted_meta_by_kbs([dataset_id]),
         )
 
-    tenant_ids = []
-    tenants = UserTenantService.query(user_id=tenant_id)
-    for tenant in tenants:
-        if KnowledgebaseService.query(tenant_id=tenant.tenant_id, id=dataset_id):
-            tenant_ids.append(tenant.tenant_id)
-            break
-    else:
-        return False, "Only owner of dataset authorized for this operation."
+    tenant_ids = [kb.tenant_id]
 
     _question = question
     if langs:
@@ -1137,7 +1132,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
 
     if use_kg:
         try:
-            default_chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
+            default_chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
             ck = await settings.kg_retriever.retrieval(_question, tenant_ids, [dataset_id], embd_mdl, LLMBundle(kb.tenant_id, default_chat_model_config))
             if ck["content_with_weight"]:
                 ranks["chunks"].insert(0, ck)
@@ -1387,7 +1382,6 @@ async def search_datasets(tenant_id: str, req: dict):
     from api.db.services.doc_metadata_service import DocMetadataService
     from api.db.services.llm_service import LLMBundle
     from api.db.services.search_service import SearchService
-    from api.db.services.user_service import UserTenantService
     from common.constants import LLMType
     from common.metadata_utils import apply_meta_data_filter
     from rag.app.tag import label_question
@@ -1438,6 +1432,10 @@ async def search_datasets(tenant_id: str, req: dict):
         if not search_detail:
             logging.warning("search config not found: search_id=%s", search_id)
             return False, "Invalid search_id"
+        if not WorkspaceAccessService.can_read_shared_resource(tenant_id, search_detail):
+            return False, "No authorization for search application."
+        if any(kb.tenant_id != search_detail.get("tenant_id") for kb in kbs):
+            return False, "Search application and datasets must belong to the same workspace."
         search_config = search_detail.get("search_config", {})
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
@@ -1457,15 +1455,15 @@ async def search_datasets(tenant_id: str, req: dict):
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
             if chat_id:
-                chat_model_config = resolve_model_config(tenant_id, LLMType.CHAT, search_config["chat_id"])
+                chat_model_config = resolve_model_config(search_detail["tenant_id"], LLMType.CHAT, search_config["chat_id"])
             else:
-                chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+                chat_model_config = get_tenant_default_model_by_type(search_detail["tenant_id"], LLMType.CHAT)
+            chat_mdl = LLMBundle(search_detail["tenant_id"], chat_model_config)
     else:
         meta_data_filter = req.get("meta_data_filter") or {}
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
-            chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
-            chat_mdl = LLMBundle(tenant_id, chat_model_config)
+            chat_model_config = get_tenant_default_model_by_type(kbs[0].tenant_id, LLMType.CHAT)
+            chat_mdl = LLMBundle(kbs[0].tenant_id, chat_model_config)
 
     if meta_data_filter:
         logging.debug("Metadata filter applied: %s, question length: %d, chat_mdl=%s", meta_data_filter, len(question), "None" if chat_mdl is None else "configured")
@@ -1479,14 +1477,7 @@ async def search_datasets(tenant_id: str, req: dict):
             metas_loader=lambda: DocMetadataService.get_flatted_meta_by_kbs(kb_ids),
         )
 
-    tenant_ids = []
-    tenants = UserTenantService.query(user_id=tenant_id)
-    for tenant in tenants:
-        if any(KnowledgebaseService.query(tenant_id=tenant.tenant_id, id=kb_id) for kb_id in kb_ids):
-            tenant_ids.append(tenant.tenant_id)
-            break
-    else:
-        return False, "Only owner of datasets authorized for this operation."
+    tenant_ids = list(dict.fromkeys(kb.tenant_id for kb in kbs))
 
     kb = kbs[0]
     _question = question
@@ -1530,7 +1521,7 @@ async def search_datasets(tenant_id: str, req: dict):
 
     if use_kg:
         try:
-            default_chat_model_config = get_tenant_default_model_by_type(tenant_id, LLMType.CHAT)
+            default_chat_model_config = get_tenant_default_model_by_type(kb.tenant_id, LLMType.CHAT)
             ck = await settings.kg_retriever.retrieval(_question, tenant_ids, kb_ids, embd_mdl, LLMBundle(kb.tenant_id, default_chat_model_config))
             if ck["content_with_weight"]:
                 ranks["chunks"].insert(0, ck)
@@ -2042,7 +2033,7 @@ async def update_wiki_page(
     ``(True, None)`` when the row is missing, or
     ``(False, message)`` on authorization failure.
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
 
@@ -2615,7 +2606,7 @@ async def clear_wiki(dataset_id: str, tenant_id: str):
     Returns ``(True, {"deleted": {kwd: count_or_True}})`` on success or
     ``(False, str)`` on auth failure.
     """
-    if not KnowledgebaseService.accessible(dataset_id, tenant_id):
+    if not KnowledgebaseService.modifiable(dataset_id, tenant_id):
         return False, "No authorization."
     _, kb = KnowledgebaseService.get_by_id(dataset_id)
 

@@ -33,6 +33,7 @@ export default function Compilation() {
   const { id } = useParams();
   const { navigateToDataFile } = useNavigatePage();
   const { data: knowledgeBase } = useFetchKnowledgeBaseConfiguration();
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
   const { data: knowledgeGraph, loading: knowledgeGraphLoading } =
     useFetchKnowledgeGraph();
   const { topics, loading: topicListLoading } = useFetchArtifactTopicList();
@@ -132,7 +133,7 @@ export default function Compilation() {
         ) : isLlmWikiEmpty ? (
           <CompilationEmptyState
             type="llm-wiki"
-            disabled={!canGenerate}
+            disabled={!canGenerate || readOnly}
             data={artifactRunData}
           />
         ) : (
@@ -145,6 +146,7 @@ export default function Compilation() {
                   selectedArtifact={selectedArtifact}
                   onSelectArtifact={handleSelectArtifact}
                   onClearWiki={clearSelectedArtifact}
+                  readOnly={readOnly}
                 />
               </ResizablePanel>
               <ResizableHandle withHandle />
@@ -153,6 +155,7 @@ export default function Compilation() {
                   selectedArtifact={selectedArtifact}
                   selectedVersion={selectedVersion}
                   onSelectVersion={selectVersion}
+                  readOnly={readOnly}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>
@@ -163,7 +166,7 @@ export default function Compilation() {
       ) : isSkillsEmpty ? (
         <CompilationEmptyState
           type="skills"
-          disabled={!canGenerate}
+          disabled={!canGenerate || readOnly}
           data={skillRunData}
         />
       ) : (

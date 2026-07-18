@@ -50,7 +50,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.pipeline_operation_log_service import PipelineOperationLogService
-from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow
+from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow, register_task_authorization
 from api.db.services.user_service import TenantService
 from api.db.services.user_canvas_version import UserCanvasVersionService
 from api.db.services.workspace_service import WorkspaceAccessService
@@ -1212,7 +1212,7 @@ async def rerun_agent(tenant_id):
     if not doc:
         return get_data_error_result(message="Document not found.")
     doc = doc[0]
-    if not DocumentService.accessible(doc["id"], tenant_id):
+    if not KnowledgebaseService.modifiable(doc["kb_id"], tenant_id):
         logging.warning(
             "rerun_agent denied: tenant_id=%s log_id=%s doc_id=%s",
             tenant_id,
@@ -1223,8 +1223,11 @@ async def rerun_agent(tenant_id):
     if 0 < doc["progress"] < 1:
         return get_data_error_result(message=f"`{doc['name']}` is processing...")
 
-    if settings.docStoreConn.index_exist(search.index_name(tenant_id), doc["kb_id"]):
-        settings.docStoreConn.delete({"doc_id": doc["id"]}, search.index_name(tenant_id), doc["kb_id"])
+    doc_tenant_id = DocumentService.get_tenant_id(doc["id"])
+    if not doc_tenant_id:
+        return get_data_error_result(message="Document workspace not found.")
+    if settings.docStoreConn.index_exist(search.index_name(doc_tenant_id), doc["kb_id"]):
+        settings.docStoreConn.delete({"doc_id": doc["id"]}, search.index_name(doc_tenant_id), doc["kb_id"])
     doc["progress_msg"] = ""
     doc["chunk_num"] = 0
     doc["token_num"] = 0
@@ -1236,7 +1239,7 @@ async def rerun_agent(tenant_id):
     dsl["path"] = [req["component_id"]]
     PipelineOperationLogService.update_by_id(req["id"], {"dsl": dsl})
     queue_dataflow(
-        tenant_id=tenant_id,
+        tenant_id=doc_tenant_id,
         flow_id=req["id"],
         task_id=get_uuid(),
         doc_id=doc["id"],
@@ -1608,12 +1611,13 @@ async def agent_chat_completion(tenant_id, agent_id=None):
             )
             ok, error_message = await thread_pool_exec(
                 queue_dataflow,
-                user_id,
+                workspace_id,
                 agent_id,
                 task_id,
                 CANVAS_DEBUG_DOC_ID,
                 files[0],
                 0,
+                actor_id=user_id,
             )
             if not ok:
                 return get_data_error_result(message=error_message)
@@ -1622,6 +1626,7 @@ async def agent_chat_completion(tenant_id, agent_id=None):
         try:
             from agent.canvas import Canvas
 
+            await thread_pool_exec(register_task_authorization, session_id, workspace_id, agent_id, user_id)
             canvas = Canvas(dsl_str, workspace_id, task_id=session_id, canvas_id=agent_id, custom_header=custom_header)
             canvas.clear_history()
         except Exception as exc:

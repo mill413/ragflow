@@ -287,6 +287,10 @@ def _load_dataset_module(monkeypatch):
         def accessible(_dataset_id, _tenant_id):
             return True
 
+        @staticmethod
+        def modifiable(dataset_id, tenant_id):
+            return _StubKnowledgebaseService.accessible(dataset_id, tenant_id)
+
     knowledgebase_service_mod.KnowledgebaseService = _StubKnowledgebaseService
     monkeypatch.setitem(sys.modules, "api.db.services.knowledgebase_service", knowledgebase_service_mod)
     services_pkg.knowledgebase_service = knowledgebase_service_mod

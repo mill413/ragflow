@@ -36,6 +36,7 @@ import {
 import { useDeleteTag, useFetchTagList } from '@/hooks/use-knowledge-request';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useKnowledgeBaseContext } from '../../contexts/knowledge-base-context';
 import { useRenameKnowledgeTag } from '../hooks';
 import { RenameDialog } from './rename-dialog';
 
@@ -46,6 +47,8 @@ export type ITag = {
 
 export function TagTable() {
   const { t } = useTranslation();
+  const { knowledgeBase } = useKnowledgeBaseContext();
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
   const { list } = useFetchTagList();
   const [tagList, setTagList] = useState<ITag[]>([]);
 
@@ -88,6 +91,7 @@ export function TagTable() {
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
+          disabled={readOnly}
         />
       ),
       cell: ({ row }) => (
@@ -95,6 +99,7 @@ export function TagTable() {
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
+          disabled={readOnly}
         />
       ),
       enableSorting: false,
@@ -145,7 +150,7 @@ export function TagTable() {
             <Tooltip>
               <ConfirmDeleteDialog onOk={handleDeleteTag([row.original.tag])}>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" disabled={readOnly}>
                     <Trash2 />
                   </Button>
                 </TooltipTrigger>
@@ -159,6 +164,7 @@ export function TagTable() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  disabled={readOnly}
                   onClick={() => showTagRenameModal(row.original.tag)}
                 >
                   <Pencil />
@@ -207,7 +213,7 @@ export function TagTable() {
             }
             className="w-1/2"
           />
-          {selectedRowLength > 0 && (
+          {!readOnly && selectedRowLength > 0 && (
             <ConfirmDeleteDialog
               onOk={handleDeleteTag(
                 table

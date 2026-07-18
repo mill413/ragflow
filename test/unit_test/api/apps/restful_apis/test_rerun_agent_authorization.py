@@ -59,11 +59,17 @@ def _load_agent_api_for_rerun(monkeypatch, *, documents_info, accessible):
         login_required=lambda func=None, **_kwargs: (lambda f: f) if func is None else func,
     )
     _stub(monkeypatch, "api.apps.services.canvas_replica_service", CanvasReplicaService=SimpleNamespace())
-    _stub(monkeypatch, "api.db", CanvasCategory=SimpleNamespace())
+    _stub(
+        monkeypatch,
+        "api.db",
+        CanvasCategory=SimpleNamespace(Agent="agent", DataFlow="dataflow"),
+        TenantPermission=SimpleNamespace(ME="me", TEAM="team"),
+        WorkspaceType=SimpleNamespace(TEAM="team"),
+    )
 
     task_model = SimpleNamespace()
     task_model.doc_id = "doc_id_field"
-    _stub(monkeypatch, "api.db.db_models", Task=task_model)
+    _stub(monkeypatch, "api.db.db_models", APIToken=SimpleNamespace(), Task=task_model)
 
     _stub(
         monkeypatch,
@@ -88,12 +94,13 @@ def _load_agent_api_for_rerun(monkeypatch, *, documents_info, accessible):
         "api.db.services.document_service",
         DocumentService=SimpleNamespace(
             accessible=acc_fn,
+            get_tenant_id=lambda _doc_id: "workspace-owner",
             clear_chunk_num_when_rerun=lambda _doc_id: destructive_calls.__setitem__("clear", destructive_calls["clear"] + 1),
             update_by_id=lambda *_a, **_k: destructive_calls.__setitem__("update", destructive_calls["update"] + 1) or True,
         ),
     )
     _stub(monkeypatch, "api.db.services.file_service", FileService=SimpleNamespace())
-    _stub(monkeypatch, "api.db.services.knowledgebase_service", KnowledgebaseService=SimpleNamespace())
+    _stub(monkeypatch, "api.db.services.knowledgebase_service", KnowledgebaseService=SimpleNamespace(modifiable=acc_fn))
 
     def _update_log(*_a, **_k):
         destructive_calls["update_log"] = True
@@ -118,9 +125,11 @@ def _load_agent_api_for_rerun(monkeypatch, *, documents_info, accessible):
         CANVAS_DEBUG_DOC_ID="",
         TaskService=_TaskService,
         queue_dataflow=lambda *_a, **_k: destructive_calls.__setitem__("queue", destructive_calls["queue"] + 1),
+        register_task_authorization=lambda *_a, **_k: True,
     )
     _stub(monkeypatch, "api.db.services.user_service", TenantService=SimpleNamespace(), UserService=SimpleNamespace(get_by_id=lambda *_a, **_k: (False, None)))
     _stub(monkeypatch, "api.db.services.user_canvas_version", UserCanvasVersionService=SimpleNamespace())
+    _stub(monkeypatch, "api.db.services.workspace_service", WorkspaceAccessService=SimpleNamespace())
 
     request_body = {"id": "log-victim", "component_id": "Parser:0", "dsl": {"path": [], "components": {}}}
 

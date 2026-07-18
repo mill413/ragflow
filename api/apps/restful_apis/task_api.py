@@ -14,10 +14,15 @@
 #  limitations under the License.
 #
 import logging
+import json
 from datetime import datetime
 
-from api.apps import login_required
-from api.db.services.task_service import TaskService, CANVAS_DEBUG_DOC_ID, GRAPH_RAPTOR_FAKE_DOC_ID
+from api.apps import current_user, login_required
+from api.db.services.canvas_service import UserCanvasService
+from api.db.services.document_service import DocumentService
+from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.task_service import TaskService, CANVAS_DEBUG_DOC_ID, GRAPH_RAPTOR_FAKE_DOC_ID, task_authorization_key
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.utils.api_utils import (
     get_json_result,
     get_request_json,
@@ -55,6 +60,10 @@ async def _cancel_task(task_id):
     Sets a Redis cancel flag, updates the task progress to -1 (cancelled),
         and marks the associated document's run status as CANCEL if applicable.
     """
+    exists, task = TaskService.get_by_id(task_id)
+    if not _can_cancel_task(task_id, task if exists else None, current_user.id):
+        return get_json_result(code=RetCode.FORBIDDEN, message="No authorization.", data=False)
+
     try:
         REDIS_CONN.set(f"{task_id}-cancel", "x")
     except Exception as e:
@@ -64,7 +73,6 @@ async def _cancel_task(task_id):
             message="Failed to stop task",
         )
 
-    exists, task = TaskService.get_by_id(task_id)
     if not exists:
         return get_json_result(data=True)
 
@@ -100,3 +108,51 @@ async def _cancel_task(task_id):
 
     logging.info(f"Cancel task succeeded: task_id={task_id} doc_id={task.doc_id}")
     return get_json_result(data=True)
+
+
+def _can_cancel_task(task_id: str, task, user_id: str) -> bool:
+    if task and task.doc_id not in (CANVAS_DEBUG_DOC_ID, GRAPH_RAPTOR_FAKE_DOC_ID):
+        kb_id = DocumentService.get_knowledgebase_id(task.doc_id)
+        return bool(kb_id and KnowledgebaseService.modifiable(kb_id, user_id))
+
+    if task and task.doc_id == GRAPH_RAPTOR_FAKE_DOC_ID:
+        task_fields = (
+            KnowledgebaseService.model.graphrag_task_id,
+            KnowledgebaseService.model.raptor_task_id,
+            KnowledgebaseService.model.mindmap_task_id,
+            KnowledgebaseService.model.artifact_task_id,
+            KnowledgebaseService.model.skill_task_id,
+        )
+        condition = task_fields[0] == task_id
+        for field in task_fields[1:]:
+            condition |= field == task_id
+        knowledgebase = KnowledgebaseService.model.get_or_none(condition)
+        return bool(knowledgebase and WorkspaceAccessService.can_update_knowledgebase(user_id, knowledgebase))
+
+    try:
+        raw_metadata = REDIS_CONN.get(task_authorization_key(task_id))
+        metadata = json.loads(raw_metadata) if raw_metadata else None
+    except Exception:
+        logging.warning("Failed to load task authorization metadata for task %s", task_id, exc_info=True)
+        return False
+    if not isinstance(metadata, dict):
+        return False
+
+    resource_id = metadata.get("resource_id")
+    workspace_id = metadata.get("workspace_id")
+    exists, agent = UserCanvasService.get_by_id(resource_id)
+    if not exists or not agent or str(agent.user_id) != str(workspace_id):
+        return False
+    if WorkspaceAccessService.can_manage_shared_resource(
+        user_id,
+        agent,
+        workspace_field="user_id",
+        permission_field="permission",
+    ):
+        return True
+    return str(metadata.get("actor_id")) == str(user_id) and WorkspaceAccessService.can_read_shared_resource(
+        user_id,
+        agent,
+        workspace_field="user_id",
+        permission_field="permission",
+    )

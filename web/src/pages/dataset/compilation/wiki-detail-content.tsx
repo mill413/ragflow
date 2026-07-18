@@ -34,12 +34,14 @@ type WikiDetailContentProps = {
   selectedArtifact: IArtifact | null;
   selectedVersion: IWikiCommit | null;
   onSelectVersion: (version: IWikiCommit | null) => void;
+  readOnly?: boolean;
 };
 
 export function WikiDetailContent({
   selectedArtifact,
   selectedVersion,
   onSelectVersion,
+  readOnly = false,
 }: WikiDetailContentProps) {
   const { t } = useTranslation();
   const isVersionView = !!selectedVersion;
@@ -110,7 +112,7 @@ export function WikiDetailContent({
   }, [title, editedContent]);
 
   const renderToolbarButtons = () => {
-    if (isDirty) {
+    if (isDirty && !readOnly) {
       return (
         <div className="flex items-center gap-2">
           <Button
@@ -189,6 +191,7 @@ export function WikiDetailContent({
                     <MarkdownEditor
                       content={editedContent}
                       onChange={handleContentChange}
+                      readOnly={readOnly || isVersionView}
                     />
                   )}
 

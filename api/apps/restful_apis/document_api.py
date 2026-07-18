@@ -1450,7 +1450,8 @@ async def ingest(tenant_id):
 
 def _run_sync(user_id: str, req):
     for doc_id in req["doc_ids"]:
-        if not DocumentService.accessible(doc_id, user_id):
+        kb_id = DocumentService.get_knowledgebase_id(doc_id)
+        if not kb_id or not KnowledgebaseService.modifiable(kb_id, user_id):
             return RetCode.AUTHENTICATION_ERROR, "No authorization."
 
     kb_table_num_map = {}

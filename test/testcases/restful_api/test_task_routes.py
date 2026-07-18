@@ -40,9 +40,9 @@ def test_patch_task_rejects_unsupported_action(rest_client):
 
 
 @pytest.mark.p2
-def test_cancel_missing_task_sets_cancel_contract(rest_client):
+def test_cancel_missing_task_is_rejected_without_resource_authorization(rest_client):
     res = rest_client.post("/tasks/missing_task/cancel")
     assert res.status_code == 200
     payload = res.json()
-    assert payload["code"] == 0, payload
-    assert payload["data"] is True, payload
+    assert payload["code"] == 403, payload
+    assert payload["data"] is False, payload

@@ -6,6 +6,7 @@ import { FileUploadDialog } from '@/components/file-upload-dialog';
 import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
+import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ export default function Dataset() {
     documentUploadLoading,
   } = useHandleUploadDocument();
   const { knowledgeBase } = useKnowledgeBaseContext();
+  const readOnly = knowledgeBase?.capabilities?.update !== true;
   const {
     searchString,
     documents,
@@ -158,26 +160,28 @@ export default function Dataset() {
             </div>
           }
         >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="default">
-                <LucidePlus />
-                {t('knowledgeDetails.addFile')}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-auto min-w-40" align="end">
-              <DropdownMenuItem onClick={showDocumentUploadModal}>
-                {t('fileManager.uploadFile')}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={showCreateModal}>
-                {t('knowledgeDetails.emptyFiles')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ReadOnlySaveTooltip readOnly={readOnly}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="default" disabled={readOnly}>
+                  <LucidePlus />
+                  {t('knowledgeDetails.addFile')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-auto min-w-40" align="end">
+                <DropdownMenuItem onClick={showDocumentUploadModal}>
+                  {t('fileManager.uploadFile')}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={showCreateModal}>
+                  {t('knowledgeDetails.emptyFiles')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </ReadOnlySaveTooltip>
         </ListFilterBar>
 
-        {rowSelectionIsEmpty || (
+        {readOnly || rowSelectionIsEmpty || (
           <BulkOperateBar
             className="!mt-2.5 !-mb-2.5"
             list={updatedList as BulkOperateItemType[]}
@@ -195,6 +199,7 @@ export default function Dataset() {
           setRowSelection={setRowSelection}
           showManageMetadataModal={showManageMetadataModal}
           loading={loading}
+          readOnly={readOnly}
         />
 
         {documentUploadVisible && (

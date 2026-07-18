@@ -109,6 +109,7 @@ def _load_file2document_module(monkeypatch):
 
     permission_mod = ModuleType("api.common.check_team_permission")
     permission_mod.check_file_team_permission = lambda *_args, **_kwargs: True
+    permission_mod.check_file_write_permission = lambda *_args, **_kwargs: True
     permission_mod.check_kb_team_permission = lambda *_args, **_kwargs: True
     monkeypatch.setitem(sys.modules, "api.common.check_team_permission", permission_mod)
     common_pkg.check_team_permission = permission_mod
@@ -165,6 +166,10 @@ def _load_file2document_module(monkeypatch):
         @staticmethod
         def get_by_id(_kb_id):
             return False, None
+
+        @staticmethod
+        def modifiable(*_args, **_kwargs):
+            return True
 
     kb_service_mod.KnowledgebaseService = _StubKnowledgebaseService
     monkeypatch.setitem(sys.modules, "api.db.services.knowledgebase_service", kb_service_mod)
@@ -271,18 +276,18 @@ def test_convert_branch_matrix_unit(monkeypatch):
     monkeypatch.setattr(module.KnowledgebaseService, "get_by_id", lambda _kb_id: (True, kb))
 
     # Unauthorized file access is rejected before scheduling background work.
-    monkeypatch.setattr(module, "check_file_team_permission", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(module, "check_file_write_permission", lambda *_args, **_kwargs: False)
     res = _run(module.convert())
     assert res["message"] == "No authorization."
 
     # Unauthorized dataset access is rejected before scheduling background work.
-    monkeypatch.setattr(module, "check_file_team_permission", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(module, "check_kb_team_permission", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(module, "check_file_write_permission", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(module.KnowledgebaseService, "modifiable", lambda *_args, **_kwargs: False)
     res = _run(module.convert())
     assert res["message"] == "No authorization."
 
     # Valid file and kb schedule background work and return data=True immediately.
-    monkeypatch.setattr(module, "check_kb_team_permission", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(module.KnowledgebaseService, "modifiable", lambda *_args, **_kwargs: True)
     res = _run(module.convert())
     assert res["code"] == 0
     assert res["data"] is True
