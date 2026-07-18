@@ -1488,6 +1488,9 @@ class MonitoringMgr:
             .dicts()
         )
         ResourceMgr._attach_ownership(rows)
+        for row in rows:
+            row["files_total"] = int(row.get("files_total", 0) or 0)
+            row["storage_bytes"] = int(row.get("storage_bytes", 0) or 0)
         return rows
 
 

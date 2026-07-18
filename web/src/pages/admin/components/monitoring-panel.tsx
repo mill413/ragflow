@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useQuery } from '@tanstack/react-query';
 import {
+  Activity,
   Bot,
   Brain,
   Building2,
@@ -49,6 +50,18 @@ const STORAGE_COLORS = [
   '#bdd2fd',
 ];
 
+type MonitoringMetric = {
+  label: string;
+  value?: number | string;
+  detail?: string;
+  icon: typeof Library;
+  breakdown?: Array<{
+    label: string;
+    value: number;
+    error?: boolean;
+  }>;
+};
+
 function formatPercentage(value: number, total: number) {
   if (!total || !value) return '0%';
   const percentage = (value / total) * 100;
@@ -65,7 +78,7 @@ export default function MonitoringPanel() {
     retry: false,
   });
 
-  const metrics = useMemo(
+  const metrics = useMemo<MonitoringMetric[]>(
     () => [
       {
         label: t('admin.monitoringPage.datasets'),
@@ -117,34 +130,48 @@ export default function MonitoringPanel() {
           : undefined,
         icon: HardDrive,
       },
+      {
+        label: t('admin.monitoringPage.processing'),
+        icon: Activity,
+        breakdown: [
+          {
+            label: t('admin.monitoringPage.processingDocuments'),
+            value: data?.processing_documents ?? 0,
+          },
+          {
+            label: t('admin.monitoringPage.pendingTasks'),
+            value: data?.pending_tasks ?? 0,
+          },
+          {
+            label: t('admin.monitoringPage.failedDocuments'),
+            value: data?.failed_documents ?? 0,
+            error: true,
+          },
+        ],
+      },
     ],
     [data, t],
   );
 
-  const distributedStorage = useMemo(
-    () =>
-      (data?.storage_distribution ?? []).reduce(
-        (total, item) => total + item.storage_bytes,
-        0,
-      ),
-    [data?.storage_distribution],
-  );
-  const storageData = useMemo(
-    () =>
-      (data?.storage_distribution ?? [])
-        .filter((item) => item.storage_bytes > 0)
-        .map((item, index) => ({
-          ...item,
-          color: STORAGE_COLORS[index % STORAGE_COLORS.length],
-          label: `${
-            item.workspace_type === 'team'
-              ? t('admin.monitoringPage.teamSpace')
-              : t('admin.monitoringPage.personalSpace')
-          }-${item.workspace_name}`,
-          percentage: formatPercentage(item.storage_bytes, distributedStorage),
-        })),
-    [data?.storage_distribution, distributedStorage, t],
-  );
+  const storageData = useMemo(() => {
+    const items = (data?.storage_distribution ?? []).map((item) => ({
+      ...item,
+      storage_bytes: Number(item.storage_bytes) || 0,
+    }));
+    const total = items.reduce((sum, item) => sum + item.storage_bytes, 0);
+    return items
+      .filter((item) => item.storage_bytes > 0)
+      .map((item, index) => ({
+        ...item,
+        color: STORAGE_COLORS[index % STORAGE_COLORS.length],
+        label: `${
+          item.workspace_type === 'team'
+            ? t('admin.monitoringPage.teamSpace')
+            : t('admin.monitoringPage.personalSpace')
+        }-${item.workspace_name}`,
+        percentage: formatPercentage(item.storage_bytes, total),
+      }));
+  }, [data?.storage_distribution, t]);
 
   return (
     <section className="space-y-6 border-b border-border-button px-6 py-6">
@@ -168,7 +195,7 @@ export default function MonitoringPanel() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {metrics.map(({ label, value, detail, icon: Icon }) => (
+        {metrics.map(({ label, value, detail, icon: Icon, breakdown }) => (
           <Card key={label} className="bg-bg-input/70">
             <CardContent className="p-5">
               <div className="mb-4 flex items-center justify-between text-text-secondary">
@@ -177,6 +204,26 @@ export default function MonitoringPanel() {
               </div>
               {isLoading ? (
                 <Skeleton className="h-9 w-24" />
+              ) : breakdown ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {breakdown.map((item) => (
+                    <div key={item.label} className="min-w-0">
+                      <div
+                        className={`text-xl font-semibold ${
+                          item.error ? 'text-state-error' : ''
+                        }`}
+                      >
+                        {item.value}
+                      </div>
+                      <div
+                        className="mt-1 truncate text-xs text-text-secondary"
+                        title={item.label}
+                      >
+                        {item.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="text-3xl font-semibold">{value ?? 0}</div>
               )}
@@ -188,41 +235,8 @@ export default function MonitoringPanel() {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div>
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              {t('admin.monitoringPage.processing')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <div className="text-2xl font-semibold">
-                {data?.processing_documents ?? 0}
-              </div>
-              <div className="text-xs text-text-secondary">
-                {t('admin.monitoringPage.processingDocuments')}
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-semibold">
-                {data?.pending_tasks ?? 0}
-              </div>
-              <div className="text-xs text-text-secondary">
-                {t('admin.monitoringPage.pendingTasks')}
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-semibold text-state-error">
-                {data?.failed_documents ?? 0}
-              </div>
-              <div className="text-xs text-text-secondary">
-                {t('admin.monitoringPage.failedDocuments')}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
               {t('admin.monitoringPage.storageDistribution')}
