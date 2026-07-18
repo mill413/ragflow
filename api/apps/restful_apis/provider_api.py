@@ -23,9 +23,11 @@ from api.utils.api_utils import (
     add_tenant_id_to_kwargs,
     get_error_argument_result,
     get_error_data_result,
+    get_resource_in_use_result,
     get_result,
 )
 from api.apps.services import provider_api_service
+from common.exceptions import ResourceInUseException
 
 
 @manager.route("/providers", methods=["GET"])  # noqa: F821
@@ -196,6 +198,8 @@ def delete_provider(tenant_id: str = None, provider_id_or_name: str = None):
             return get_result(message=msg)
         else:
             return get_error_data_result(message=msg)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")
@@ -656,6 +660,8 @@ async def update_provider_instance(tenant_id: str = None, provider_id_or_name: s
             return get_result(message=msg)
         else:
             return get_error_data_result(message=msg)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")
@@ -718,6 +724,8 @@ async def drop_provider_instances(tenant_id: str = None, provider_id_or_name: st
             return get_result(message=msg)
         else:
             return get_error_data_result(message=msg)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")
@@ -969,6 +977,8 @@ async def delete_models_from_instance(tenant_id: str, provider_id_or_name: str, 
             return get_result(message=result)
         else:
             return get_error_data_result(message=result)
+    except ResourceInUseException as exc:
+        return get_resource_in_use_result(exc)
     except Exception as e:
         logging.exception(e)
         return get_error_data_result(message="Internal server error")

@@ -22,6 +22,11 @@ from api.db.services.resource_reference_service import ResourceReferenceService
 from common.exceptions import ResourceInUseException
 
 
+class _FakeQuery(list):
+    def where(self, *_args, **_kwargs):
+        return self
+
+
 def test_extract_ids_finds_nested_references_and_ignores_variable_expressions():
     dsl = {
         "components": [
@@ -85,5 +90,90 @@ def test_ensure_not_referenced_reports_each_target_and_its_referrers(monkeypatch
             "resource_id": "agent-1",
             "resource_name": "Research assistant",
             "target_resource_id": "mcp-used",
+        }
+    ]
+
+
+def test_build_model_targets_includes_id_and_canonical_name(monkeypatch):
+    provider = SimpleNamespace(id="provider-1", provider_name="OpenAI-API-Compatible", tenant_id="team-1")
+    instance = SimpleNamespace(id="instance-1", instance_name="default", provider_id="provider-1")
+    model = SimpleNamespace(id="model-1", model_name="chat-model", provider_id="provider-1", instance_id="instance-1")
+
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.TenantModelProvider.select",
+        lambda *_args: _FakeQuery([provider]),
+    )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.TenantModelInstance.select",
+        lambda *_args: _FakeQuery([instance]),
+    )
+
+    assert ResourceReferenceService.build_model_targets("team-1", [model]) == [
+        {
+            "id": "model-1",
+            "name": "chat-model@default@OpenAI-API-Compatible",
+            "tenant_id": "team-1",
+            "identifiers": [
+                "model-1",
+                "chat-model@default@OpenAI-API-Compatible",
+                "chat-model@OpenAI-API-Compatible",
+            ],
+        }
+    ]
+
+
+def test_model_reference_scanner_reports_chat_using_model_id(monkeypatch):
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Tenant.get_or_none",
+        lambda *_args, **_kwargs: None,
+    )
+    empty_models = [
+        "Knowledgebase",
+        "Document",
+        "Search",
+        "Memory",
+        "CompilationTemplate",
+        "TenantModelGroupMapping",
+        "TenantModelGroup",
+        "UserCanvas",
+        "UserCanvasVersion",
+        "API4Conversation",
+    ]
+    for model_name in empty_models:
+        monkeypatch.setattr(
+            f"api.db.services.resource_reference_service.{model_name}.select",
+            lambda *_args: _FakeQuery(),
+        )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Dialog.select",
+        lambda *_args: _FakeQuery(
+            [
+                SimpleNamespace(
+                    id="chat-1",
+                    name="Team chat",
+                    llm_id="model-1",
+                    tenant_llm_id="model-1",
+                    rerank_id="",
+                    tenant_rerank_id=None,
+                    llm_setting={},
+                    prompt_config={},
+                )
+            ]
+        ),
+    )
+
+    references = ResourceReferenceService._model_references(
+        {
+            "resource_id": "model-1",
+            "workspace_id": "team-1",
+            "identifiers": ["model-1", "chat-model@internal@OpenAI-API-Compatible"],
+        }
+    )
+
+    assert references == [
+        {
+            "resource_type": "chat",
+            "resource_id": "chat-1",
+            "resource_name": "Team chat",
         }
     ]

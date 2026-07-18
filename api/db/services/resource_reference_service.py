@@ -20,12 +20,20 @@ from typing import Any
 from api.db import CanvasCategory
 from api.db.db_models import (
     API4Conversation,
+    CompilationTemplate,
     Connector,
     Connector2Kb,
     Dialog,
     Document,
     Knowledgebase,
+    Memory,
     Search,
+    Tenant,
+    TenantModel,
+    TenantModelGroup,
+    TenantModelGroupMapping,
+    TenantModelInstance,
+    TenantModelProvider,
     UserCanvas,
     UserCanvasVersion,
 )
@@ -40,6 +48,7 @@ class ResourceReferenceService:
         "mcp": ("id", "name", "tenant_id"),
         "compilation_template": ("id", "name", "tenant_id"),
         "data_source": ("id", "name", "tenant_id"),
+        "model": ("id", "name", "tenant_id"),
     }
 
     @staticmethod
@@ -51,12 +60,16 @@ class ResourceReferenceService:
     @classmethod
     def _target(cls, resource_type: str, resource: Mapping[str, Any] | Any) -> dict:
         id_field, name_field, workspace_field = cls.RESOURCE_TYPE_FIELDS[resource_type]
-        return {
+        target = {
             "resource_type": resource_type,
             "resource_id": str(cls._value(resource, id_field, "")),
             "resource_name": str(cls._value(resource, name_field, "") or ""),
             "workspace_id": str(cls._value(resource, workspace_field, "")),
         }
+        identifiers = cls._value(resource, "identifiers")
+        if identifiers:
+            target["identifiers"] = [str(identifier) for identifier in identifiers if identifier]
+        return target
 
     @staticmethod
     def _extract_ids(value: Any, keys: set[str]) -> set[str]:
@@ -86,6 +99,16 @@ class ResourceReferenceService:
             "resource_id": str(resource_id),
             "resource_name": str(resource_name or ""),
         }
+
+    @classmethod
+    def _contains_model_reference(cls, value: Any, identifiers: set[str]) -> bool:
+        if isinstance(value, str):
+            return value in identifiers
+        if isinstance(value, Mapping):
+            return any(cls._contains_model_reference(nested, identifiers) for nested in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(cls._contains_model_reference(nested, identifiers) for nested in value)
+        return False
 
     @classmethod
     def _canvas_references(cls, workspace_id: str, target_id: str, keys: set[str]) -> list[dict]:
@@ -215,6 +238,246 @@ class ResourceReferenceService:
         return [cls._reference("dataset", dataset.id, dataset.name) for dataset in datasets]
 
     @classmethod
+    def _model_references(cls, target: dict) -> list[dict]:
+        workspace_id = target["workspace_id"]
+        identifiers = set(target.get("identifiers") or [target["resource_id"]])
+        references: list[dict] = []
+
+        def add_if_referenced(resource_type: str, resource_id: str, resource_name: str, value: Any) -> None:
+            if cls._contains_model_reference(value, identifiers):
+                references.append(cls._reference(resource_type, resource_id, resource_name))
+
+        tenant = Tenant.get_or_none(id=workspace_id, status=StatusEnum.VALID.value)
+        if tenant:
+            add_if_referenced(
+                "workspace",
+                tenant.id,
+                tenant.name or tenant.id,
+                {
+                    "llm_id": tenant.llm_id,
+                    "tenant_llm_id": tenant.tenant_llm_id,
+                    "embd_id": tenant.embd_id,
+                    "tenant_embd_id": tenant.tenant_embd_id,
+                    "asr_id": tenant.asr_id,
+                    "tenant_asr_id": tenant.tenant_asr_id,
+                    "img2txt_id": tenant.img2txt_id,
+                    "tenant_img2txt_id": tenant.tenant_img2txt_id,
+                    "rerank_id": tenant.rerank_id,
+                    "tenant_rerank_id": tenant.tenant_rerank_id,
+                    "tts_id": tenant.tts_id,
+                    "tenant_tts_id": tenant.tenant_tts_id,
+                    "ocr_id": tenant.ocr_id,
+                    "tenant_ocr_id": tenant.tenant_ocr_id,
+                },
+            )
+
+        datasets = list(
+            Knowledgebase.select(
+                Knowledgebase.id,
+                Knowledgebase.name,
+                Knowledgebase.embd_id,
+                Knowledgebase.tenant_embd_id,
+                Knowledgebase.parser_config,
+            ).where(
+                Knowledgebase.tenant_id == workspace_id,
+                Knowledgebase.status == StatusEnum.VALID.value,
+            )
+        )
+        for dataset in datasets:
+            add_if_referenced(
+                "dataset",
+                dataset.id,
+                dataset.name,
+                {
+                    "embd_id": dataset.embd_id,
+                    "tenant_embd_id": dataset.tenant_embd_id,
+                    "parser_config": dataset.parser_config,
+                },
+            )
+
+        dataset_by_id = {dataset.id: dataset for dataset in datasets}
+        if dataset_by_id:
+            documents = Document.select(Document.id, Document.name, Document.kb_id, Document.parser_config).where(
+                Document.kb_id.in_(list(dataset_by_id)),
+                Document.status == StatusEnum.VALID.value,
+            )
+            for document in documents:
+                dataset = dataset_by_id.get(document.kb_id)
+                name = f"{dataset.name} / {document.name}" if dataset else document.name
+                add_if_referenced("document", document.id, name, document.parser_config)
+
+        dialogs = Dialog.select(
+            Dialog.id,
+            Dialog.name,
+            Dialog.llm_id,
+            Dialog.tenant_llm_id,
+            Dialog.rerank_id,
+            Dialog.tenant_rerank_id,
+            Dialog.llm_setting,
+            Dialog.prompt_config,
+        ).where(
+            Dialog.tenant_id == workspace_id,
+            Dialog.status == StatusEnum.VALID.value,
+        )
+        for dialog in dialogs:
+            add_if_referenced(
+                "chat",
+                dialog.id,
+                dialog.name,
+                {
+                    "llm_id": dialog.llm_id,
+                    "tenant_llm_id": dialog.tenant_llm_id,
+                    "rerank_id": dialog.rerank_id,
+                    "tenant_rerank_id": dialog.tenant_rerank_id,
+                    "llm_setting": dialog.llm_setting,
+                    "prompt_config": dialog.prompt_config,
+                },
+            )
+
+        searches = Search.select(Search.id, Search.name, Search.search_config).where(
+            Search.tenant_id == workspace_id,
+            Search.status == StatusEnum.VALID.value,
+        )
+        for search in searches:
+            add_if_referenced("search", search.id, search.name, search.search_config)
+
+        memories = Memory.select(
+            Memory.id,
+            Memory.name,
+            Memory.llm_id,
+            Memory.tenant_llm_id,
+            Memory.embd_id,
+            Memory.tenant_embd_id,
+        ).where(Memory.tenant_id == workspace_id)
+        for memory in memories:
+            add_if_referenced(
+                "memory",
+                memory.id,
+                memory.name,
+                {
+                    "llm_id": memory.llm_id,
+                    "tenant_llm_id": memory.tenant_llm_id,
+                    "embd_id": memory.embd_id,
+                    "tenant_embd_id": memory.tenant_embd_id,
+                },
+            )
+
+        templates = CompilationTemplate.select(
+            CompilationTemplate.id,
+            CompilationTemplate.name,
+            CompilationTemplate.config,
+        ).where(
+            CompilationTemplate.tenant_id == workspace_id,
+            CompilationTemplate.status == StatusEnum.VALID.value,
+        )
+        for template in templates:
+            add_if_referenced("compilation_template", template.id, template.name, template.config)
+
+        mappings = list(
+            TenantModelGroupMapping.select(TenantModelGroupMapping.group_id).where(
+                TenantModelGroupMapping.model_id == target["resource_id"]
+            )
+        )
+        group_ids = {mapping.group_id for mapping in mappings}
+        if group_ids:
+            groups = TenantModelGroup.select(TenantModelGroup.id, TenantModelGroup.model_name).where(
+                TenantModelGroup.id.in_(group_ids)
+            )
+            references.extend(
+                cls._reference("model_group", group.id, group.model_name or group.id)
+                for group in groups
+            )
+
+        canvases = list(
+            UserCanvas.select(UserCanvas.id, UserCanvas.title, UserCanvas.canvas_category, UserCanvas.dsl).where(
+                UserCanvas.user_id == workspace_id
+            )
+        )
+        canvas_by_id = {canvas.id: canvas for canvas in canvases}
+        for canvas in canvases:
+            resource_type = "agent" if canvas.canvas_category == CanvasCategory.Agent else "dataflow"
+            add_if_referenced(resource_type, canvas.id, canvas.title, canvas.dsl)
+
+        if canvas_by_id:
+            canvas_ids = list(canvas_by_id)
+            versions = UserCanvasVersion.select(
+                UserCanvasVersion.id,
+                UserCanvasVersion.user_canvas_id,
+                UserCanvasVersion.title,
+                UserCanvasVersion.dsl,
+            ).where(
+                UserCanvasVersion.user_canvas_id.in_(canvas_ids),
+                UserCanvasVersion.release == True,  # noqa: E712
+            )
+            for version in versions:
+                canvas = canvas_by_id.get(version.user_canvas_id)
+                add_if_referenced(
+                    "agent_version",
+                    version.id,
+                    version.title or (canvas.title if canvas else ""),
+                    version.dsl,
+                )
+
+            sessions = API4Conversation.select(
+                API4Conversation.id,
+                API4Conversation.dialog_id,
+                API4Conversation.name,
+                API4Conversation.dsl,
+            ).where(API4Conversation.dialog_id.in_(canvas_ids))
+            for session in sessions:
+                canvas = canvas_by_id.get(session.dialog_id)
+                add_if_referenced(
+                    "agent_session",
+                    session.id,
+                    session.name or (canvas.title if canvas else ""),
+                    session.dsl,
+                )
+
+        return references
+
+    @classmethod
+    def build_model_targets(cls, workspace_id: str, models: list[TenantModel]) -> list[dict]:
+        if not models:
+            return []
+        provider_ids = {model.provider_id for model in models}
+        instance_ids = {model.instance_id for model in models}
+        providers = {
+            provider.id: provider
+            for provider in TenantModelProvider.select().where(
+                TenantModelProvider.id.in_(provider_ids),
+                TenantModelProvider.tenant_id == workspace_id,
+            )
+        }
+        instances = {
+            instance.id: instance
+            for instance in TenantModelInstance.select().where(TenantModelInstance.id.in_(instance_ids))
+        }
+        targets = []
+        for model in models:
+            provider = providers.get(model.provider_id)
+            instance = instances.get(model.instance_id)
+            identifiers = [model.id]
+            display_name = model.model_name or model.id
+            if provider and instance and instance.provider_id == provider.id:
+                display_name = f"{model.model_name}@{instance.instance_name}@{provider.provider_name}"
+                identifiers.append(display_name)
+                if instance.instance_name == "default":
+                    identifiers.append(f"{model.model_name}@{provider.provider_name}")
+            targets.append(
+                {
+                    "id": model.id,
+                    "name": display_name,
+                    "tenant_id": workspace_id,
+                    "identifiers": identifiers,
+                }
+            )
+        return targets
+
+    @classmethod
+    def ensure_models_not_referenced(cls, workspace_id: str, models: list[TenantModel]) -> None:
+        cls.ensure_not_referenced("model", cls.build_model_targets(workspace_id, models))
+
+    @classmethod
     def find_references(cls, resource_type: str, resource: Mapping[str, Any] | Any) -> tuple[dict, list[dict]]:
         target = cls._target(resource_type, resource)
         finders = {
@@ -223,9 +486,11 @@ class ResourceReferenceService:
             "mcp": cls._mcp_references,
             "compilation_template": cls._compilation_template_references,
             "data_source": cls._data_source_references,
+            "model": cls._model_references,
         }
         references = finders[resource_type](target)
         unique_references = {(reference["resource_type"], reference["resource_id"]): reference for reference in references}
+        target.pop("identifiers", None)
         return target, sorted(
             unique_references.values(),
             key=lambda reference: (reference["resource_type"], reference["resource_name"].casefold(), reference["resource_id"]),

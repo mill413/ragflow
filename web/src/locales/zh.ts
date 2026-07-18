@@ -1791,6 +1791,9 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
         compilationTemplate: '知识编译模板',
         dataSource: '数据源',
         document: '文档',
+        model: '模型',
+        modelGroup: '模型组',
+        workspace: '工作空间默认模型',
       },
     },
     fileManager: {
