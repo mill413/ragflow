@@ -132,6 +132,7 @@ export default {
       register: 'Create an account',
       continue: 'Continue',
       title: 'A leading RAG engine for LLM context',
+      signInWith: 'Sign in with {{provider}}',
       start: "Let's get started",
       description:
         'Sign up for free to explore top RAG technology. Create datasets and AIs to empower your business.',

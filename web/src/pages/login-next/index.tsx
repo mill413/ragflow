@@ -203,7 +203,7 @@ function LoginFormContent({
                     height={20}
                     style={{ marginRight: 5 }}
                   />
-                  Sign in with {item.display_name}
+                  {t('signInWith', { provider: item.display_name })}
                 </div>
               </Button>
             ))}
