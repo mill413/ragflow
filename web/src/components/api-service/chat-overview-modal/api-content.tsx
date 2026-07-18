@@ -8,6 +8,8 @@ import ChatApiKeyModal from '../chat-api-key-modal';
 import BackendServiceApi from './backend-service-api';
 import MarkdownToc from './markdown-toc';
 
+const apiDocContent = apiDoc.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+
 const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
   const { t } = useTranslate('setting');
 
@@ -36,10 +38,10 @@ const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
       </div>
       <section className="flex flex-col gap-2 pb-5 flex-1 min-h-0 overflow-auto mb-4">
         <div style={{ position: 'relative' }}>
-          {tocVisible && <MarkdownToc content={apiDoc} />}
+          {tocVisible && <MarkdownToc content={apiDocContent} />}
         </div>
         <MarkdownPreview
-          source={apiDoc}
+          source={apiDocContent}
           wrapperElement={{ 'data-color-mode': isDarkTheme ? 'dark' : 'light' }}
         ></MarkdownPreview>
       </section>
