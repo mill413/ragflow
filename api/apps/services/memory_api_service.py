@@ -50,8 +50,9 @@ def _joined_tenant_ids(user_id: str) -> set[str]:
     return set(WorkspaceAccessService.list_visible_workspace_ids(user_id))
 
 
-def _memory_accessible(memory) -> bool:
-    return WorkspaceAccessService.can_read_shared_resource(
+def _memory_accessible(memory, *, manage: bool = False) -> bool:
+    check = WorkspaceAccessService.can_manage_shared_resource if manage else WorkspaceAccessService.can_read_shared_resource
+    return check(
         current_user.id,
         memory,
         permission_field="permissions",
@@ -80,11 +81,11 @@ def _build_memory_response(memory):
     return data
 
 
-def _filter_accessible_memories(memory_ids: list[str]):
+def _filter_accessible_memories(memory_ids: list[str], *, manage: bool = False):
     memory_ids = _split_filter_values(memory_ids)
     if not memory_ids:
         return []
-    return [memory for memory in MemoryService.get_by_ids(memory_ids) if _memory_accessible(memory)]
+    return [memory for memory in MemoryService.get_by_ids(memory_ids) if _memory_accessible(memory, manage=manage)]
 
 
 async def create_memory(memory_info: dict):
@@ -364,14 +365,15 @@ async def add_message(memory_ids: list[str], message_dict: dict):
         "message_type": str
     }
     """
-    accessible_memory_ids = [memory.id for memory in _filter_accessible_memories(memory_ids)]
-    if not accessible_memory_ids:
+    requested_memory_ids = list(dict.fromkeys(_split_filter_values(memory_ids)))
+    manageable_memory_ids = [memory.id for memory in _filter_accessible_memories(requested_memory_ids, manage=True)]
+    if not requested_memory_ids or set(manageable_memory_ids) != set(requested_memory_ids):
         return False, "Memory not found."
-    return await queue_save_to_memory_task(accessible_memory_ids, message_dict)
+    return await queue_save_to_memory_task(manageable_memory_ids, message_dict)
 
 
 async def forget_message(memory_id: str, message_id: int):
-    memory = _require_memory_access(memory_id)
+    memory = _require_memory_access(memory_id, manage=True)
 
     forget_time = timestamp_to_date(current_timestamp())
     update_succeed = MessageService.update_message({"memory_id": memory_id, "message_id": int(message_id)}, {"forget_at": forget_time}, memory.tenant_id, memory_id)
@@ -381,7 +383,7 @@ async def forget_message(memory_id: str, message_id: int):
 
 
 async def update_message_status(memory_id: str, message_id: int, status: bool):
-    memory = _require_memory_access(memory_id)
+    memory = _require_memory_access(memory_id, manage=True)
 
     update_succeed = MessageService.update_message({"memory_id": memory_id, "message_id": int(message_id)}, {"status": status}, memory.tenant_id, memory_id)
     if update_succeed:
