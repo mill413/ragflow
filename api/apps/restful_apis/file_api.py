@@ -19,6 +19,7 @@ import re
 from quart import request, make_response
 from api.apps import login_required
 from api.db import FileType
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.file2document_service import File2DocumentService
 from api.utils.api_utils import (
     add_tenant_id_to_kwargs,
@@ -68,6 +69,9 @@ async def create_or_upload(tenant_id: str = None):
     try:
         if "multipart/form-data" in content_type:
             form = await request.form
+            workspace_id = form.get("workspace_id") or tenant_id
+            if not WorkspaceAccessService.can_create_shared_resource(tenant_id, workspace_id):
+                return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
             pf_id = form.get("parent_id")
             files = await request.files
             if "file" not in files:
@@ -77,7 +81,7 @@ async def create_or_upload(tenant_id: str = None):
                 if file_obj.filename == "":
                     return get_error_argument_result("No file selected!")
 
-            success, result = await file_api_service.upload_file(tenant_id, pf_id, file_objs)
+            success, result = await file_api_service.upload_file(workspace_id, pf_id, file_objs)
             if success:
                 return get_result(data=result)
             else:
@@ -86,8 +90,11 @@ async def create_or_upload(tenant_id: str = None):
             req, err = await validate_and_parse_json_request(request, CreateFolderReq)
             if err is not None:
                 return get_error_argument_result(err)
+            workspace_id = req.pop("workspace_id", None) or tenant_id
+            if not WorkspaceAccessService.can_create_shared_resource(tenant_id, workspace_id):
+                return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
 
-            success, result = await file_api_service.create_folder(tenant_id, req["name"], req.get("parent_id"), req.get("type"))
+            success, result = await file_api_service.create_folder(workspace_id, req["name"], req.get("parent_id"), req.get("type"))
             if success:
                 return get_result(data=result)
             else:
@@ -189,7 +196,8 @@ async def delete(tenant_id: str = None):
     try:
         # Get Authorization header to pass to Go backend
         auth_header = request.headers.get("Authorization", "")
-        success, result = await file_api_service.delete_files(tenant_id, req["ids"], auth_header)
+        workspace_id = req.get("workspace_id")
+        success, result = await file_api_service.delete_files(tenant_id, req["ids"], auth_header, workspace_id)
         if success:
             return get_result(data=result)
         else:
@@ -251,7 +259,13 @@ async def move(tenant_id: str = None):
         return get_error_argument_result(err)
 
     try:
-        success, result = await file_api_service.move_files(tenant_id, req["src_file_ids"], req.get("dest_file_id"), req.get("new_name"))
+        success, result = await file_api_service.move_files(
+            tenant_id,
+            req["src_file_ids"],
+            req.get("dest_file_id"),
+            req.get("new_name"),
+            req.get("workspace_id"),
+        )
         if success:
             return get_result(data=result)
         else:

@@ -1016,12 +1016,14 @@ class CreateFolderReq(Base):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), Field(...)]
     parent_id: Annotated[str | None, Field(default=None)]
     type: Annotated[str | None, Field(default=None)]
+    workspace_id: Annotated[str | None, Field(default=None, min_length=32, max_length=32)]
 
 
 class DeleteFileReq(Base):
     """Request model for deleting files."""
 
     ids: Annotated[list[str], Field(min_length=1)]
+    workspace_id: Annotated[str | None, Field(default=None, min_length=32, max_length=32)]
 
 
 class MoveFileReq(Base):
@@ -1030,6 +1032,7 @@ class MoveFileReq(Base):
     src_file_ids: Annotated[list[str], Field(min_length=1)]
     dest_file_id: Annotated[str | None, Field(default=None)]
     new_name: Annotated[str | None, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), Field(default=None)]
+    workspace_id: Annotated[str | None, Field(default=None, min_length=32, max_length=32)]
 
     @model_validator(mode="after")
     def check_operation(self):

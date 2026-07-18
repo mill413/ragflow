@@ -109,6 +109,9 @@ class Retrieval(ToolBase, ABC):
         kbs = KnowledgebaseService.get_by_ids(filtered_kb_ids)
         if not kbs:
             raise Exception("No dataset is selected.")
+        workspace_id = self._canvas.get_tenant_id()
+        if any(kb.tenant_id != workspace_id for kb in kbs):
+            raise PermissionError("Agents can only retrieve datasets from the same workspace.")
 
         embd_nms = list(set([kb.embd_id for kb in kbs]))
         assert len(embd_nms) == 1, "Knowledge bases use different embedding models."

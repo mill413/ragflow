@@ -126,10 +126,10 @@ def _load_file_api_module(monkeypatch):
     async def _create_folder(_tenant_id, _name, _parent_id=None, _file_type=None):
         return True, {"id": "folder1"}
 
-    async def _delete_files(_tenant_id, _ids):
+    async def _delete_files(_tenant_id, _ids, _auth_header="", _workspace_id=None):
         return True, True
 
-    async def _move_files(_tenant_id, _src_file_ids, _dest_file_id=None, _new_name=None):
+    async def _move_files(_tenant_id, _src_file_ids, _dest_file_id=None, _new_name=None, _workspace_id=None):
         return True, True
 
     file_api_service_mod.upload_file = _upload_file
@@ -156,6 +156,12 @@ def _load_file_api_module(monkeypatch):
     db_pkg.FileType = _FileType
     monkeypatch.setitem(sys.modules, "api.db", db_pkg)
     api_pkg.db = db_pkg
+
+    workspace_service_mod = ModuleType("api.db.services.workspace_service")
+    workspace_service_mod.WorkspaceAccessService = SimpleNamespace(
+        can_create_shared_resource=lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setitem(sys.modules, "api.db.services.workspace_service", workspace_service_mod)
 
     file2doc_mod = ModuleType("api.db.services.file2document_service")
     file2doc_mod.File2DocumentService = SimpleNamespace(get_storage_address=lambda **_kwargs: ("bucket2", "path2"))
@@ -282,15 +288,15 @@ def test_move_uses_new_payload_shape(monkeypatch):
 
     seen = {}
 
-    async def _move_files(tenant_id, src_file_ids, dest_file_id=None, new_name=None):
-        seen["args"] = (tenant_id, src_file_ids, dest_file_id, new_name)
+    async def _move_files(tenant_id, src_file_ids, dest_file_id=None, new_name=None, workspace_id=None):
+        seen["args"] = (tenant_id, src_file_ids, dest_file_id, new_name, workspace_id)
         return True, True
 
     monkeypatch.setattr(module, "validate_and_parse_json_request", _validate)
     monkeypatch.setattr(module.file_api_service, "move_files", _move_files)
 
     res = _run(module.move("tenant1"))
-    assert seen["args"] == ("tenant1", ["f1"], "pf2", None)
+    assert seen["args"] == ("tenant1", ["f1"], "pf2", None, None)
     assert res["code"] == 0
     assert res["data"] is True
 
@@ -304,15 +310,15 @@ def test_rename_via_move_route(monkeypatch):
 
     seen = {}
 
-    async def _move_files(tenant_id, src_file_ids, dest_file_id=None, new_name=None):
-        seen["args"] = (tenant_id, src_file_ids, dest_file_id, new_name)
+    async def _move_files(tenant_id, src_file_ids, dest_file_id=None, new_name=None, workspace_id=None):
+        seen["args"] = (tenant_id, src_file_ids, dest_file_id, new_name, workspace_id)
         return True, True
 
     monkeypatch.setattr(module, "validate_and_parse_json_request", _validate)
     monkeypatch.setattr(module.file_api_service, "move_files", _move_files)
 
     res = _run(module.move("tenant1"))
-    assert seen["args"] == ("tenant1", ["file1"], None, "renamed.txt")
+    assert seen["args"] == ("tenant1", ["file1"], None, "renamed.txt", None)
     assert res["code"] == 0
     assert res["data"] is True
 
@@ -457,6 +463,7 @@ def _load_file2document_module(monkeypatch):
     permission_mod = ModuleType("api.common.check_team_permission")
     permission_mod.check_file_read_permission = lambda *_args, **_kwargs: True
     permission_mod.check_file_team_permission = lambda *_args, **_kwargs: True
+    permission_mod.check_file_write_permission = lambda *_args, **_kwargs: True
     permission_mod.check_kb_team_permission = lambda *_args, **_kwargs: True
     monkeypatch.setitem(sys.modules, "api.common.check_team_permission", permission_mod)
     common_pkg.check_team_permission = permission_mod
@@ -728,6 +735,7 @@ def _load_file_api_service(monkeypatch):
     permission_mod = ModuleType("api.common.check_team_permission")
     permission_mod.check_file_read_permission = lambda *_args, **_kwargs: True
     permission_mod.check_file_team_permission = lambda *_args, **_kwargs: True
+    permission_mod.check_file_write_permission = lambda *_args, **_kwargs: True
     monkeypatch.setitem(sys.modules, "api.common.check_team_permission", permission_mod)
     common_pkg.check_team_permission = permission_mod
 
@@ -849,7 +857,11 @@ def test_upload_file_requires_existing_folder(monkeypatch):
 @pytest.mark.p2
 def test_upload_file_respects_user_limit(monkeypatch):
     module = _load_file_api_service(monkeypatch)
-    monkeypatch.setattr(module.FileService, "get_by_id", lambda _file_id: (True, SimpleNamespace(id="pf1", name="pf1")))
+    monkeypatch.setattr(
+        module.FileService,
+        "get_by_id",
+        lambda _file_id: (True, SimpleNamespace(id="pf1", name="pf1", tenant_id="tenant1")),
+    )
     monkeypatch.setattr(module.DocumentService, "get_doc_count", lambda _uid: 1)
     monkeypatch.setenv("MAX_FILE_NUM_PER_USER", "1")
 
@@ -864,7 +876,11 @@ def test_upload_file_success_uses_new_service_layer(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     storage_puts = []
 
-    monkeypatch.setattr(module.FileService, "get_by_id", lambda _file_id: (True, SimpleNamespace(id="pf1", name="pf1")))
+    monkeypatch.setattr(
+        module.FileService,
+        "get_by_id",
+        lambda _file_id: (True, SimpleNamespace(id="pf1", name="pf1", tenant_id="tenant1")),
+    )
     monkeypatch.setattr(module.FileService, "get_id_list_by_id", lambda *_args, **_kwargs: ["pf1"])
     monkeypatch.setattr(
         module.FileService,
@@ -899,14 +915,35 @@ def test_create_folder_rejects_duplicate_name(monkeypatch):
 
 
 @pytest.mark.p2
-def test_delete_files_checks_team_permission(monkeypatch):
+def test_upload_and_create_folder_reject_cross_workspace_parent(monkeypatch):
+    module = _load_file_api_service(monkeypatch)
+    monkeypatch.setattr(
+        module.FileService,
+        "get_by_id",
+        lambda file_id: (
+            True,
+            _DummyFile(file_id, module.FileType.FOLDER.value, tenant_id="team-2"),
+        ),
+    )
+
+    ok, message = _run(module.upload_file("team-1", "foreign-folder", [_DummyUploadFile("a.txt")]))
+    assert ok is False
+    assert message == "Parent folder does not belong to the selected workspace."
+
+    ok, message = _run(module.create_folder("team-1", "folder", "foreign-folder", module.FileType.FOLDER.value))
+    assert ok is False
+    assert message == "Parent folder does not belong to the selected workspace."
+
+
+@pytest.mark.p2
+def test_delete_files_checks_write_permission(monkeypatch):
     module = _load_file_api_service(monkeypatch)
     monkeypatch.setattr(
         module.FileService,
         "get_by_id",
         lambda _file_id: (True, _DummyFile("file1", module.FileType.DOC.value)),
     )
-    monkeypatch.setattr(module, "check_file_team_permission", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(module, "check_file_write_permission", lambda *_args, **_kwargs: False)
 
     ok, message = _run(module.delete_files("tenant1", ["file1"]))
     assert ok is False
@@ -964,6 +1001,28 @@ def test_move_files_handles_dest_and_storage_move(monkeypatch):
     assert data is True
     assert moved == [("src", "old", "dest", "a.txt")]
     assert updated == [("file1", {"parent_id": "dest", "location": "a.txt"})]
+
+
+@pytest.mark.p2
+def test_move_files_rejects_cross_workspace_destination(monkeypatch):
+    module = _load_file_api_service(monkeypatch)
+    monkeypatch.setattr(
+        module.FileService,
+        "get_by_ids",
+        lambda _ids: [_DummyFile("file1", module.FileType.DOC.value, tenant_id="team-1")],
+    )
+    monkeypatch.setattr(
+        module.FileService,
+        "get_by_id",
+        lambda _file_id: (
+            True,
+            _DummyFile("dest", module.FileType.FOLDER.value, tenant_id="team-2"),
+        ),
+    )
+
+    ok, message = _run(module.move_files("admin", ["file1"], "dest"))
+    assert ok is False
+    assert message == "Files cannot be moved across workspaces."
 
 
 @pytest.mark.p2

@@ -55,9 +55,7 @@ def workspace_dependencies(monkeypatch):
     monkeypatch.setattr(
         "api.db.services.workspace_service.UserTenantService.query",
         lambda **kwargs: [
-            membership
-            for membership in memberships.values()
-            if membership.tenant_id == kwargs["tenant_id"] and membership.role == kwargs["role"] and membership.status == kwargs["status"]
+            membership for membership in memberships.values() if membership.tenant_id == kwargs["tenant_id"] and membership.role == kwargs["role"] and membership.status == kwargs["status"]
         ],
     )
 
@@ -92,6 +90,7 @@ def test_shared_resource_permissions_follow_workspace_roles(workspace_dependenci
     assert WorkspaceAccessService.can_create_shared_resource("owner-1", "team-1")
     assert WorkspaceAccessService.can_create_shared_resource("admin-1", "team-1")
     assert not WorkspaceAccessService.can_create_shared_resource("member-1", "team-1")
+    assert WorkspaceAccessService.can_create_shared_resource("system-admin", "team-1")
 
     assert WorkspaceAccessService.get_shared_resource_capabilities("user-1", personal_resource) == {
         "read": True,
@@ -117,14 +116,14 @@ def test_shared_resource_permissions_follow_workspace_roles(workspace_dependenci
     assert not WorkspaceAccessService.can_read_shared_resource("outsider", team_resource)
 
 
-def test_superuser_can_read_but_not_manage_every_workspace(workspace_dependencies):
+def test_superuser_can_read_and_manage_every_workspace_resource(workspace_dependencies):
     personal_resource = {"tenant_id": "user-1", "status": StatusEnum.VALID.value}
     team_resource = {"tenant_id": "team-1", "status": StatusEnum.VALID.value}
 
     assert WorkspaceAccessService.can_read_shared_resource("system-admin", personal_resource)
     assert WorkspaceAccessService.can_read_shared_resource("system-admin", team_resource)
-    assert not WorkspaceAccessService.can_manage_shared_resource("system-admin", personal_resource)
-    assert not WorkspaceAccessService.can_manage_shared_resource("system-admin", team_resource)
+    assert WorkspaceAccessService.can_manage_shared_resource("system-admin", personal_resource)
+    assert WorkspaceAccessService.can_manage_shared_resource("system-admin", team_resource)
 
 
 def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_dependencies):
@@ -143,20 +142,20 @@ def test_knowledgebase_permissions_follow_workspace_and_creator_roles(workspace_
 
     assert WorkspaceAccessService.get_knowledgebase_capabilities("user-1", personal_kb) == {"read": True, "update": True, "delete": True}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("outsider", personal_kb) == {"read": False, "update": False, "delete": False}
-    assert WorkspaceAccessService.get_knowledgebase_capabilities("member-1", team_kb) == {"read": True, "update": True, "delete": True}
+    assert WorkspaceAccessService.get_knowledgebase_capabilities("member-1", team_kb) == {"read": True, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("member-2", team_kb) == {"read": True, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("admin-1", team_kb) == {"read": True, "update": True, "delete": True}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("invite-1", team_kb) == {"read": False, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("outsider", team_kb) == {"read": False, "update": False, "delete": False}
     assert WorkspaceAccessService.get_knowledgebase_capabilities("system-admin", personal_kb) == {
         "read": True,
-        "update": False,
-        "delete": False,
+        "update": True,
+        "delete": True,
     }
     assert WorkspaceAccessService.get_knowledgebase_capabilities("system-admin", team_kb) == {
         "read": True,
-        "update": False,
-        "delete": False,
+        "update": True,
+        "delete": True,
     }
 
 
@@ -171,9 +170,55 @@ def test_workspace_capabilities_distinguish_member_and_manager(workspace_depende
     }
     assert WorkspaceAccessService.get_workspace_capabilities("member-1", "team-1") == {
         "read": True,
-        "create_knowledgebase": True,
+        "create_knowledgebase": False,
         "create_shared_resource": False,
         "manage_members": False,
         "update": False,
         "delete": False,
     }
+    assert WorkspaceAccessService.get_workspace_capabilities("system-admin", "team-1") == {
+        "read": True,
+        "create_knowledgebase": True,
+        "create_shared_resource": True,
+        "manage_members": True,
+        "update": True,
+        "delete": True,
+    }
+
+
+def test_team_members_cannot_create_or_modify_team_resources(workspace_dependencies):
+    team_file = {"tenant_id": "team-1"}
+    personal_file = {"tenant_id": "user-1"}
+
+    assert not WorkspaceAccessService.can_create_knowledgebase("member-1", "team-1")
+    assert not WorkspaceAccessService.can_create_shared_resource("member-1", "team-1")
+    assert not WorkspaceAccessService.can_manage_file("member-1", team_file)
+    assert WorkspaceAccessService.can_manage_file("admin-1", team_file)
+    assert WorkspaceAccessService.can_manage_file("system-admin", team_file)
+    assert WorkspaceAccessService.can_manage_file("user-1", personal_file)
+
+
+def test_knowledgebase_references_must_stay_in_workspace(workspace_dependencies, monkeypatch):
+    knowledgebases = {
+        "team-kb": SimpleNamespace(
+            id="team-kb",
+            tenant_id="team-1",
+            permission=TenantPermission.TEAM,
+            status=StatusEnum.VALID.value,
+        ),
+        "personal-kb": SimpleNamespace(
+            id="personal-kb",
+            tenant_id="user-1",
+            permission=TenantPermission.ME,
+            status=StatusEnum.VALID.value,
+        ),
+    }
+    monkeypatch.setattr(
+        "api.db.services.workspace_service.Knowledgebase.get_or_none",
+        lambda *_args, **_kwargs: knowledgebases.get(_kwargs.get("id")),
+    )
+
+    assert WorkspaceAccessService.extract_knowledgebase_ids({"components": [{"params": {"dataset_ids": ["team-kb"]}}]}) == {"team-kb"}
+    assert WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["team-kb"])
+    assert not WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["personal-kb"])
+    assert not WorkspaceAccessService.can_reference_knowledgebases("member-1", "team-1", ["missing"])

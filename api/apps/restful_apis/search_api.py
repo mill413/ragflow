@@ -25,7 +25,6 @@ from api.apps import current_user, login_required
 from api.constants import DATASET_NAME_LIMIT
 from api.db.db_models import DB
 from api.db.services import duplicate_name
-from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.search_service import SearchService
 from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
@@ -59,6 +58,17 @@ def _get_search(search_id, *, manage=False):
     return search if check(current_user.id, search) else None
 
 
+def _validate_search_knowledgebases(search_config, workspace_id):
+    if not isinstance(search_config, dict):
+        return "search_config must be a JSON object"
+    knowledgebase_ids = search_config.get("kb_ids") or []
+    if not isinstance(knowledgebase_ids, list):
+        return "search_config.kb_ids must be a list"
+    if not WorkspaceAccessService.can_reference_knowledgebases(current_user.id, workspace_id, knowledgebase_ids):
+        return "Searches can only reference datasets from the same workspace."
+    return None
+
+
 @manager.route("/searches", methods=["POST"])  # noqa: F821
 @login_required
 @validate_request("name")
@@ -87,6 +97,8 @@ async def create():
     req["description"] = description
     req["tenant_id"] = workspace_id
     req["created_by"] = current_user.id
+    if error := _validate_search_knowledgebases(req.get("search_config", {}), workspace_id):
+        return get_data_error_result(message=error)
     with DB.atomic():
         try:
             if not SearchService.save(**req):
@@ -109,9 +121,7 @@ def list_searches():
     try:
         accessible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(current_user.id))
         if not owner_ids:
-            search_apps, total = SearchService.get_by_tenant_ids(
-                list(accessible_workspace_ids), current_user.id, page_number, items_per_page, orderby, desc, keywords
-            )
+            search_apps, total = SearchService.get_by_tenant_ids(list(accessible_workspace_ids), current_user.id, page_number, items_per_page, orderby, desc, keywords)
         else:
             if not set(owner_ids).issubset(accessible_workspace_ids):
                 return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
@@ -171,6 +181,8 @@ async def update(search_id):
         if not isinstance(new_config, dict):
             return get_data_error_result(message="search_config must be a JSON object")
         req["search_config"] = {**current_config, **new_config}
+        if error := _validate_search_knowledgebases(req["search_config"], search_app.tenant_id):
+            return get_data_error_result(message=error)
         logging.debug(
             "Search update weight: search_id=%s user_id=%s incoming_vector_similarity_weight=%s stored_vector_similarity_weight=%s stored_full_text_weight=%s",
             search_id,
@@ -243,10 +255,8 @@ async def completion(search_id):
     if not kb_ids:
         return get_data_error_result(message="`kb_ids` is required.")
 
-    # check if the kb_ids is accessible for this user
-    for kb_id in kb_ids:
-        if not KnowledgebaseService.accessible(kb_id=kb_id, user_id=uid):
-            return get_data_error_result(message=f"You don't own the dataset {kb_id}")
+    if not WorkspaceAccessService.can_reference_knowledgebases(uid, workspace_id, kb_ids):
+        return get_data_error_result(message="Search datasets are no longer accessible from this workspace.")
 
     async def stream():
         nonlocal req, uid, kb_ids, search_config

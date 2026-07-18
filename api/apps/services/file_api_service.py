@@ -17,7 +17,7 @@ import logging
 import os
 import pathlib
 
-from api.common.check_team_permission import check_file_read_permission, check_file_team_permission
+from api.common.check_team_permission import check_file_read_permission, check_file_write_permission
 from api.db import FileType
 from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService
@@ -45,6 +45,8 @@ async def upload_file(tenant_id: str, pf_id: str, file_objs: list):
     e, pf_folder = FileService.get_by_id(pf_id)
     if not e:
         return False, "Can't find this folder!"
+    if pf_folder.tenant_id != tenant_id:
+        return False, "Parent folder does not belong to the selected workspace."
 
     file_res = []
     for file_obj in file_objs:
@@ -112,6 +114,9 @@ async def create_folder(tenant_id: str, name: str, pf_id: str = None, file_type:
 
     if not FileService.is_parent_folder_exist(pf_id):
         return False, "Parent Folder Doesn't Exist!"
+    parent_exists, parent_folder = FileService.get_by_id(pf_id)
+    if not parent_exists or parent_folder.tenant_id != tenant_id:
+        return False, "Parent folder does not belong to the selected workspace."
     if FileService.query(name=name, parent_id=pf_id):
         return False, "Duplicated folder name in the same folder."
 
@@ -215,7 +220,7 @@ def get_all_parent_folders(file_id: str, user_id: str = None, tenant_id: str = N
     return True, {"parent_folders": [pf.to_json() for pf in parent_folders]}
 
 
-async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
+async def delete_files(uid: str, file_ids: list, auth_header: str = "", workspace_id: str = None):
     """
     Delete files/folders with team permission check and recursive deletion.
 
@@ -432,7 +437,10 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
             if not file.tenant_id:
                 errors.append(f"Tenant not found for file {file_id}")
                 continue
-            if not check_file_team_permission(file, uid):
+            if workspace_id and file.tenant_id != workspace_id:
+                errors.append(f"File {file_id} does not belong to the selected workspace")
+                continue
+            if not check_file_write_permission(file, uid):
                 errors.append(f"No authorization for file {file_id}")
                 continue
 
@@ -455,7 +463,7 @@ async def delete_files(uid: str, file_ids: list, auth_header: str = ""):
     return await thread_pool_exec(_rm_sync)
 
 
-async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new_name: str = None):
+async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new_name: str = None, workspace_id: str = None):
     """
     Move and/or rename files. Follows Linux mv semantics:
     - new_name only: rename in place (no storage operation)
@@ -480,7 +488,9 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
             return False, "File or folder not found!"
         if not file.tenant_id:
             return False, "Tenant not found!"
-        if not check_file_team_permission(file, uid):
+        if workspace_id and file.tenant_id != workspace_id:
+            return False, "Source files do not belong to the selected workspace."
+        if not check_file_write_permission(file, uid):
             return False, "No authorization."
 
     dest_folder = None
@@ -488,6 +498,14 @@ async def move_files(uid: str, src_file_ids: list, dest_file_id: str = None, new
         ok, dest_folder = FileService.get_by_id(dest_file_id)
         if not ok or not dest_folder:
             return False, "Parent folder not found!"
+        if dest_folder.type != FileType.FOLDER.value:
+            return False, "Destination must be a folder."
+        if workspace_id and dest_folder.tenant_id != workspace_id:
+            return False, "Destination does not belong to the selected workspace."
+        if not check_file_write_permission(dest_folder, uid):
+            return False, "No authorization for destination folder."
+        if any(file.tenant_id != dest_folder.tenant_id for file in files):
+            return False, "Files cannot be moved across workspaces."
 
     if new_name:
         file = files_dict[src_file_ids[0]]

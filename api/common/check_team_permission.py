@@ -52,3 +52,7 @@ def check_file_read_permission(file: dict | File, user_id: str) -> bool:
     if file["tenant_id"] in WorkspaceAccessService.list_visible_workspace_ids(user_id):
         return True
     return check_file_team_permission(file, user_id)
+
+
+def check_file_write_permission(file: dict | File, user_id: str) -> bool:
+    return WorkspaceAccessService.can_manage_file(user_id, file)

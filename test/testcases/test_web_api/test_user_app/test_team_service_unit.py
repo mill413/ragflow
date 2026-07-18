@@ -47,6 +47,45 @@ def test_normal_member_cannot_change_roles(monkeypatch):
         TeamService.update_member_role("member-1", "team-1", "member-2", UserTenantRole.ADMIN)
 
 
+def test_superuser_can_view_teams_without_membership(monkeypatch):
+    monkeypatch.setattr(WorkspaceAccessService, "is_superuser", staticmethod(lambda user_id: user_id == "root"))
+    monkeypatch.setattr(
+        WorkspaceAccessService,
+        "list_visible_workspaces",
+        classmethod(
+            lambda _cls, _user_id: [
+                {"tenant_id": "personal-1", "workspace_type": "personal"},
+                {"tenant_id": "team-1", "workspace_type": "team"},
+            ]
+        ),
+    )
+
+    assert TeamService.list_by_user_id("root") == [{"tenant_id": "team-1", "workspace_type": "team"}]
+
+
+def test_superuser_can_remove_non_owner_team_member(monkeypatch):
+    member = SimpleNamespace(id="member-relation", role=UserTenantRole.ADMIN)
+    updates = []
+
+    class UpdateQuery:
+        def where(self, *_args):
+            return self
+
+        def execute(self):
+            updates.append(True)
+
+    monkeypatch.setattr(
+        WorkspaceAccessService,
+        "get_membership",
+        classmethod(lambda _cls, user_id, _team_id: member if user_id == "member-1" else None),
+    )
+    monkeypatch.setattr(WorkspaceAccessService, "is_superuser", staticmethod(lambda user_id: user_id == "root"))
+    monkeypatch.setattr("api.db.services.workspace_service.UserTenant.update", lambda **_data: UpdateQuery())
+
+    TeamService.remove_member("root", "team-1", "member-1")
+    assert updates == [True]
+
+
 def test_pending_invitations_are_separate_from_active_teams(monkeypatch):
     monkeypatch.setattr(
         "api.db.services.workspace_service.UserTenantService.list_memberships_by_user_id",

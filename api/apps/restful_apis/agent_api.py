@@ -815,11 +815,7 @@ async def create_agent(tenant_id):
         return get_json_result(data=False, message="No authorization.", code=RetCode.OPERATING_ERROR)
     req["canvas_type"] = req.get("canvas_type", "")
     req["user_id"] = workspace_id
-    req["permission"] = (
-        TenantPermission.TEAM
-        if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM
-        else TenantPermission.ME
-    )
+    req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM else TenantPermission.ME
     req["canvas_category"] = req.get("canvas_category") or CanvasCategory.Agent
     req["release"] = bool(req.get("release", ""))
 
@@ -837,6 +833,13 @@ async def create_agent(tenant_id):
             data=False,
             message=str(exc),
             code=RetCode.ARGUMENT_ERROR,
+        )
+    knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(req["dsl"])
+    if not WorkspaceAccessService.can_reference_knowledgebases(tenant_id, workspace_id, knowledgebase_ids):
+        return get_json_result(
+            data=False,
+            message="Agents can only reference datasets from the same workspace.",
+            code=RetCode.OPERATING_ERROR,
         )
 
     if req.get("title") is None:
@@ -1088,6 +1091,14 @@ async def update_agent(agent_id, tenant_id):
 
     _, current_agent = UserCanvasService.get_by_id(agent_id)
     workspace_id = current_agent.user_id if current_agent else tenant_id
+    if req.get("dsl") is not None:
+        knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(req["dsl"])
+        if not WorkspaceAccessService.can_reference_knowledgebases(tenant_id, workspace_id, knowledgebase_ids):
+            return get_json_result(
+                data=False,
+                message="Agents can only reference datasets from the same workspace.",
+                code=RetCode.OPERATING_ERROR,
+            )
     if req.get("title") is not None:
         req["title"] = req["title"].strip()
         canvas_category_for_duplicate_check = req.get("canvas_category") or (current_agent.canvas_category if current_agent else CanvasCategory.Agent)

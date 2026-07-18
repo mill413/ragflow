@@ -126,21 +126,27 @@ class WorkspaceAccessService:
     def can_manage_workspace(cls, user_id: str, tenant_id: str) -> bool:
         if cls.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
             return False
+        if cls.is_superuser(user_id):
+            return True
         membership = cls.get_membership(user_id, tenant_id)
         return bool(membership and cls._value(membership, "role") in cls.MANAGER_ROLES)
 
     @classmethod
     def can_create_knowledgebase(cls, user_id: str, tenant_id: str) -> bool:
         workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type and cls.is_superuser(user_id):
+            return True
         if workspace_type == WorkspaceType.PERSONAL:
             return tenant_id == user_id and cls.is_member(user_id, tenant_id)
         if workspace_type == WorkspaceType.TEAM:
-            return cls.is_member(user_id, tenant_id)
+            return cls.can_manage_workspace(user_id, tenant_id)
         return False
 
     @classmethod
     def can_create_shared_resource(cls, user_id: str, tenant_id: str) -> bool:
         workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type and cls.is_superuser(user_id):
+            return True
         if workspace_type == WorkspaceType.PERSONAL:
             return tenant_id == user_id and cls.is_member(user_id, tenant_id)
         if workspace_type == WorkspaceType.TEAM:
@@ -166,15 +172,9 @@ class WorkspaceAccessService:
         if workspace_type and cls.is_superuser(user_id):
             return True
         if workspace_type == WorkspaceType.PERSONAL:
-            return (
-                tenant_id == user_id
-                and cls.is_member(user_id, tenant_id)
-                and (permission_field is None or permission == TenantPermission.ME)
-            )
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id) and (permission_field is None or permission == TenantPermission.ME)
         if workspace_type == WorkspaceType.TEAM:
-            return cls.is_member(user_id, tenant_id) and (
-                permission_field is None or permission == TenantPermission.TEAM
-            )
+            return cls.is_member(user_id, tenant_id) and (permission_field is None or permission == TenantPermission.TEAM)
         return False
 
     @classmethod
@@ -195,6 +195,8 @@ class WorkspaceAccessService:
             return False
 
         tenant_id = cls._value(resource, workspace_field)
+        if cls.is_superuser(user_id):
+            return True
         if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
             return tenant_id == user_id and cls.is_member(user_id, tenant_id)
         return cls.can_manage_workspace(user_id, tenant_id)
@@ -253,12 +255,51 @@ class WorkspaceAccessService:
             return False
 
         tenant_id = cls._value(knowledgebase, "tenant_id")
+        if cls.is_superuser(user_id):
+            return True
         if cls.get_workspace_type(tenant_id) == WorkspaceType.PERSONAL:
             return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        return cls.can_manage_workspace(user_id, tenant_id)
 
-        membership = cls.get_membership(user_id, tenant_id)
-        role = cls._value(membership, "role") if membership else None
-        return role in cls.MANAGER_ROLES or cls._value(knowledgebase, "created_by") == user_id
+    @classmethod
+    def can_manage_file(cls, user_id: str, file: Mapping[str, Any] | Any) -> bool:
+        tenant_id = cls._value(file, "tenant_id")
+        workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type and cls.is_superuser(user_id):
+            return True
+        if workspace_type == WorkspaceType.PERSONAL:
+            return tenant_id == user_id and cls.is_member(user_id, tenant_id)
+        if workspace_type == WorkspaceType.TEAM:
+            return cls.can_manage_workspace(user_id, tenant_id)
+        return False
+
+    @classmethod
+    def can_reference_knowledgebases(cls, user_id: str, workspace_id: str, knowledgebase_ids: list[str] | tuple[str, ...] | set[str]) -> bool:
+        for knowledgebase_id in set(knowledgebase_ids or []):
+            knowledgebase = Knowledgebase.get_or_none(id=knowledgebase_id, status=StatusEnum.VALID.value)
+            if not knowledgebase or knowledgebase.tenant_id != workspace_id:
+                return False
+            if not cls.can_read_knowledgebase(user_id, knowledgebase):
+                return False
+        return True
+
+    @classmethod
+    def extract_knowledgebase_ids(cls, value: Any) -> set[str]:
+        knowledgebase_ids: set[str] = set()
+
+        def visit(item: Any) -> None:
+            if isinstance(item, Mapping):
+                for key, nested in item.items():
+                    if key in {"dataset_ids", "kb_ids"} and isinstance(nested, (list, tuple, set)):
+                        knowledgebase_ids.update(identifier for identifier in nested if isinstance(identifier, str) and identifier and "@" not in identifier)
+                    else:
+                        visit(nested)
+            elif isinstance(item, (list, tuple, set)):
+                for nested in item:
+                    visit(nested)
+
+        visit(value)
+        return knowledgebase_ids
 
     @classmethod
     def can_delete_knowledgebase(cls, user_id: str, knowledgebase: Mapping[str, Any] | Any) -> bool:
@@ -271,13 +312,14 @@ class WorkspaceAccessService:
         role = cls._value(membership, "role") if membership else None
         is_member = role in cls.ACTIVE_MEMBER_ROLES
         is_team = workspace_type == WorkspaceType.TEAM
+        is_superuser = bool(workspace_type and cls.is_superuser(user_id))
         return {
-            "read": bool(is_member or (workspace_type and cls.is_superuser(user_id))),
+            "read": bool(is_member or is_superuser),
             "create_knowledgebase": cls.can_create_knowledgebase(user_id, tenant_id),
             "create_shared_resource": cls.can_create_shared_resource(user_id, tenant_id),
-            "manage_members": bool(is_team and role in cls.MANAGER_ROLES),
-            "update": bool(is_team and role in cls.MANAGER_ROLES),
-            "delete": bool(is_team and role == UserTenantRole.OWNER),
+            "manage_members": bool(is_team and (role in cls.MANAGER_ROLES or is_superuser)),
+            "update": bool(is_team and (role in cls.MANAGER_ROLES or is_superuser)),
+            "delete": bool(is_team and (role == UserTenantRole.OWNER or is_superuser)),
         }
 
     @classmethod
@@ -371,6 +413,9 @@ class TeamService:
 
     @classmethod
     def list_by_user_id(cls, user_id: str) -> list[dict[str, Any]]:
+        if WorkspaceAccessService.is_superuser(user_id):
+            return [workspace for workspace in WorkspaceAccessService.list_visible_workspaces(user_id) if workspace["workspace_type"] == WorkspaceType.TEAM]
+
         teams = []
         for workspace in TenantService.list_accessible_by_user_id(user_id):
             if workspace["tenant_id"] == user_id:
@@ -405,7 +450,7 @@ class TeamService:
     def get(cls, user_id: str, tenant_id: str) -> dict[str, Any]:
         if WorkspaceAccessService.get_workspace_type(tenant_id) != WorkspaceType.TEAM:
             raise LookupError("Team not found.")
-        if not WorkspaceAccessService.is_member(user_id, tenant_id):
+        if not WorkspaceAccessService.is_member(user_id, tenant_id) and not WorkspaceAccessService.is_superuser(user_id):
             raise PermissionError("No authorization.")
         exists, tenant = TenantService.get_by_id(tenant_id)
         if not exists:
@@ -430,7 +475,7 @@ class TeamService:
 
     @classmethod
     def list_members(cls, actor_id: str, tenant_id: str) -> list[dict[str, Any]]:
-        if not WorkspaceAccessService.is_member(actor_id, tenant_id):
+        if not WorkspaceAccessService.is_member(actor_id, tenant_id) and not WorkspaceAccessService.is_superuser(actor_id):
             raise PermissionError("No authorization.")
         return UserTenantService.get_by_tenant_id(tenant_id)
 
@@ -485,9 +530,10 @@ class TeamService:
                 raise ValueError("Transfer team ownership before removing the owner.")
             actor_membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
             actor_role = WorkspaceAccessService._value(actor_membership, "role") if actor_membership else None
-            if actor_id != user_id and actor_role not in WorkspaceAccessService.MANAGER_ROLES:
+            is_superuser = WorkspaceAccessService.is_superuser(actor_id)
+            if actor_id != user_id and actor_role not in WorkspaceAccessService.MANAGER_ROLES and not is_superuser:
                 raise PermissionError("No authorization.")
-            if actor_role == UserTenantRole.ADMIN and membership.role == UserTenantRole.ADMIN:
+            if not is_superuser and actor_role == UserTenantRole.ADMIN and membership.role == UserTenantRole.ADMIN:
                 raise PermissionError("Only the owner can remove an administrator.")
             with DB.atomic():
                 UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.id == membership.id).execute()
@@ -512,20 +558,29 @@ class TeamService:
         with DB.lock(cls._lock_name("owner", tenant_id), 10):
             actor = WorkspaceAccessService.get_membership(actor_id, tenant_id)
             target = WorkspaceAccessService.get_membership(user_id, tenant_id)
-            if not actor or actor.role != UserTenantRole.OWNER:
+            is_superuser = WorkspaceAccessService.is_superuser(actor_id)
+            if not is_superuser and (not actor or actor.role != UserTenantRole.OWNER):
                 raise PermissionError("Only the owner can transfer team ownership.")
             if not target or target.role not in WorkspaceAccessService.ACTIVE_MEMBER_ROLES:
                 raise LookupError("Target member not found.")
-            if actor_id == user_id:
+            owners = UserTenantService.query(
+                tenant_id=tenant_id,
+                role=UserTenantRole.OWNER,
+                status=StatusEnum.VALID.value,
+            )
+            if not owners:
+                raise LookupError("Team owner not found.")
+            owner = owners[0]
+            if owner.user_id == user_id:
                 return
             with DB.atomic():
-                UserTenant.update(role=UserTenantRole.ADMIN).where(UserTenant.id == actor.id).execute()
+                UserTenant.update(role=UserTenantRole.ADMIN).where(UserTenant.id == owner.id).execute()
                 UserTenant.update(role=UserTenantRole.OWNER).where(UserTenant.id == target.id).execute()
 
     @classmethod
     def delete(cls, actor_id: str, tenant_id: str) -> None:
         membership = WorkspaceAccessService.get_membership(actor_id, tenant_id)
-        if not membership or membership.role != UserTenantRole.OWNER:
+        if not WorkspaceAccessService.is_superuser(actor_id) and (not membership or membership.role != UserTenantRole.OWNER):
             raise PermissionError("Only the owner can delete a team.")
         resource_queries = (
             Knowledgebase.select().where((Knowledgebase.tenant_id == tenant_id) & (Knowledgebase.status == StatusEnum.VALID.value)),

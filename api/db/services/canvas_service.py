@@ -210,10 +210,7 @@ class UserCanvasService(CommonService):
         if include_private:
             query = cls.model.select(cls.model.tags).where(cls.model.user_id.in_(joined_tenant_ids))
         else:
-            query = cls.model.select(cls.model.tags).where(
-                ((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value))
-                | (cls.model.user_id == user_id)
-            )
+            query = cls.model.select(cls.model.tags).where(((cls.model.user_id.in_(joined_tenant_ids)) & (cls.model.permission == TenantPermission.TEAM.value)) | (cls.model.user_id == user_id))
         if canvas_category:
             query = query.where(cls.model.canvas_category == canvas_category)
 
@@ -278,12 +275,15 @@ class UserCanvasService(CommonService):
         e, c = UserCanvasService.get_by_canvas_id(canvas_id)
         if not e:
             return False
-        return WorkspaceAccessService.can_read_shared_resource(
+        if not WorkspaceAccessService.can_read_shared_resource(
             tenant_id,
             c,
             workspace_field="user_id",
             permission_field="permission",
-        )
+        ):
+            return False
+        knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(c.get("dsl") or {})
+        return WorkspaceAccessService.can_reference_knowledgebases(tenant_id, c["user_id"], knowledgebase_ids)
 
     @classmethod
     @DB.connection_context()
@@ -293,12 +293,15 @@ class UserCanvasService(CommonService):
         e, canvas = UserCanvasService.get_by_canvas_id(canvas_id)
         if not e:
             return False
-        return WorkspaceAccessService.can_manage_shared_resource(
+        if not WorkspaceAccessService.can_manage_shared_resource(
             tenant_id,
             canvas,
             workspace_field="user_id",
             permission_field="permission",
-        )
+        ):
+            return False
+        knowledgebase_ids = WorkspaceAccessService.extract_knowledgebase_ids(canvas.get("dsl") or {})
+        return WorkspaceAccessService.can_reference_knowledgebases(tenant_id, canvas["user_id"], knowledgebase_ids)
 
     @classmethod
     def get_agent_dsl_with_release(cls, agent_id, release_mode=False, tenant_id=None):

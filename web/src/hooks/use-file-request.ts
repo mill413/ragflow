@@ -70,6 +70,7 @@ export const useFileWorkspace = () => {
 };
 
 export const useUploadFile = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const { setPaginationParams } = useSetPaginationParams();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -86,6 +87,9 @@ export const useUploadFile = () => {
       );
       const formData = new FormData();
       formData.append('parent_id', params.parentId);
+      if (targetWorkspaceId) {
+        formData.append('workspace_id', targetWorkspaceId);
+      }
       fileList.forEach((file: any, index: number) => {
         formData.append('file', file);
         formData.append('path', pathList[index]);
@@ -113,9 +117,11 @@ export interface IMoveFileBody {
   src_file_ids: string[];
   dest_file_id?: string;
   new_name?: string;
+  workspace_id?: string;
 }
 
 export const useMoveFile = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
@@ -126,7 +132,10 @@ export const useMoveFile = () => {
   } = useMutation({
     mutationKey: [FileApiAction.MoveFile],
     mutationFn: async (params: IMoveFileBody) => {
-      const { data } = await fileManagerService.moveFile(params);
+      const { data } = await fileManagerService.moveFile({
+        ...params,
+        workspace_id: targetWorkspaceId,
+      });
       if (data.code === 0) {
         message.success(t('message.operated'));
         queryClient.invalidateQueries({
@@ -141,6 +150,7 @@ export const useMoveFile = () => {
 };
 
 export const useCreateFolder = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const { setPaginationParams } = useSetPaginationParams();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -156,6 +166,7 @@ export const useCreateFolder = () => {
         name: params.name,
         parent_id: params.parentId,
         type: 'folder',
+        workspace_id: targetWorkspaceId,
       });
       if (data.code === 0) {
         message.success(t('message.created'));
@@ -294,6 +305,7 @@ export const useFetchFileList = () => {
 };
 
 export const useDeleteFile = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
@@ -306,6 +318,7 @@ export const useDeleteFile = () => {
     mutationFn: async (params: { fileIds: string[]; parentId: string }) => {
       const { data } = await fileManagerService.removeFile({
         ids: params.fileIds,
+        workspace_id: targetWorkspaceId,
       });
       if (data.code === 0) {
         message.success(t('message.deleted'));
@@ -341,6 +354,7 @@ export const useDownloadFile = () => {
 };
 
 export const useRenameFile = () => {
+  const { targetWorkspaceId } = useFileWorkspace();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const {
@@ -353,6 +367,7 @@ export const useRenameFile = () => {
       const { data } = await fileManagerService.moveFile({
         src_file_ids: [params.fileId],
         new_name: params.name,
+        workspace_id: targetWorkspaceId,
       });
       if (data.code === 0) {
         message.success(t('message.renamed'));

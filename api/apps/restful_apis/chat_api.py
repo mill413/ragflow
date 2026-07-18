@@ -336,17 +336,22 @@ async def _validate_rerank_id(rerank_id, tenant_id):
 #     return None
 
 
-async def _validate_dataset_ids(dataset_ids, tenant_id):
+async def _validate_dataset_ids(dataset_ids, actor_id, workspace_id):
     if dataset_ids is None:
         return []
     if not isinstance(dataset_ids, list):
         return "`dataset_ids` should be a list."
 
     normalized_ids = [dataset_id for dataset_id in dataset_ids if dataset_id]
+    if not await thread_pool_exec(
+        WorkspaceAccessService.can_reference_knowledgebases,
+        actor_id,
+        workspace_id,
+        normalized_ids,
+    ):
+        return "Chats can only reference datasets from the same workspace."
     kbs = []
     for dataset_id in normalized_ids:
-        if not await thread_pool_exec(KnowledgebaseService.accessible, kb_id=dataset_id, user_id=tenant_id):
-            return f"You don't own the dataset {dataset_id}"
         matches = await thread_pool_exec(KnowledgebaseService.query, id=dataset_id)
         if not matches:
             return f"You don't own the dataset {dataset_id}"
@@ -392,7 +397,7 @@ async def create():
         req["name"] = name
 
         if "dataset_ids" in req:
-            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id)
+            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id, workspace_id)
             if isinstance(kb_ids, str):
                 return get_data_error_result(message=kb_ids)
             req["kb_ids"] = kb_ids
@@ -472,9 +477,7 @@ async def list_chats():
     try:
         page_number = int(request.args.get("page", 0))
         items_per_page = validate_rest_api_page_size(int(request.args.get("page_size", 0)))
-        accessible_workspace_ids = set(
-            await thread_pool_exec(WorkspaceAccessService.list_visible_workspace_ids, current_user.id)
-        )
+        accessible_workspace_ids = set(await thread_pool_exec(WorkspaceAccessService.list_visible_workspace_ids, current_user.id))
 
         if owner_ids:
             if not set(owner_ids).issubset(accessible_workspace_ids):
@@ -554,7 +557,7 @@ async def update_chat(chat_id):
             req["name"] = name
 
         if "dataset_ids" in req:
-            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id)
+            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id, workspace_id)
             if isinstance(kb_ids, str):
                 return get_data_error_result(message=kb_ids)
             req["kb_ids"] = kb_ids
@@ -631,7 +634,7 @@ async def patch_chat(chat_id):
                 req["name"] = name
 
         if "dataset_ids" in req:
-            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id)
+            kb_ids = await _validate_dataset_ids(req.get("dataset_ids"), current_user.id, workspace_id)
             if isinstance(kb_ids, str):
                 return get_data_error_result(message=kb_ids)
             req["kb_ids"] = kb_ids
@@ -1112,8 +1115,16 @@ async def mindmap():
     kb_ids = list(search_config.get("kb_ids", []))
     kb_ids.extend(req["kb_ids"])
     kb_ids = list(set(kb_ids))
+    workspace_id = search_app.get("tenant_id", current_user.id)
+    if not await thread_pool_exec(
+        WorkspaceAccessService.can_reference_knowledgebases,
+        current_user.id,
+        workspace_id,
+        kb_ids,
+    ):
+        return get_json_result(data=False, message="Datasets must belong to the same workspace.", code=RetCode.AUTHENTICATION_ERROR)
 
-    mind_map = await gen_mindmap(req["question"], kb_ids, search_app.get("tenant_id", current_user.id), search_config)
+    mind_map = await gen_mindmap(req["question"], kb_ids, workspace_id, search_config)
     if "error" in mind_map:
         return server_error_response(Exception(mind_map["error"]))
     return get_json_result(data=mind_map)
@@ -1200,6 +1211,17 @@ async def session_completion(chat_id_in_arg=""):
             e, dia = await thread_pool_exec(DialogService.get_by_id, chat_id)
             if not e:
                 return get_data_error_result(message="Chat not found!")
+            if not await thread_pool_exec(
+                WorkspaceAccessService.can_reference_knowledgebases,
+                current_user.id,
+                dia.tenant_id,
+                dia.kb_ids,
+            ):
+                return get_json_result(
+                    data=False,
+                    message="Chat datasets are no longer accessible from this workspace.",
+                    code=RetCode.AUTHENTICATION_ERROR,
+                )
             if session_id:
                 e, conv = await thread_pool_exec(ConversationService.get_by_id, session_id)
                 if not e:
