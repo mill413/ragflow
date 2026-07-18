@@ -250,8 +250,9 @@ const AdminNavigationLayout = () => {
                   <ul
                     className={cn(
                       'mt-1 space-y-1',
-                      !sidebarCollapsed &&
-                        'ml-6 border-l border-border-button pl-3',
+                      sidebarCollapsed
+                        ? 'ml-2'
+                        : 'ml-6 border-l border-border-button pl-3',
                     )}
                   >
                     {it.children.map((child) => (
