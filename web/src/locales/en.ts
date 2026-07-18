@@ -3403,6 +3403,10 @@ Important structured information may include: names, dates, locations, events, k
       },
 
       userMonitoring: {
+        description:
+          'Manage all user accounts and view their knowledge resource usage.',
+        totalUsersLabel: 'Users',
+        activeUsersLabel: 'Active users',
         teams: 'Teams joined',
         datasets: 'Datasets created',
         documents: 'Files uploaded',

@@ -26,11 +26,15 @@ import {
 } from '@tanstack/react-query';
 
 import {
+  HardDrive,
+  Library,
   LucideClipboardList,
   LucideExternalLink,
   LucideTrash2,
   LucideUserLock,
   LucideUserPlus,
+  UserCheck,
+  UsersRound,
 } from 'lucide-react';
 
 import { rsaPsw } from '@/utils';
@@ -578,40 +582,28 @@ function AdminUserManagement() {
     }
   }, [usersList, table]);
 
+  const totalUsers = usersList?.length ?? 0;
+  const activeUsers =
+    usersList?.filter((user) => parseBooleanish(user.is_active)).length ?? 0;
+  const createdDatasets =
+    usersList?.reduce((total, user) => total + user.created_datasets, 0) ?? 0;
+  const uploadedStorage =
+    usersList?.reduce(
+      (total, user) => total + user.uploaded_storage_bytes,
+      0,
+    ) ?? 0;
+
   return (
     <>
       <Card className="!shadow-none relative h-full bg-transparent overflow-hidden">
         <Spotlight />
 
         <ScrollArea className="size-full">
-          <CardHeader className="space-y-0 flex flex-row justify-between items-center">
+          <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-5">
             <div>
               <CardTitle>{t('admin.userManagement')}</CardTitle>
-              <div className="mt-2 flex gap-4 text-xs text-text-secondary">
-                <span>
-                  {t('admin.userMonitoring.totalUsers', {
-                    count: usersList?.length ?? 0,
-                  })}
-                </span>
-                <span>
-                  {t('admin.userMonitoring.activeUsers', {
-                    count:
-                      usersList?.filter((user) =>
-                        parseBooleanish(user.is_active),
-                      ).length ?? 0,
-                  })}
-                </span>
-                <span>
-                  {t('admin.userMonitoring.totalStorage', {
-                    size: formatBytes(
-                      usersList?.reduce(
-                        (total, user) => total + user.uploaded_storage_bytes,
-                        0,
-                      ) ?? 0,
-                      { decimals: 1 },
-                    ),
-                  })}
-                </span>
+              <div className="mt-2 text-sm text-text-secondary">
+                {t('admin.userMonitoring.description')}
               </div>
             </div>
 
@@ -754,6 +746,43 @@ function AdminUserManagement() {
                 <LucideUserPlus />
                 {t('admin.newUser')}
               </Button>
+            </div>
+
+            <div className="col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                [
+                  t('admin.userMonitoring.totalUsersLabel'),
+                  totalUsers,
+                  UsersRound,
+                ],
+                [
+                  t('admin.userMonitoring.activeUsersLabel'),
+                  activeUsers,
+                  UserCheck,
+                ],
+                [t('admin.userMonitoring.datasets'), createdDatasets, Library],
+                [
+                  t('admin.userMonitoring.storage'),
+                  formatBytes(uploadedStorage, { decimals: 1 }),
+                  HardDrive,
+                ],
+              ].map(([label, value, Icon]) => {
+                const MetricIcon = Icon as typeof UsersRound;
+                return (
+                  <div
+                    key={String(label)}
+                    className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
+                  >
+                    <div className="flex items-center justify-between text-xs text-text-secondary">
+                      <span>{String(label)}</span>
+                      <MetricIcon className="size-4" />
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold">
+                      {String(value)}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CardHeader>
 

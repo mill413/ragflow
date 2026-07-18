@@ -3015,6 +3015,9 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       },
 
       userMonitoring: {
+        description: '管理所有用户账号并查看用户创建的知识资源使用情况。',
+        totalUsersLabel: '用户总数',
+        activeUsersLabel: '启用用户',
         teams: '加入团队',
         datasets: '创建知识库',
         documents: '上传文件',
