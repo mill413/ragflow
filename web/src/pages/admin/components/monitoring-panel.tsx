@@ -17,11 +17,13 @@ import {
 } from 'lucide-react';
 import {
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
   Tooltip as ChartTooltip,
 } from 'recharts';
+import type { PieLabelRenderProps } from 'recharts';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -36,18 +38,15 @@ import { formatBytes } from '@/lib/utils';
 import { getMonitoringSummary } from '@/services/admin-service';
 
 const STORAGE_COLORS = [
-  '#00beb4',
-  '#3ba05c',
-  '#faad14',
-  '#d8494b',
-  '#5b8ff9',
-  '#9270ca',
-  '#6dc8ec',
-  '#ff9d4d',
-  '#269a99',
-  '#ed6f91',
-  '#7f8da9',
-  '#bdd2fd',
+  '#5470c6',
+  '#91cc75',
+  '#fac858',
+  '#ee6666',
+  '#73c0de',
+  '#3ba272',
+  '#fc8452',
+  '#9a60b4',
+  '#ea7ccc',
 ];
 
 type MonitoringMetric = {
@@ -67,6 +66,20 @@ function formatPercentage(value: number, total: number) {
   const percentage = (value / total) * 100;
   if (percentage < 0.1) return '<0.1%';
   return `${percentage.toFixed(percentage >= 10 ? 1 : 2)}%`;
+}
+
+function renderStorageLabel({ name, x, y, textAnchor }: PieLabelRenderProps) {
+  return (
+    <text
+      x={x}
+      y={y}
+      className="fill-text-primary"
+      textAnchor={textAnchor}
+      dominantBaseline="central"
+    >
+      {name}
+    </text>
+  );
 }
 
 export default function MonitoringPanel() {
@@ -244,74 +257,52 @@ export default function MonitoringPanel() {
           </CardHeader>
           <CardContent>
             {storageData.length ? (
-              <div className="grid items-center gap-4 xl:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)]">
-                <div className="relative h-72 min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={storageData}
-                        dataKey="storage_bytes"
-                        nameKey="label"
-                        innerRadius={72}
-                        outerRadius={108}
-                        paddingAngle={2}
-                        stroke="var(--bg-card)"
-                        strokeWidth={2}
-                      >
-                        {storageData.map((item) => (
-                          <Cell key={item.workspace_id} fill={item.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip
-                        formatter={(value, _name, item) => [
-                          `${formatBytes(Number(value), { decimals: 1 })} · ${item.payload.percentage}`,
-                          item.payload.label,
-                        ]}
-                        contentStyle={{
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--border-default)',
-                          borderRadius: 8,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-xs text-text-secondary">
-                      {t('admin.monitoringPage.storage')}
-                    </span>
-                    <span className="mt-1 text-xl font-semibold">
-                      {formatBytes(data?.files_storage_bytes ?? 0, {
-                        decimals: 1,
-                      })}
-                    </span>
-                  </div>
-                </div>
-                <div className="max-h-72 space-y-3 overflow-y-auto pr-2">
-                  {storageData.map((item) => (
-                    <div
-                      key={item.workspace_id}
-                      className="flex items-center gap-3 text-sm"
+              <div className="h-80 min-w-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart
+                    margin={{ top: 24, right: 100, bottom: 36, left: 100 }}
+                  >
+                    <Pie
+                      data={storageData}
+                      dataKey="storage_bytes"
+                      nameKey="label"
+                      innerRadius="48%"
+                      outerRadius="72%"
+                      cy="42%"
+                      labelLine
+                      label={renderStorageLabel}
                     >
-                      <span
-                        className="size-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="min-w-0 flex-1 truncate">
-                        {item.label}
-                      </span>
-                      <span className="shrink-0 text-right text-text-secondary">
-                        <span className="block">
-                          {formatBytes(item.storage_bytes, { decimals: 1 })}
-                        </span>
-                        <span className="block text-xs">
-                          {t('admin.monitoringPage.storagePercentage', {
-                            percentage: item.percentage,
-                          })}
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                      {storageData.map((item) => (
+                        <Cell key={item.workspace_id} fill={item.color} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip
+                      formatter={(value, _name, item) => [
+                        `${formatBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
+                        item.payload.label,
+                      ]}
+                      contentStyle={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: 8,
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      align="center"
+                      layout="horizontal"
+                      iconType="circle"
+                      wrapperStyle={{
+                        maxHeight: 36,
+                        overflowY: 'auto',
+                        color: 'var(--text-primary)',
+                      }}
+                      formatter={(value) => (
+                        <span className="text-text-primary">{value}</span>
+                      )}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             ) : (
               <div className="text-sm text-text-secondary">
