@@ -2,13 +2,11 @@ import { useIsDarkTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { useSetModalState, useTranslate } from '@/hooks/common-hooks';
 import { LangfuseCard } from '@/pages/user-setting/setting-model/langfuse';
-import apiDoc from '@parent/docs/references/http_api_reference.md?raw';
+import apiDoc from '@parent/docs/references/http_api_reference_zh.md?raw';
 import MarkdownPreview from '@uiw/react-markdown-preview';
 import ChatApiKeyModal from '../chat-api-key-modal';
 import BackendServiceApi from './backend-service-api';
 import MarkdownToc from './markdown-toc';
-
-const apiDocContent = apiDoc.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
 
 const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
   const { t } = useTranslate('setting');
@@ -36,14 +34,21 @@ const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
           {tocVisible ? t('hideToc') : t('showToc')}
         </Button>
       </div>
-      <section className="flex flex-col gap-2 pb-5 flex-1 min-h-0 overflow-auto mb-4">
-        <div style={{ position: 'relative' }}>
-          {tocVisible && <MarkdownToc content={apiDocContent} />}
+      <section className="flex flex-col gap-4 pb-5 flex-1 min-h-0 overflow-hidden mb-4 xl:flex-row">
+        <div
+          id="api-reference-content"
+          className="min-w-0 flex-1 overflow-auto rounded-md"
+        >
+          <MarkdownPreview
+            source={apiDoc}
+            wrapperElement={{
+              'data-color-mode': isDarkTheme ? 'dark' : 'light',
+            }}
+          />
         </div>
-        <MarkdownPreview
-          source={apiDocContent}
-          wrapperElement={{ 'data-color-mode': isDarkTheme ? 'dark' : 'light' }}
-        ></MarkdownPreview>
+        {tocVisible && (
+          <MarkdownToc content={apiDoc} containerId="api-reference-content" />
+        )}
       </section>
       <LangfuseCard></LangfuseCard>
       {apiKeyVisible && (
