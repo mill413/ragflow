@@ -1039,7 +1039,7 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
 
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
         logging.warning("search access denied: dataset=%s tenant=%s", dataset_id, tenant_id)
-        return False, "Only owner of dataset authorized for this operation."
+        return False, "No authorization to access this dataset."
 
     e, kb = KnowledgebaseService.get_by_id(dataset_id)
     if not e:
@@ -1421,7 +1421,7 @@ async def search_datasets(tenant_id: str, req: dict):
     for kb_id in kb_ids:
         if not KnowledgebaseService.accessible(kb_id, tenant_id):
             logging.warning("search_datasets access denied: dataset=%s tenant=%s", kb_id, tenant_id)
-            return False, f"Only owner of dataset {kb_id} authorized for this operation."
+            return False, f"No authorization to access dataset {kb_id}."
 
     kbs = KnowledgebaseService.get_by_ids(kb_ids)
     if not kbs:

@@ -112,4 +112,4 @@ class TestAgentSessions:
 
         res = delete_agent(HttpApiAuth, "invalid-agent-id")
         assert res["code"] == 103, res
-        assert "Only the owner of the agent is authorized for this operation." in res["message"], res
+        assert "No authorization to manage this agent." in res["message"], res

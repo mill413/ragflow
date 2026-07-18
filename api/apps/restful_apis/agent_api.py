@@ -145,17 +145,17 @@ def _require_canvas_manage_async(func):
         agent_id = kwargs.get("agent_id")
         tenant_id = kwargs.get("tenant_id")
         if not await thread_pool_exec(UserCanvasService.manageable, agent_id, tenant_id):
-            return get_json_result(data=False, message="Only workspace managers are authorized for this operation.", code=RetCode.OPERATING_ERROR)
+            return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
         return await func(*args, **kwargs)
 
     return wrapper
 
 
-def _require_canvas_owner_sync(func):
+def _require_canvas_manage_sync(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not UserCanvasService.manageable(kwargs.get("agent_id"), kwargs.get("tenant_id")):
-            return get_json_result(data=False, message="Only workspace managers are authorized for this operation.", code=RetCode.OPERATING_ERROR)
+            return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
         return func(*args, **kwargs)
 
     return wrapper
@@ -1165,7 +1165,7 @@ async def get_agent_logs(agent_id, message_id, tenant_id):
 @manager.route("/agents/<agent_id>", methods=["DELETE"])  # noqa: F821
 @login_required
 @add_tenant_id_to_kwargs
-@_require_canvas_owner_sync
+@_require_canvas_manage_sync
 def delete_agent(agent_id, tenant_id):
     with UserCanvasService.model._meta.database.atomic():
         API4ConversationService.delete_by_dialog_ids([agent_id])
@@ -1845,12 +1845,12 @@ async def webhook(agent_id: str):
 async def webhook_test(agent_id: str, tenant_id: str):
     if not UserCanvasService.manageable(agent_id, tenant_id):
         logging.warning(
-            "Webhook test denied: owner check failed agent_id=%s tenant_id=%s method=%s",
+            "Webhook test denied: management check failed agent_id=%s tenant_id=%s method=%s",
             agent_id,
             tenant_id,
             request.method,
         )
-        return get_json_result(data=False, message="Only the owner of the agent is authorized for this operation.", code=RetCode.OPERATING_ERROR)
+        return get_json_result(data=False, message="No authorization to manage this agent.", code=RetCode.OPERATING_ERROR)
     return await _webhook_impl(agent_id, is_test=True)
 
 

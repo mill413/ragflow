@@ -1838,7 +1838,7 @@ def test_searchbots_retrieval_test_embedded_matrix_unit(monkeypatch):
     monkeypatch.setattr(module.UserTenantService, "query", lambda **_kwargs: [SimpleNamespace(tenant_id="tenant-a")])
     monkeypatch.setattr(module.KnowledgebaseService, "query", lambda **_kwargs: [])
     res = _run(handler())
-    assert "Only owner of dataset authorized for this operation." in res["message"]
+    assert "No authorization to access this dataset." in res["message"]
 
     llm_calls = []
 

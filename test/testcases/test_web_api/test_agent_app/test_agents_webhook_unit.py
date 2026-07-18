@@ -632,7 +632,7 @@ def test_agents_crud_unit_branches(monkeypatch):
 
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: False)
 
-    @module._require_canvas_owner_sync
+    @module._require_canvas_manage_sync
     def _dummy_delete(agent_id, tenant_id):
         return module.get_json_result(data=True)
 
@@ -701,7 +701,7 @@ def test_webhook_security_dispatch(monkeypatch):
 
 
 @pytest.mark.p2
-def test_webhook_test_requires_owner(monkeypatch):
+def test_webhook_test_requires_manage_permission(monkeypatch):
     module = _load_agents_app(monkeypatch)
     _patch_background_task(monkeypatch, module)
 
@@ -714,7 +714,7 @@ def test_webhook_test_requires_owner(monkeypatch):
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: [])
     denied = _run(module.webhook_test(agent_id="agent-1"))
     assert denied["code"] == module.RetCode.OPERATING_ERROR
-    assert "Only the owner" in denied["message"]
+    assert "No authorization to manage this agent" in denied["message"]
 
     cvs = _make_webhook_cvs(module, params=_default_webhook_params(security=_anonymous_security()))
     monkeypatch.setattr(module.UserCanvasService, "query", lambda **_kwargs: [cvs])
