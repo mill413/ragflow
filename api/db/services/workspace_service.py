@@ -189,6 +189,32 @@ class WorkspaceAccessService:
         return False
 
     @classmethod
+    def permission_for_workspace(cls, tenant_id: str) -> TenantPermission | None:
+        workspace_type = cls.get_workspace_type(tenant_id)
+        if workspace_type == WorkspaceType.TEAM:
+            return TenantPermission.TEAM
+        if workspace_type == WorkspaceType.PERSONAL:
+            return TenantPermission.ME
+        return None
+
+    @classmethod
+    def can_move_shared_resource(
+        cls,
+        user_id: str,
+        resource: Mapping[str, Any] | Any,
+        target_workspace_id: str,
+        *,
+        workspace_field: str = "tenant_id",
+        permission_field: str | None = None,
+    ) -> bool:
+        return cls.can_manage_shared_resource(
+            user_id,
+            resource,
+            workspace_field=workspace_field,
+            permission_field=permission_field,
+        ) and cls.can_create_shared_resource(user_id, target_workspace_id)
+
+    @classmethod
     def can_read_shared_resource(
         cls,
         user_id: str,

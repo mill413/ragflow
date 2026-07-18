@@ -285,6 +285,7 @@ export const useDeleteSearch = () => {
 
 export type IUpdateSearchProps = Omit<ISearchAppDetailProps, 'id'> & {
   search_id: string;
+  workspace_id?: string;
 };
 
 export const useUpdateSearch = () => {
@@ -304,7 +305,7 @@ export const useUpdateSearch = () => {
       }
       return response.data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       message.success(t('message.updated'));
       queryClient.invalidateQueries({
         queryKey: ['searchDetail', variables.search_id],

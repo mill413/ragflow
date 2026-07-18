@@ -11,7 +11,6 @@ import Divider from '@/components/ui/divider';
 import { Form } from '@/components/ui/form';
 import { FormLayout } from '@/constants/form';
 import { DocumentParserType, ParseType } from '@/constants/knowledge';
-import { PermissionRole } from '@/constants/permission';
 import { IConnector, IDataset } from '@/interfaces/database/dataset';
 import { useDataSourceInfo } from '@/pages/user-setting/data-source/constant';
 import { IDataSourceBase } from '@/pages/user-setting/data-source/interface';
@@ -62,7 +61,7 @@ export default function DatasetSettings() {
     defaultValues: {
       name: '',
       chunk_method: DocumentParserType.Naive,
-      permission: PermissionRole.Me,
+      workspace_id: '',
       language: 'English',
       parser_config: {
         layout_recognize: DocumentType.DeepDOC,

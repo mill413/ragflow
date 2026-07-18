@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { AvatarUpload } from '@/components/avatar-upload';
 import { RAGFlowFormItem } from '@/components/ragflow-form';
-import { Form, FormControl, FormItem, FormLabel } from '@/components/ui/form';
+import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
+import { Form } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useFetchAgent } from '@/hooks/use-agent-request';
@@ -16,7 +16,7 @@ const formSchema = z.object({
   title: z.string().min(1, {}),
   avatar: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  permission: z.string(),
+  workspace_id: z.string(),
 });
 
 export type SettingFormSchemaType = z.infer<typeof formSchema>;
@@ -35,7 +35,7 @@ export function SettingForm({ submit }: SettingFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
-      permission: 'me',
+      workspace_id: '',
     },
   });
 
@@ -44,7 +44,7 @@ export function SettingForm({ submit }: SettingFormProps) {
       title: data?.title,
       description: data?.description,
       avatar: data.avatar,
-      permission: data?.permission,
+      workspace_id: data?.user_id,
     });
   }, [data, form]);
 
@@ -65,43 +65,7 @@ export function SettingForm({ submit }: SettingFormProps) {
           <Textarea rows={4} />
         </RAGFlowFormItem>
 
-        <RAGFlowFormItem
-          name="permission"
-          label={t('permissions')}
-          tooltip={t('permissionsTip')}
-        >
-          {(field) => (
-            <RadioGroup
-              onValueChange={field.onChange}
-              value={field.value}
-              className="flex"
-            >
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <RadioGroupItem value="me" id="me" />
-                </FormControl>
-                <FormLabel
-                  className="font-normal !m-0 cursor-pointer"
-                  htmlFor="me"
-                >
-                  {t('me')}
-                </FormLabel>
-              </FormItem>
-
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <RadioGroupItem value="team" id="team" />
-                </FormControl>
-                <FormLabel
-                  className="font-normal !m-0 cursor-pointer"
-                  htmlFor="team"
-                >
-                  {t('team')}
-                </FormLabel>
-              </FormItem>
-            </RadioGroup>
-          )}
-        </RAGFlowFormItem>
+        <ResourceWorkspaceFormField />
       </form>
     </Form>
   );

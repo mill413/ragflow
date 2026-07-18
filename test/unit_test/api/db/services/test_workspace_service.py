@@ -30,6 +30,7 @@ def workspace_dependencies(monkeypatch):
     tenants = {
         "user-1": SimpleNamespace(id="user-1", status=StatusEnum.VALID.value),
         "team-1": SimpleNamespace(id="team-1", status=StatusEnum.VALID.value),
+        "team-2": SimpleNamespace(id="team-2", status=StatusEnum.VALID.value),
     }
     users = {"user-1": SimpleNamespace(id="user-1", status=StatusEnum.VALID.value)}
     memberships = {
@@ -39,6 +40,8 @@ def workspace_dependencies(monkeypatch):
         ("member-1", "team-1"): SimpleNamespace(user_id="member-1", tenant_id="team-1", role=UserTenantRole.NORMAL, status=StatusEnum.VALID.value),
         ("member-2", "team-1"): SimpleNamespace(user_id="member-2", tenant_id="team-1", role=UserTenantRole.NORMAL, status=StatusEnum.VALID.value),
         ("invite-1", "team-1"): SimpleNamespace(user_id="invite-1", tenant_id="team-1", role=UserTenantRole.INVITE, status=StatusEnum.VALID.value),
+        ("owner-2", "team-2"): SimpleNamespace(user_id="owner-2", tenant_id="team-2", role=UserTenantRole.OWNER, status=StatusEnum.VALID.value),
+        ("admin-1", "team-2"): SimpleNamespace(user_id="admin-1", tenant_id="team-2", role=UserTenantRole.ADMIN, status=StatusEnum.VALID.value),
     }
 
     monkeypatch.setattr(WorkspaceAccessService, "get_membership", classmethod(lambda cls, user_id, tenant_id: memberships.get((user_id, tenant_id))))
@@ -118,6 +121,26 @@ def test_shared_resource_permissions_follow_workspace_roles(workspace_dependenci
         permission_field="permission",
     )["read"]
     assert not WorkspaceAccessService.can_read_shared_resource("outsider", team_resource)
+
+
+def test_resource_moves_require_management_of_both_workspaces(workspace_dependencies):
+    team_resource = {
+        "tenant_id": "team-1",
+        "permission": TenantPermission.TEAM,
+        "status": StatusEnum.VALID.value,
+    }
+
+    assert WorkspaceAccessService.can_move_shared_resource(
+        "admin-1", team_resource, "team-2", permission_field="permission"
+    )
+    assert not WorkspaceAccessService.can_move_shared_resource(
+        "member-1", team_resource, "team-2", permission_field="permission"
+    )
+    assert WorkspaceAccessService.can_move_shared_resource(
+        "system-admin", team_resource, "user-1", permission_field="permission"
+    )
+    assert WorkspaceAccessService.permission_for_workspace("team-2") == TenantPermission.TEAM
+    assert WorkspaceAccessService.permission_for_workspace("user-1") == TenantPermission.ME
 
 
 def test_superuser_can_read_and_manage_every_workspace_resource(workspace_dependencies):

@@ -4,9 +4,9 @@ import { EmbeddingSelect } from '@/pages/dataset/dataset-setting/configuration/c
 import { MemoryOptions, MemoryType } from '@/pages/memories/constants';
 import { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { useFetchMemoryMessageList } from '../memory-message/hook';
-import { useMemorySettingContext } from './memory-setting-context';
 
 export const memoryModelFormSchema = (t: TFunction) => ({
   embd_id: z.string(),
@@ -31,8 +31,11 @@ export const defaultMemoryModelForm = {
 export const MemoryModelForm = () => {
   const { t } = useTranslation();
   const { data } = useFetchMemoryMessageList();
-  const { data: configData } = useMemorySettingContext();
-  const ownerTenantId = configData?.tenant_id;
+  const form = useFormContext();
+  const ownerTenantId = useWatch({
+    control: form.control,
+    name: 'workspace_id',
+  });
   return (
     <>
       <RenderField

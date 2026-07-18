@@ -45,6 +45,7 @@ export function useChatSettingSchema() {
   });
 
   const formSchema = z.object({
+    workspace_id: z.string(),
     name: z.string().min(1, { message: t('assistantNameMessage') }),
     icon: z.string(),
     description: z.string().optional(),

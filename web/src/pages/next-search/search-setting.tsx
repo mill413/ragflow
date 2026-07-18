@@ -14,6 +14,7 @@ import {
 } from '@/components/metadata-filter';
 import { ModelTreeSelect } from '@/components/model-tree-select';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
+import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { Button } from '@/components/ui/button';
 import { SingleFormSlider } from '@/components/ui/dual-range-slider';
 import {
@@ -29,7 +30,6 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { Spin } from '@/components/ui/spin';
 import { Switch } from '@/components/ui/switch';
 import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
-import { useFetchTenantInfo } from '@/hooks/use-user-setting-request';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X } from 'lucide-react';
@@ -54,6 +54,7 @@ interface SearchSettingProps {
 const SearchSettingFormSchema = z
   .object({
     search_id: z.string().optional(),
+    workspace_id: z.string(),
     name: z.string().min(1, 'Name is required'),
     avatar: z.string().optional(),
     description: z.string().optional(),
@@ -121,6 +122,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
   const resetForm = useCallback(() => {
     formMethods.reset({
       search_id: data?.id,
+      workspace_id: data?.tenant_id,
       name: data?.name || '',
       avatar: data?.avatar || '',
       description: data?.description || descriptionDefaultValue,
@@ -194,6 +196,10 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
     control: formMethods.control,
     name: 'search_config.kb_ids',
   });
+  const selectedWorkspaceId = useWatch({
+    control: formMethods.control,
+    name: 'workspace_id',
+  });
   const referenceMetadataEnabled = useWatch({
     control: formMethods.control,
     name: 'search_config.reference_metadata.include',
@@ -251,10 +257,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
 
   const { updateSearch } = useUpdateSearch();
   const [formSubmitLoading, setFormSubmitLoading] = useState(false);
-  const { data: systemSetting } = useFetchTenantInfo();
-  const onSubmit = async (
-    formData: IUpdateSearchProps & { tenant_id: string },
-  ) => {
+  const onSubmit = async (formData: IUpdateSearchProps) => {
     try {
       setFormSubmitLoading(true);
       const {
@@ -266,7 +269,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
         maxTokensEnabled: _maxTokensEnabled,
         ...other_formdata
       } = formData as IUpdateSearchProps & {
-        tenant_id: string;
         temperatureEnabled?: boolean;
         topPEnabled?: boolean;
         presencePenaltyEnabled?: boolean;
@@ -314,7 +316,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
           rerank_id: use_rerank ? rerank_id : '',
           llm_setting: { ...llmSetting },
         },
-        tenant_id: systemSetting.tenant_id,
+        workspace_id: other_formdata.workspace_id,
       });
       setOpen(false);
     } catch (error) {
@@ -353,11 +355,12 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
             className="space-y-6"
           >
             <AvatarNameDescription avatarField="avatar" />
+            <ResourceWorkspaceFormField />
 
             <KnowledgeBaseFormField
               name="search_config.kb_ids"
               required
-              workspaceId={data.tenant_id}
+              workspaceId={selectedWorkspaceId || data.tenant_id}
             ></KnowledgeBaseFormField>
             <MetadataFilter prefix="search_config."></MetadataFilter>
             <FormField
@@ -452,6 +455,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
                       <FormControl>
                         <ModelTreeSelect
                           modelTypes={['rerank']}
+                          ownerTenantId={selectedWorkspaceId}
                           {...field}
                           placeholder={t('chat.model')}
                         />
@@ -520,6 +524,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               // ></LlmSettingFieldItems>
               <LlmSettingFieldItems
                 prefix="search_config.llm_setting"
+                ownerTenantId={selectedWorkspaceId}
                 showFields={[
                   'temperature',
                   'top_p',

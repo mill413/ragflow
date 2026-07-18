@@ -134,6 +134,7 @@ export const updateAgent = (
     avatar?: string;
     description?: string | null;
     permission?: string;
+    workspace_id?: string;
     release?: string;
   },
 ) => {

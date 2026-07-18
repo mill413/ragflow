@@ -43,6 +43,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
     shouldUnregister: false,
     defaultValues: {
       name: '',
+      workspace_id: '',
       icon: '',
       description: '',
       dataset_ids: [],
@@ -131,6 +132,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
 
     const nextData = {
       ...data,
+      workspace_id: data.tenant_id,
       prompt_config: {
         ...data.prompt_config,
         reference_metadata: normalizedReferenceMetadata,

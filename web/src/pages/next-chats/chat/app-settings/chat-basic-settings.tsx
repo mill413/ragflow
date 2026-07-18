@@ -2,6 +2,7 @@
 
 import { AvatarNameDescription } from '@/components/avatar-name-description';
 import { KnowledgeBaseFormField } from '@/components/knowledge-base-item';
+import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { LlmSettingFieldItems } from '@/components/llm-setting-items/next';
 import {
   FormControl,
@@ -37,6 +38,10 @@ export default function ChatBasicSetting({
   });
 
   const llmSettingPrefix = prefixName(prefix, 'llm_setting');
+  const selectedWorkspaceId = useWatch({
+    control: form.control,
+    name: prefixName(prefix, 'workspace_id'),
+  });
 
   return (
     <div className="space-y-8">
@@ -47,10 +52,12 @@ export default function ChatBasicSetting({
           descriptionField={prefixName(prefix, 'description')}
         />
       )}
+      {prefix || <ResourceWorkspaceFormField />}
       <LlmSettingFieldItems
         prefix={llmSettingPrefix}
         llmId={prefixName(prefix, 'llm_id')}
         showCollapse
+        ownerTenantId={selectedWorkspaceId || workspaceId}
       ></LlmSettingFieldItems>
 
       <FormField
@@ -73,7 +80,7 @@ export default function ChatBasicSetting({
       />
       <KnowledgeBaseFormField
         name={prefixName(prefix, 'dataset_ids')}
-        workspaceId={workspaceId}
+        workspaceId={selectedWorkspaceId || workspaceId}
       ></KnowledgeBaseFormField>
     </div>
   );

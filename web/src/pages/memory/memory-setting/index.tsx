@@ -1,4 +1,5 @@
 import { DynamicForm } from '@/components/dynamic-form';
+import { ResourceWorkspaceFormField } from '@/components/resource-workspace-form-field';
 import { Button } from '@/components/ui/button';
 import Divider from '@/components/ui/divider';
 import { Form } from '@/components/ui/form';
@@ -30,6 +31,7 @@ export default function MemoryMessage() {
   const { t } = useTranslation();
   const MemoryMessageSchema = z.object({
     id: z.string(),
+    workspace_id: z.string(),
     ...basicInfoSchema,
     ...memoryModelFormSchema(t),
     ...advancedSettingsFormSchema,
@@ -38,6 +40,7 @@ export default function MemoryMessage() {
     resolver: zodResolver(MemoryMessageSchema),
     defaultValues: {
       id: '',
+      workspace_id: '',
       ...defaultBasicInfo,
       ...defaultMemoryModelForm,
       ...defaultAdvancedSettingsForm,
@@ -49,6 +52,7 @@ export default function MemoryMessage() {
   useEffect(() => {
     form.reset({
       id: data?.id,
+      workspace_id: data?.tenant_id,
       embd_id: data?.embd_id,
       llm_id: data?.llm_id,
       name: data?.name || '',
@@ -61,7 +65,6 @@ export default function MemoryMessage() {
       user_prompt: data?.user_prompt || '',
       forgetting_policy: data?.forgetting_policy || 'FIFO',
       storage_type: data?.storage_type || 'Table',
-      permissions: data?.permissions || 'me',
     });
   }, [data, form]);
   const onSubmit = (data: IMemory) => {
@@ -78,36 +81,37 @@ export default function MemoryMessage() {
         <MemorySettingProvider data={data}>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(() => {})} className="space-y-6 ">
-            <div className="w-[768px] h-[calc(100vh-300px)] pr-1 overflow-y-auto scrollbar-auto pb-4">
-              <MainContainer className="text-text-secondary !space-y-10">
-                <div className="text-base font-medium text-text-primary">
-                  {t('knowledgeConfiguration.baseInfo')}
-                </div>
-                <BasicInfo></BasicInfo>
-                <Divider />
-                <MemoryModelForm />
-                <AdvancedSettingsForm />
-              </MainContainer>
-            </div>
-            <div className="text-right items-center flex justify-end gap-3 w-[768px]">
-              <Button
-                type="reset"
-                className="bg-transparent text-color-white hover:bg-transparent border-border-button border"
-                onClick={() => {
-                  form.reset();
-                }}
-              >
-                {t('knowledgeConfiguration.cancel')}
-              </Button>
-              <DynamicForm.SavingButton
-                submitLoading={loading}
-                submitFunc={(value) => {
-                  console.log('form-value', value);
-                  onSubmit(value as IMemory);
-                }}
-              ></DynamicForm.SavingButton>
-            </div>
-          </form>
+              <div className="w-[768px] h-[calc(100vh-300px)] pr-1 overflow-y-auto scrollbar-auto pb-4">
+                <MainContainer className="text-text-secondary !space-y-10">
+                  <div className="text-base font-medium text-text-primary">
+                    {t('knowledgeConfiguration.baseInfo')}
+                  </div>
+                  <BasicInfo></BasicInfo>
+                  <ResourceWorkspaceFormField horizontal />
+                  <Divider />
+                  <MemoryModelForm />
+                  <AdvancedSettingsForm />
+                </MainContainer>
+              </div>
+              <div className="text-right items-center flex justify-end gap-3 w-[768px]">
+                <Button
+                  type="reset"
+                  className="bg-transparent text-color-white hover:bg-transparent border-border-button border"
+                  onClick={() => {
+                    form.reset();
+                  }}
+                >
+                  {t('knowledgeConfiguration.cancel')}
+                </Button>
+                <DynamicForm.SavingButton
+                  submitLoading={loading}
+                  submitFunc={(value) => {
+                    console.log('form-value', value);
+                    onSubmit(value as IMemory);
+                  }}
+                ></DynamicForm.SavingButton>
+              </div>
+            </form>
           </Form>
         </MemorySettingProvider>
       </div>

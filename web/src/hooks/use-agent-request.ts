@@ -470,7 +470,7 @@ export const useSetAgent = (showMessage: boolean = true) => {
             dsl: params.dsl,
             avatar: params.avatar,
             description: params.description,
-            permission: params.permission,
+            workspace_id: params.workspace_id,
             release: params.release,
           })
         : await agentService.createAgent({
