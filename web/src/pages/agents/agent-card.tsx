@@ -41,7 +41,6 @@ export function AgentCard({ data, showAgentRenameModal }: DatasetCardProps) {
         ...data,
         name: data.title,
         description: data.description || '',
-        release_time: data.release_time,
       }}
       moreDropdown={
         data.capabilities?.update || data.capabilities?.delete ? (
@@ -68,7 +67,6 @@ export function AgentCard({ data, showAgentRenameModal }: DatasetCardProps) {
       }
       sharedBadge={<WorkspaceBadge {...data} />}
       extra={<AgentTags tags={data.tags} />}
-      showReleaseTime
     />
   );
 }

@@ -7,7 +7,6 @@ import {
 } from '@/components/ui/tooltip';
 import { formatDate } from '@/utils/date';
 import { ElementType, ReactNode, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 
 interface IProps {
   data: {
@@ -15,14 +14,12 @@ interface IProps {
     description?: string;
     avatar?: string;
     update_time?: string | number;
-    release_time?: number;
   };
   onClick?: () => void;
   moreDropdown: React.ReactNode;
   sharedBadge?: ReactNode;
   icon?: React.ReactNode;
   testId?: string;
-  showReleaseTime?: boolean;
   extra?: ReactNode;
 }
 
@@ -79,11 +76,8 @@ export function HomeCard({
   sharedBadge,
   icon,
   testId,
-  showReleaseTime = false,
   extra,
 }: IProps) {
-  const { t } = useTranslation();
-
   return (
     <Card
       as="article"
@@ -138,26 +132,7 @@ export function HomeCard({
               </TruncatedText>
               {extra}
               <div className="flex justify-between items-center min-w-0">
-                {showReleaseTime ? (
-                  <section className="text-sm text-text-secondary space-y-1 min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="whitespace-nowrap">
-                        {t('flow.lastSavedAt')}:
-                      </span>
-                      <Time time={data.update_time}></Time>
-                    </div>
-                    {data.release_time && (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="whitespace-nowrap">
-                          {t('flow.publishedAt')}:
-                        </span>
-                        <Time time={data.release_time}></Time>
-                      </div>
-                    )}
-                  </section>
-                ) : (
-                  <Time time={data.update_time}></Time>
-                )}
+                <Time time={data.update_time}></Time>
                 {sharedBadge}
               </div>
             </section>
