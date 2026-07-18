@@ -21,7 +21,7 @@ from operator import or_
 from uuid import uuid4
 from agent.canvas import Canvas
 from api.db import CanvasCategory, TenantPermission
-from api.db.db_models import DB, CanvasTemplate, Tenant, UserCanvas, API4Conversation, UserCanvasVersion
+from api.db.db_models import APIToken, DB, API4Conversation, CanvasTemplate, Tenant, UserCanvas, UserCanvasVersion
 from api.db.services.api_service import API4ConversationService
 from api.db.services.common_service import CommonService
 from api.db.services.user_canvas_version import UserCanvasVersionService
@@ -45,6 +45,16 @@ class DataFlowTemplateService(CommonService):
 
 class UserCanvasService(CommonService):
     model = UserCanvas
+
+    @classmethod
+    @DB.connection_context()
+    def delete_with_dependencies(cls, canvas_id):
+        """Delete a canvas and its database-owned dependent records atomically."""
+        with DB.atomic():
+            API4Conversation.delete().where(API4Conversation.dialog_id == canvas_id).execute()
+            UserCanvasVersion.delete().where(UserCanvasVersion.user_canvas_id == canvas_id).execute()
+            APIToken.delete().where(APIToken.dialog_id == canvas_id).execute()
+            return cls.model.delete().where(cls.model.id == canvas_id).execute()
 
     @classmethod
     @DB.connection_context()

@@ -39,7 +39,7 @@ from api.apps import AUTH_JWT, AUTH_API, AUTH_BETA, current_user, login_required
 from api.apps.services.canvas_replica_service import CanvasReplicaService
 from api.apps.workspace_access import workspace_required
 from api.db import CanvasCategory, TenantPermission, WorkspaceType
-from api.db.db_models import APIToken, Task
+from api.db.db_models import Task
 from api.db.services.api_service import API4ConversationService
 from api.db.services.canvas_service import (
     CanvasTemplateService,
@@ -1178,11 +1178,7 @@ def delete_agent(agent_id, tenant_id):
             ResourceReferenceService.ensure_not_referenced("dataflow", [canvas])
         except ResourceInUseException as exc:
             return get_resource_in_use_result(exc)
-    with UserCanvasService.model._meta.database.atomic():
-        API4ConversationService.delete_by_dialog_ids([agent_id])
-        UserCanvasVersionService.model.delete().where(UserCanvasVersionService.model.user_canvas_id == agent_id).execute()
-        APIToken.delete().where(APIToken.dialog_id == agent_id).execute()
-        UserCanvasService.delete_by_id(agent_id)
+    UserCanvasService.delete_with_dependencies(agent_id)
     return get_json_result(data=True)
 
 
