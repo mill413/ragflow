@@ -122,7 +122,7 @@ const AdminNavigationLayout = () => {
       <aside
         className={cn(
           'shrink-0 flex flex-col gap-6 transition-[width] duration-200 ease-out',
-          sidebarCollapsed ? 'w-14' : 'w-72',
+          sidebarCollapsed ? 'w-14' : 'w-64',
         )}
       >
         <div
