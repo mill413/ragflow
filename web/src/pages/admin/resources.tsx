@@ -518,7 +518,7 @@ export default function AdminResources() {
                       )}
                     </TableHead>
                     <TableHead className="text-center">
-                      {t('admin.operation')}
+                      {t('admin.actions')}
                     </TableHead>
                   </TableRow>
                 </TableHeader>

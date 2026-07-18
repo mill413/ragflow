@@ -3501,15 +3501,15 @@ Important structured information may include: names, dates, locations, events, k
         file: 'File management',
         descriptions: {
           dataset:
-            'Manage datasets across workspaces and review file counts, chunks, storage usage, and parsing failures.',
-          chat: 'Manage chat applications across workspaces and review their linked datasets and session usage.',
+            'Review dataset file volume, chunk counts, and storage usage, and locate files that failed to parse.',
+          chat: 'Audit the datasets linked to chat applications, review session volume, and remove unused chat configurations.',
           search:
-            'Manage search applications across workspaces and review their linked datasets and selected files.',
+            'Inspect the datasets and selected files used by search applications and maintain retrieval-facing resources.',
           agent:
-            'Manage agents across workspaces and review agent types, release status, and session counts.',
+            'Track agent types, release status, and session activity while maintaining agent resources centrally.',
           memory:
-            'Manage memory resources across workspaces and review memory types, storage methods, and capacity.',
-          file: 'Manage files across workspaces and track file types, sources, sizes, and creators.',
+            'Review memory types, storage methods, and capacity settings to understand long-term memory usage.',
+          file: 'Inventory file types, sources, sizes, and creators by workspace, and remove independently managed files.',
         },
         searchPlaceholders: {
           dataset: 'Search dataset name or ID',
