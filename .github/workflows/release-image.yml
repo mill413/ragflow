@@ -28,9 +28,7 @@ jobs:
 
       - name: Set build version metadata
         shell: bash
-        run: |
-          echo "BUILD_TIMESTAMP=$(date +%s)" >> "${GITHUB_ENV}"
-          echo "GIT_COMMIT=${GITHUB_SHA::9}" >> "${GITHUB_ENV}"
+        run: echo "GIT_COMMIT=${GITHUB_SHA::9}" >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -60,7 +58,6 @@ jobs:
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
-            BUILD_TIMESTAMP=${{ env.BUILD_TIMESTAMP }}
             GIT_COMMIT=${{ env.GIT_COMMIT }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
