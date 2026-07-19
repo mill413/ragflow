@@ -30,13 +30,6 @@ import {
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import message from '@/components/ui/message';
@@ -462,40 +455,42 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
   ];
 
   return (
-    <>
-      <Sheet
-        open={Boolean(email)}
-        onOpenChange={(open) => {
-          if (!open) setEditOpen(false);
-          onOpenChange(open);
-        }}
-      >
-        <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
-          <SheetHeader className="border-b border-border-button px-6 py-5">
-            <div className="flex items-center gap-3 pr-8">
-              <RAGFlowAvatar
-                avatar={detail?.avatar}
-                name={detail?.email || email}
-                isPerson
-              />
-              <div className="min-w-0">
-                <SheetTitle className="truncate">
-                  {detail?.nickname || detail?.email || email}
-                </SheetTitle>
-                <SheetDescription className="truncate">
-                  {detail?.email || email}
-                  {detail?.id ? ` · ${detail.id}` : ''}
-                </SheetDescription>
-              </div>
-              <EnterpriseFeature>
-                {() =>
-                  detail?.role && (
-                    <Badge className="shrink-0" variant="secondary">
-                      {detail.role}
-                    </Badge>
-                  )
-                }
-              </EnterpriseFeature>
+    <Sheet
+      open={Boolean(email)}
+      onOpenChange={(open) => {
+        if (!open) setEditOpen(false);
+        onOpenChange(open);
+      }}
+    >
+      <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+        <SheetHeader className="border-b border-border-button px-6 py-5">
+          <div className="flex items-center gap-3 pr-8">
+            <RAGFlowAvatar
+              avatar={detail?.avatar}
+              name={detail?.email || email}
+              isPerson
+            />
+            <div className="min-w-0">
+              <SheetTitle className="truncate">
+                {editOpen
+                  ? t('admin.editUser')
+                  : detail?.nickname || detail?.email || email}
+              </SheetTitle>
+              <SheetDescription className="truncate">
+                {detail?.email || email}
+                {detail?.id ? ` · ${detail.id}` : ''}
+              </SheetDescription>
+            </div>
+            <EnterpriseFeature>
+              {() =>
+                detail?.role && (
+                  <Badge className="shrink-0" variant="secondary">
+                    {detail.role}
+                  </Badge>
+                )
+              }
+            </EnterpriseFeature>
+            {!editOpen && (
               <Button
                 className="ml-auto shrink-0"
                 variant="outline"
@@ -505,180 +500,183 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                 <LucidePencil />
                 {t('admin.editUser')}
               </Button>
-            </div>
-          </SheetHeader>
-
-          <ScrollArea className="h-[calc(100vh-97px)] px-6">
-            <section className="border-b border-border-button py-5">
-              <div className="mb-3 text-sm font-medium">
-                {t('admin.userInformation')}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {informationItems.map(({ label, value, icon }) => (
-                  <DetailInformationCard
-                    key={label}
-                    label={label}
-                    value={value}
-                    icon={icon}
-                  />
-                ))}
-              </div>
-              {detail?.remark && (
-                <DetailInformationCard
-                  className="mt-3"
-                  icon={StickyNote}
-                  label={t('admin.remark')}
-                  value={detail.remark}
-                  valueClassName="whitespace-pre-wrap font-normal"
-                />
-              )}
-            </section>
-
-            <section className="py-5">
-              <Tabs defaultValue="dataset">
-                <TabsList className="mb-4 justify-start gap-4 bg-transparent p-0">
-                  {ASSET_NAMES.map((name) => (
-                    <TabsTrigger
-                      key={name}
-                      className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
-                      value={name}
-                    >
-                      {t(`header.${name}`)}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                <TabsContent value="dataset">
-                  <UserDatasetTable data={datasets} />
-                </TabsContent>
-
-                <TabsContent value="flow">
-                  <UserAgentTable data={agents} />
-                </TabsContent>
-              </Tabs>
-            </section>
-          </ScrollArea>
-        </SheetContent>
-      </Sheet>
-
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{t('admin.editUser')}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-5 px-6 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>{t('admin.nickname')}</Label>
-              <Input
-                value={editForm.nickname}
-                onChange={(event) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    nickname: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t('admin.department')}</Label>
-              <DepartmentTreeSelect
-                departments={departments}
-                value={editForm.departmentId}
-                placeholder={t('admin.noDepartment')}
-                onChange={(departmentId) =>
-                  setEditForm((form) => ({ ...form, departmentId }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t('admin.status')}</Label>
-              <Select
-                disabled={isMe}
-                value={editForm.isActive ? 'active' : 'inactive'}
-                onValueChange={(value) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    isActive: value === 'active',
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">
-                    <UserStatusText active />
-                  </SelectItem>
-                  <SelectItem value="inactive">
-                    <UserStatusText active={false} />
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{t('admin.userType')}</Label>
-              <Select
-                disabled={isMe}
-                value={editForm.isSuperuser ? 'admin' : 'user'}
-                onValueChange={(value) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    isSuperuser: value === 'admin',
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">{t('admin.superuser')}</SelectItem>
-                  <SelectItem value="user">{t('admin.normalUser')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t('admin.password')}</Label>
-              <Input
-                type="password"
-                autoComplete="new-password"
-                placeholder={t('admin.passwordUnchangedPlaceholder')}
-                value={editForm.password}
-                onChange={(event) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    password: event.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label>{t('admin.remark')}</Label>
-              <Textarea
-                rows={3}
-                value={editForm.remark}
-                onChange={(event) =>
-                  setEditForm((form) => ({
-                    ...form,
-                    remark: event.target.value,
-                  }))
-                }
-              />
-            </div>
+            )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              {t('admin.cancel')}
-            </Button>
-            <Button
-              disabled={updateMutation.isPending}
-              onClick={() => updateMutation.mutate()}
-            >
-              {t('admin.save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </SheetHeader>
+
+        <ScrollArea className="h-[calc(100vh-97px)] px-6">
+          {editOpen ? (
+            <section className="py-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>{t('admin.nickname')}</Label>
+                  <Input
+                    value={editForm.nickname}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        nickname: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('admin.department')}</Label>
+                  <DepartmentTreeSelect
+                    departments={departments}
+                    value={editForm.departmentId}
+                    placeholder={t('admin.noDepartment')}
+                    onChange={(departmentId) =>
+                      setEditForm((form) => ({ ...form, departmentId }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('admin.status')}</Label>
+                  <Select
+                    disabled={isMe}
+                    value={editForm.isActive ? 'active' : 'inactive'}
+                    onValueChange={(value) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        isActive: value === 'active',
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">
+                        <UserStatusText active />
+                      </SelectItem>
+                      <SelectItem value="inactive">
+                        <UserStatusText active={false} />
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('admin.userType')}</Label>
+                  <Select
+                    disabled={isMe}
+                    value={editForm.isSuperuser ? 'admin' : 'user'}
+                    onValueChange={(value) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        isSuperuser: value === 'admin',
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">
+                        {t('admin.superuser')}
+                      </SelectItem>
+                      <SelectItem value="user">
+                        {t('admin.normalUser')}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>{t('admin.password')}</Label>
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={t('admin.passwordUnchangedPlaceholder')}
+                    value={editForm.password}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        password: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>{t('admin.remark')}</Label>
+                  <Textarea
+                    rows={3}
+                    value={editForm.remark}
+                    onChange={(event) =>
+                      setEditForm((form) => ({
+                        ...form,
+                        remark: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3 border-t border-border-button pt-5">
+                <Button variant="outline" onClick={() => setEditOpen(false)}>
+                  {t('admin.cancel')}
+                </Button>
+                <Button
+                  disabled={updateMutation.isPending}
+                  onClick={() => updateMutation.mutate()}
+                >
+                  {t('admin.save')}
+                </Button>
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="border-b border-border-button py-5">
+                <div className="mb-3 text-sm font-medium">
+                  {t('admin.userInformation')}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {informationItems.map(({ label, value, icon }) => (
+                    <DetailInformationCard
+                      key={label}
+                      label={label}
+                      value={value}
+                      icon={icon}
+                    />
+                  ))}
+                </div>
+                {detail?.remark && (
+                  <DetailInformationCard
+                    className="mt-3"
+                    icon={StickyNote}
+                    label={t('admin.remark')}
+                    value={detail.remark}
+                    valueClassName="whitespace-pre-wrap font-normal"
+                  />
+                )}
+              </section>
+
+              <section className="py-5">
+                <Tabs defaultValue="dataset">
+                  <TabsList className="mb-4 justify-start gap-4 bg-transparent p-0">
+                    {ASSET_NAMES.map((name) => (
+                      <TabsTrigger
+                        key={name}
+                        className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
+                        value={name}
+                      >
+                        {t(`header.${name}`)}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+
+                  <TabsContent value="dataset">
+                    <UserDatasetTable data={datasets} />
+                  </TabsContent>
+
+                  <TabsContent value="flow">
+                    <UserAgentTable data={agents} />
+                  </TabsContent>
+                </Tabs>
+              </section>
+            </>
+          )}
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
   );
 }
 
