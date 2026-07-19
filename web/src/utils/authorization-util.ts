@@ -39,6 +39,9 @@ const storage = {
   removeAuthorization: () => {
     localStorage.removeItem(Authorization);
   },
+  clearAdminViewSession: () => {
+    sessionStorage.removeItem(AdminViewSession);
+  },
   removeAll: () => {
     KeySet.forEach((x) => {
       localStorage.removeItem(x);
@@ -56,7 +59,11 @@ const storage = {
 export const getAuthorization = () => {
   const auth = getSearchValue('auth');
   const requestedAdminView = getSearchValue('admin_view') === '1';
-  if (requestedAdminView) sessionStorage.setItem(AdminViewSession, '1');
+  if (auth) {
+    storage.clearAdminViewSession();
+  } else if (requestedAdminView) {
+    sessionStorage.setItem(AdminViewSession, '1');
+  }
   const useAdminAuthorization =
     requestedAdminView || sessionStorage.getItem(AdminViewSession) === '1';
   const authorization = auth
@@ -88,6 +95,7 @@ export const adminAuthorizationUtil = {
   },
   removeAll: () => {
     AdminKeySet.forEach((key) => localStorage.removeItem(key));
+    sessionStorage.removeItem(AdminViewSession);
   },
 };
 

@@ -166,6 +166,7 @@ const routeConfigOptions = [
       const url = new URL(request.url);
       const auth = url.searchParams.get('auth');
       if (auth) {
+        authorizationUtil.clearAdminViewSession();
         authorizationUtil.setAuthorization(auth);
         url.searchParams.delete('auth');
         return redirect(`${url.pathname}${url.search}`);
