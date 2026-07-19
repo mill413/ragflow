@@ -333,6 +333,15 @@ export const deleteManagedResource = (
   request.delete<ResponseData<{ resource_type: string; resource_id: string }>>(
     adminManagedResource(resourceType, resourceId),
   );
+export const getDatasetResourceDetail = (
+  resourceId: string,
+  page: number,
+  pageSize: number,
+) =>
+  request.get<ResponseData<AdminService.DatasetResourceDetailResponse>>(
+    adminManagedResource('dataset', resourceId),
+    { params: { page, page_size: pageSize } },
+  );
 export const listManagedModels = () =>
   request.get<ResponseData<AdminService.ManagedModel[]>>(adminManagedModels);
 export const listModelWorkspaces = () =>

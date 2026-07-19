@@ -1122,6 +1122,108 @@ class ResourceMgr:
             row["session_count"] = counts.get(row["id"], 0)
 
     @classmethod
+    def get_resource_detail(
+        cls,
+        resource_type: str,
+        resource_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        if resource_type != "dataset":
+            raise AdminException(f"Unsupported resource detail type: {resource_type}", 400)
+
+        valid = StatusEnum.VALID.value
+        dataset = (
+            Knowledgebase.select(
+                Knowledgebase.id,
+                Knowledgebase.name,
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                Knowledgebase.created_by.alias("creator_id"),
+                Knowledgebase.permission,
+                Knowledgebase.description,
+                Knowledgebase.language,
+                Knowledgebase.embd_id,
+                Knowledgebase.parser_id,
+                Knowledgebase.pipeline_id,
+                Knowledgebase.parser_config,
+                Knowledgebase.pagerank,
+                Knowledgebase.similarity_threshold,
+                Knowledgebase.vector_similarity_weight,
+                Knowledgebase.doc_num,
+                Knowledgebase.chunk_num,
+                Knowledgebase.token_num,
+                Knowledgebase.create_date,
+                Knowledgebase.update_date,
+            )
+            .where(
+                (Knowledgebase.id == resource_id)
+                & (Knowledgebase.status == valid)
+            )
+            .dicts()
+            .first()
+        )
+        if not dataset:
+            raise AdminException("Resource not found", 404)
+
+        cls._attach_ownership([dataset])
+        cls._attach_dataset_metrics([dataset])
+        dataset["resource_type"] = resource_type
+        dataset["deletable"] = True
+
+        documents_query = Document.select(
+            Document.id,
+            Document.name,
+            Document.created_by.alias("creator_id"),
+            Document.type.alias("file_type"),
+            Document.suffix,
+            Document.source_type,
+            Document.size,
+            Document.parser_id,
+            Document.pipeline_id,
+            Document.parser_config,
+            Document.chunk_num,
+            Document.token_num,
+            Document.progress,
+            Document.progress_msg,
+            Document.process_begin_at,
+            Document.process_duration,
+            Document.run,
+            Document.create_date,
+            Document.update_date,
+        ).where((Document.kb_id == resource_id) & (Document.status == valid))
+        document_total = documents_query.count()
+        documents = list(
+            documents_query.order_by(Document.create_time.desc())
+            .paginate(page, page_size)
+            .dicts()
+        )
+
+        creator_ids = {row.get("creator_id") for row in documents if row.get("creator_id")}
+        creators = {
+            user.id: user.nickname or user.email
+            for user in User.select(User.id, User.nickname, User.email).where(
+                (User.id.in_(creator_ids)) & (User.status == valid)
+            )
+        }
+        for document in documents:
+            document["creator_name"] = creators.get(document.get("creator_id"), "")
+            progress = float(document.get("progress") or 0)
+            if progress < 0:
+                document["parse_status"] = "failed"
+            elif progress >= 1:
+                document["parse_status"] = "completed"
+            elif document.get("run") == "0" and progress == 0:
+                document["parse_status"] = "pending"
+            else:
+                document["parse_status"] = "processing"
+
+        return {
+            "dataset": dataset,
+            "documents": documents,
+            "document_total": document_total,
+        }
+
+    @classmethod
     async def delete_resource(
         cls,
         resource_type: str,

@@ -512,6 +512,25 @@ def list_failed_documents():
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_resource_detail(resource_type, resource_id):
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        return success_response(
+            ResourceMgr.get_resource_detail(resource_type, resource_id, page, page_size)
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to get admin resource detail")
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["DELETE"])
 @login_required
 @check_admin_auth

@@ -13,6 +13,7 @@ import { Navigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  Activity,
   Bot,
   Brain,
   CalendarPlus,
@@ -28,11 +29,14 @@ import {
   Import,
   Layers3,
   Library,
+  Languages,
   MessageSquare,
   Rocket,
   Search,
+  Settings2,
   Shapes,
   ShieldCheck,
+  TextQuote,
   Trash2,
   UserRound,
   UsersRound,
@@ -58,6 +62,7 @@ import { Input } from '@/components/ui/input';
 import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -81,6 +86,7 @@ import {
 } from '@/components/ui/sheet';
 import {
   deleteManagedResource,
+  getDatasetResourceDetail,
   getMonitoringSummary,
   listFailedDocuments,
   listManagedResources,
@@ -174,6 +180,13 @@ function sortRows<T>(rows: T[], sort: SortState): T[] {
   });
 }
 
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 export default function AdminResources() {
   const { t } = useTranslation();
   const { resourceView } = useParams<{ resourceView: string }>();
@@ -200,7 +213,19 @@ export default function AdminResources() {
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
   const [selectedDetail, setSelectedDetail] =
     useState<SelectedResourceDetail>();
+  const [datasetDocumentPage, setDatasetDocumentPage] = useState(1);
+  const [datasetDocumentPageSize, setDatasetDocumentPageSize] = useState(20);
+  const [datasetDocumentSort, setDatasetDocumentSort] = useState<SortState>({
+    key: 'create_date',
+    direction: 'desc',
+  });
   const resourceType = view;
+
+  const selectedDatasetId =
+    selectedDetail?.kind === 'resource' &&
+    selectedDetail.resource.resource_type === 'dataset'
+      ? selectedDetail.resource.id
+      : undefined;
 
   useEffect(() => {
     setPage(1);
@@ -258,6 +283,27 @@ export default function AdminResources() {
       ).data.data,
     enabled: view === 'dataset',
   });
+  const { data: datasetDetail, isFetching: datasetDetailFetching } = useQuery({
+    queryKey: [
+      'admin/resources/dataset-detail',
+      selectedDatasetId,
+      datasetDocumentPage,
+      datasetDocumentPageSize,
+    ],
+    queryFn: async () =>
+      (
+        await getDatasetResourceDetail(
+          selectedDatasetId!,
+          datasetDocumentPage,
+          datasetDocumentPageSize,
+        )
+      ).data.data,
+    enabled: Boolean(selectedDatasetId),
+  });
+
+  useEffect(() => {
+    setDatasetDocumentPage(1);
+  }, [selectedDatasetId]);
 
   useEffect(() => {
     if (resourceType !== 'file' || !resourceData?.resources.length) return;
@@ -320,6 +366,10 @@ export default function AdminResources() {
   const sortedFailures = useMemo(
     () => sortRows(failureData?.documents ?? [], failureSort),
     [failureData?.documents, failureSort],
+  );
+  const sortedDatasetDocuments = useMemo(
+    () => sortRows(datasetDetail?.documents ?? [], datasetDocumentSort),
+    [datasetDetail?.documents, datasetDocumentSort],
   );
 
   const toggleSort = (
@@ -1128,10 +1178,12 @@ export default function AdminResources() {
           open={Boolean(selectedDetail)}
           onOpenChange={(open) => !open && setSelectedDetail(undefined)}
         >
-          <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
+          <SheetContent className="w-[min(980px,90vw)] max-w-none overflow-hidden p-0">
             <SheetHeader className="border-b border-border-button px-6 py-5">
               <SheetTitle>
-                {detailName || t('admin.unnamedResource')}
+                {datasetDetail?.dataset.name ||
+                  detailName ||
+                  t('admin.unnamedResource')}
               </SheetTitle>
               <SheetDescription className="font-mono text-xs">
                 {t('admin.resourceManagementPage.resourceId')}：
@@ -1139,21 +1191,390 @@ export default function AdminResources() {
               </SheetDescription>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
-              <section className="py-5">
-                <div className="mb-3 text-sm font-medium">
-                  {t('admin.resourceManagementPage.resourceInformation')}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {detailItems.map(({ label, value, icon }, index) => (
-                    <DetailInformationCard
-                      key={`${label}-${index}`}
-                      icon={icon}
-                      label={label}
-                      value={value}
+              {selectedDatasetId ? (
+                <Tabs defaultValue="overview" className="py-5">
+                  <TabsList className="mb-5 h-auto justify-start gap-2 bg-transparent p-0">
+                    <TabsTrigger value="overview">
+                      {t('admin.resourceManagementPage.datasetDetail.overview')}
+                    </TabsTrigger>
+                    <TabsTrigger value="files">
+                      {t('admin.resourceManagementPage.datasetDetail.files')}
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="overview" className="mt-0 space-y-5">
+                    {datasetDetailFetching && !datasetDetail ? (
+                      <div className="py-20 text-center text-sm text-text-secondary">
+                        {t('common.loading')}
+                      </div>
+                    ) : datasetDetail ? (
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <DetailInformationCard
+                            icon={FileText}
+                            label={t('admin.knowledgeMonitoring.documentCount')}
+                            value={datasetDetail.dataset.doc_num ?? 0}
+                          />
+                          <DetailInformationCard
+                            icon={HardDrive}
+                            label={t('admin.knowledgeMonitoring.storage')}
+                            value={
+                              <StorageSize
+                                bytes={datasetDetail.dataset.storage_bytes ?? 0}
+                              />
+                            }
+                          />
+                          <DetailInformationCard
+                            icon={Layers3}
+                            label={t('admin.knowledgeMonitoring.chunkCount')}
+                            value={datasetDetail.dataset.chunk_num ?? 0}
+                          />
+                          <DetailInformationCard
+                            icon={Hash}
+                            label={t('admin.tokenNum')}
+                            value={datasetDetail.dataset.token_num ?? 0}
+                          />
+                        </div>
+
+                        <section className="space-y-3">
+                          <div className="text-sm font-medium">
+                            {t(
+                              'admin.resourceManagementPage.resourceInformation',
+                            )}
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <DetailInformationCard
+                              icon={UsersRound}
+                              label={t('admin.workspaceOwner')}
+                              value={`${t(
+                                datasetDetail.dataset.workspace_type === 'team'
+                                  ? 'admin.teamWorkspace'
+                                  : 'admin.personalWorkspace',
+                              )}-${datasetDetail.dataset.workspace_name}`}
+                            />
+                            <DetailInformationCard
+                              icon={UserRound}
+                              label={t('admin.creator')}
+                              value={datasetDetail.dataset.creator_name || '-'}
+                            />
+                            <DetailInformationCard
+                              icon={TextQuote}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.description',
+                              )}
+                              value={datasetDetail.dataset.description || '-'}
+                            />
+                            <DetailInformationCard
+                              icon={Brain}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.embeddingModel',
+                              )}
+                              value={datasetDetail.dataset.embd_id || '-'}
+                            />
+                            <DetailInformationCard
+                              icon={Settings2}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.parseMethod',
+                              )}
+                              value={datasetDetail.dataset.parser_id || '-'}
+                            />
+                            <DetailInformationCard
+                              icon={Languages}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.language',
+                              )}
+                              value={datasetDetail.dataset.language || '-'}
+                            />
+                            <DetailInformationCard
+                              icon={Activity}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.pageRank',
+                              )}
+                              value={datasetDetail.dataset.pagerank ?? 0}
+                            />
+                            <DetailInformationCard
+                              icon={CalendarPlus}
+                              label={t('admin.createTime')}
+                              value={
+                                formatDate(datasetDetail.dataset.create_date) ||
+                                '-'
+                              }
+                            />
+                            <DetailInformationCard
+                              icon={Clock3}
+                              label={t('admin.lastUpdateTime')}
+                              value={
+                                formatDate(datasetDetail.dataset.update_date) ||
+                                '-'
+                              }
+                            />
+                          </div>
+                        </section>
+
+                        <details
+                          open
+                          className="rounded-lg border-0.5 border-border-button bg-bg-input"
+                        >
+                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                            {t(
+                              'admin.resourceManagementPage.datasetDetail.retrievalConfiguration',
+                            )}
+                          </summary>
+                          <div className="grid gap-3 border-t border-border-button p-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <DetailInformationCard
+                              icon={Activity}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.similarityThreshold',
+                              )}
+                              value={
+                                datasetDetail.dataset.similarity_threshold ??
+                                '-'
+                              }
+                            />
+                            <DetailInformationCard
+                              icon={Activity}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.vectorWeight',
+                              )}
+                              value={
+                                datasetDetail.dataset
+                                  .vector_similarity_weight ?? '-'
+                              }
+                            />
+                            <DetailInformationCard
+                              icon={Workflow}
+                              label={t(
+                                'admin.resourceManagementPage.datasetDetail.dataFlow',
+                              )}
+                              value={datasetDetail.dataset.pipeline_id || '-'}
+                            />
+                          </div>
+                        </details>
+
+                        <details className="rounded-lg border-0.5 border-border-button bg-bg-input">
+                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                            {t(
+                              'admin.resourceManagementPage.datasetDetail.parserConfiguration',
+                            )}
+                          </summary>
+                          <div className="grid gap-3 border-t border-border-button p-4 sm:grid-cols-2">
+                            {Object.entries(
+                              datasetDetail.dataset.parser_config ?? {},
+                            ).map(([key, value]) => (
+                              <DetailInformationCard
+                                key={key}
+                                icon={Settings2}
+                                label={t(
+                                  `admin.resourceManagementPage.datasetDetail.parserFields.${key}`,
+                                  { defaultValue: key },
+                                )}
+                                value={formatDetailValue(value)}
+                              />
+                            ))}
+                            {!Object.keys(
+                              datasetDetail.dataset.parser_config ?? {},
+                            ).length && (
+                              <div className="col-span-full py-6 text-center text-sm text-text-secondary">
+                                {t('common.noData')}
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      </>
+                    ) : (
+                      <div className="py-20 text-center text-sm text-text-secondary">
+                        {t('common.noData')}
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="files" className="mt-0 space-y-4">
+                    <div className="overflow-x-auto">
+                      <Table
+                        rootClassName="max-w-full [contain:inline-size]"
+                        className="min-w-[980px]"
+                      >
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              {sortButton(
+                                t('admin.knowledgeMonitoring.fileName'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'name',
+                              )}
+                            </TableHead>
+                            <TableHead>
+                              {sortButton(
+                                t('admin.resourceManagementPage.fileType'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'file_type',
+                              )}
+                            </TableHead>
+                            <TableHead className="text-center">
+                              {sortButton(
+                                t('admin.knowledgeMonitoring.fileSize'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'size',
+                              )}
+                            </TableHead>
+                            <TableHead>
+                              {sortButton(
+                                t('admin.knowledgeMonitoring.parseStatus'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'parse_status',
+                              )}
+                            </TableHead>
+                            <TableHead className="text-center">
+                              {sortButton(
+                                t('admin.knowledgeMonitoring.chunkCount'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'chunk_num',
+                              )}
+                            </TableHead>
+                            <TableHead className="text-center">
+                              {sortButton(
+                                t('admin.tokenNum'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'token_num',
+                              )}
+                            </TableHead>
+                            <TableHead className="text-center">
+                              {sortButton(
+                                t(
+                                  'admin.resourceManagementPage.datasetDetail.progress',
+                                ),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'progress',
+                              )}
+                            </TableHead>
+                            <TableHead>
+                              {sortButton(
+                                t('admin.createTime'),
+                                datasetDocumentSort,
+                                setDatasetDocumentSort,
+                                'create_date',
+                              )}
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody
+                          className={
+                            datasetDetailFetching ? 'opacity-60' : undefined
+                          }
+                        >
+                          {sortedDatasetDocuments.length ? (
+                            sortedDatasetDocuments.map((document) => (
+                              <TableRow key={document.id}>
+                                <TableCell>
+                                  <div className="max-w-56 truncate font-medium">
+                                    {document.name || '-'}
+                                  </div>
+                                  <div className="max-w-56 truncate font-mono text-xs text-text-secondary">
+                                    {document.id}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {document.suffix || document.file_type || '-'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <StorageSize bytes={document.size ?? 0} />
+                                </TableCell>
+                                <TableCell>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex">
+                                        <Badge
+                                          variant={
+                                            document.parse_status === 'failed'
+                                              ? 'destructive'
+                                              : document.parse_status ===
+                                                  'completed'
+                                                ? 'success'
+                                                : 'secondary'
+                                          }
+                                        >
+                                          {t(
+                                            `admin.resourceManagementPage.datasetDetail.status.${document.parse_status}`,
+                                          )}
+                                        </Badge>
+                                      </span>
+                                    </TooltipTrigger>
+                                    {document.progress_msg && (
+                                      <TooltipContent className="max-w-sm">
+                                        {document.progress_msg}
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {document.chunk_num ?? 0}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {document.token_num ?? 0}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {Math.max(
+                                    0,
+                                    Math.min(
+                                      100,
+                                      (document.progress ?? 0) * 100,
+                                    ),
+                                  ).toFixed(0)}
+                                  %
+                                </TableCell>
+                                <TableCell>
+                                  {formatDate(document.create_date) || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell
+                                colSpan={8}
+                                className="h-40 text-center text-text-secondary"
+                              >
+                                {t('common.noData')}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <RAGFlowPagination
+                      total={datasetDetail?.document_total ?? 0}
+                      current={datasetDocumentPage}
+                      pageSize={datasetDocumentPageSize}
+                      onChange={(nextPage, nextPageSize) => {
+                        setDatasetDocumentPage(nextPage);
+                        setDatasetDocumentPageSize(nextPageSize);
+                      }}
                     />
-                  ))}
-                </div>
-              </section>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <section className="py-5">
+                  <div className="mb-3 text-sm font-medium">
+                    {t('admin.resourceManagementPage.resourceInformation')}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {detailItems.map(({ label, value, icon }, index) => (
+                      <DetailInformationCard
+                        key={`${label}-${index}`}
+                        icon={icon}
+                        label={label}
+                        value={value}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
             </ScrollArea>
           </SheetContent>
         </Sheet>

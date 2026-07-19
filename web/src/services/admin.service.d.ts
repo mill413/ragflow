@@ -201,6 +201,48 @@ declare namespace AdminService {
     total: number;
   };
 
+  export type DatasetDocumentDetail = {
+    id: string;
+    name: string;
+    creator_id?: string;
+    creator_name?: string;
+    file_type?: string;
+    suffix?: string;
+    source_type?: string;
+    size: number;
+    parser_id?: string;
+    pipeline_id?: string;
+    parser_config?: Record<string, unknown>;
+    chunk_num: number;
+    token_num: number;
+    progress: number;
+    progress_msg?: string;
+    process_begin_at?: string;
+    process_duration?: number;
+    run?: string;
+    parse_status: 'pending' | 'processing' | 'completed' | 'failed';
+    create_date: string;
+    update_date: string;
+  };
+
+  export type DatasetResourceDetail = ManagedResourceItem & {
+    description?: string;
+    language?: string;
+    embd_id?: string;
+    parser_id?: string;
+    pipeline_id?: string;
+    parser_config?: Record<string, unknown>;
+    pagerank?: number;
+    similarity_threshold?: number;
+    vector_similarity_weight?: number;
+  };
+
+  export type DatasetResourceDetailResponse = {
+    dataset: DatasetResourceDetail;
+    documents: DatasetDocumentDetail[];
+    document_total: number;
+  };
+
   export type FailedDocumentItem = {
     id: string;
     name: string;
