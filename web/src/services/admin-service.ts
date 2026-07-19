@@ -117,6 +117,8 @@ const {
   adminDepartment,
   adminListManagedResources,
   adminManagedResource,
+  adminChatSessions,
+  adminChatSession,
   adminListFailedDocuments,
   adminQuotas,
   adminQuota,
@@ -397,6 +399,33 @@ export const getManagedResourceDetail = (
 ) =>
   request.get<ResponseData<AdminService.StandardManagedResourceDetailResponse>>(
     adminManagedResource(resourceType, resourceId),
+  );
+export const listManagedChatSessions = (
+  resourceId: string,
+  params: {
+    page: number;
+    pageSize: number;
+    sources?: string[];
+    keywords?: string;
+  },
+) =>
+  request.get<ResponseData<AdminService.ManagedChatSessionList>>(
+    adminChatSessions(resourceId),
+    {
+      params: {
+        ...params,
+        sources: params.sources?.join(','),
+      },
+    },
+  );
+export const getManagedChatSession = (
+  resourceId: string,
+  sessionId: string,
+  source: AdminService.ManagedChatSessionSource,
+) =>
+  request.get<ResponseData<AdminService.ManagedChatSessionDetail>>(
+    adminChatSession(resourceId, sessionId),
+    { params: { source } },
   );
 export const downloadManagedFile = (resourceId: string, workspaceId: string) =>
   request.get<Blob>(`${api.getFile}/${resourceId}`, {

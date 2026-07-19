@@ -573,6 +573,51 @@ def get_resource_detail(resource_type, resource_id):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/resources/chat/<resource_id>/sessions", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_chat_sessions(resource_id):
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        sources = [value for value in request.args.get("sources", "").split(",") if value]
+        return success_response(
+            ResourceMgr.list_chat_sessions(
+                resource_id,
+                page,
+                page_size,
+                sources,
+                request.args.get("keywords", ""),
+            )
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list admin chat sessions")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/chat/<resource_id>/sessions/<session_id>", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_chat_session_detail(resource_id, session_id):
+    try:
+        return success_response(
+            ResourceMgr.get_chat_session_detail(
+                resource_id,
+                session_id,
+                request.args.get("source", "web"),
+            )
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to get admin chat session detail")
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["DELETE"])
 @login_required
 @check_admin_auth

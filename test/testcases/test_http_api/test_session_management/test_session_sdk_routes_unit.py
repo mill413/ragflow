@@ -615,6 +615,8 @@ def _load_session_module(monkeypatch):
         get_by_id=lambda _session_id: (True, SimpleNamespace(to_dict=lambda: {"id": _session_id})),
         delete_by_id=lambda *_args, **_kwargs: True,
         query=lambda **_kwargs: [],
+        insert=lambda **_kwargs: True,
+        update_by_id=lambda *_args, **_kwargs: True,
     )
     monkeypatch.setitem(sys.modules, "api.db.services.api_service", api_service_mod)
 
@@ -773,6 +775,8 @@ def _load_agent_api_module(monkeypatch):
         save=lambda **_kwargs: True,
         get_by_id=lambda _session_id: (True, SimpleNamespace(to_dict=lambda: {"id": _session_id})),
         delete_by_id=lambda *_args, **_kwargs: True,
+        insert=lambda **_kwargs: True,
+        update_by_id=lambda *_args, **_kwargs: True,
     )
     monkeypatch.setitem(sys.modules, "api.db.services.api_service", api_service_mod)
 
@@ -1073,6 +1077,55 @@ def test_openai_nonstream_branch_unit(monkeypatch):
 
     res = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
     assert res["choices"][0]["message"]["content"] == "world"
+
+
+@pytest.mark.p2
+def test_openai_nonstream_persists_api_conversation(monkeypatch):
+    module = _load_openai_api_module(monkeypatch)
+    inserted = {}
+    updated = {}
+
+    monkeypatch.setattr(module, "get_uuid", lambda: "openai-session-1")
+    monkeypatch.setattr(module, "num_tokens_from_string", lambda text: len(text or ""))
+    monkeypatch.setattr(
+        module.DialogService,
+        "query",
+        lambda **_kwargs: [SimpleNamespace(kb_ids=[], llm_id="chat-model", tenant_id="team-1")],
+    )
+    monkeypatch.setattr(module.API4ConversationService, "insert", lambda **kwargs: inserted.update(kwargs))
+    monkeypatch.setattr(
+        module.API4ConversationService,
+        "update_by_id",
+        lambda session_id, data: updated.update({"session_id": session_id, **data}),
+    )
+
+    async def fake_async_chat(*_args, **_kwargs):
+        yield {"answer": "world", "reference": {"chunks": [{"id": "chunk-1"}]}}
+
+    monkeypatch.setattr(module, "async_chat", fake_async_chat)
+    monkeypatch.setattr(
+        module,
+        "get_request_json",
+        lambda: _AwaitableValue(
+            {
+                "model": "model",
+                "messages": [{"role": "user", "content": "hello"}],
+                "user": "external-user-1",
+            }
+        ),
+    )
+
+    result = _run(inspect.unwrap(module.openai_chat_completions)("chat-1"))
+
+    assert result["session_id"] == "openai-session-1"
+    assert inserted["dialog_id"] == "chat-1"
+    assert inserted["user_id"] == "team-1"
+    assert inserted["exp_user_id"] == "external-user-1"
+    assert inserted["source"] == "openai"
+    assert updated["session_id"] == "openai-session-1"
+    assert updated["message"][-1]["content"] == "world"
+    assert updated["reference"] == [{"chunks": [{"id": "chunk-1"}]}]
+    assert updated["round"] == 1
 
 
 @pytest.mark.p2

@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/utils/date';
 import { DetailInformationCard } from './detail-information-card';
 import { StorageSize } from './storage-size';
+import { ChatSessionMonitor } from './chat-session-monitor';
 
 type DetailItem = {
   label: string;
@@ -848,6 +849,11 @@ export function StandardResourceDetail({
         <TabsTrigger value="configuration">
           {t('admin.resourceManagementPage.resourceDetail.configuration')}
         </TabsTrigger>
+        {detail.resource.resource_type === 'chat' && (
+          <TabsTrigger value="sessions">
+            {t('admin.resourceManagementPage.chatSessions.title')}
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="overview" className="mt-0 space-y-5">
@@ -909,6 +915,11 @@ export function StandardResourceDetail({
           configuration={detail.configuration ?? {}}
         />
       </TabsContent>
+      {detail.resource.resource_type === 'chat' && (
+        <TabsContent value="sessions" className="mt-0">
+          <ChatSessionMonitor resourceId={detail.resource.id} />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

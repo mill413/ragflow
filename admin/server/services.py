@@ -1145,7 +1145,7 @@ class ResourceMgr:
     def _attach_chat_metrics(rows):
         if not rows:
             return
-        counts = {
+        web_counts = {
             row["dialog_id"]: int(row["session_count"] or 0)
             for row in (
                 Conversation.select(
@@ -1157,8 +1157,22 @@ class ResourceMgr:
                 .dicts()
             )
         }
+        api_counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                API4Conversation.select(
+                    API4Conversation.dialog_id,
+                    fn.COUNT(API4Conversation.id).alias("session_count"),
+                )
+                .where(API4Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(API4Conversation.dialog_id)
+                .dicts()
+            )
+        }
         for row in rows:
-            row["session_count"] = counts.get(row["id"], 0)
+            row["web_session_count"] = web_counts.get(row["id"], 0)
+            row["api_session_count"] = api_counts.get(row["id"], 0)
+            row["session_count"] = row["web_session_count"] + row["api_session_count"]
             row["dataset_count"] = len(set(row.pop("kb_ids", []) or []))
 
     @staticmethod
@@ -1329,9 +1343,13 @@ class ResourceMgr:
                 .first()
             )
             if resource:
-                resource["session_count"] = Conversation.select().where(
+                resource["web_session_count"] = Conversation.select().where(
                     Conversation.dialog_id == resource_id
                 ).count()
+                resource["api_session_count"] = API4Conversation.select().where(
+                    API4Conversation.dialog_id == resource_id
+                ).count()
+                resource["session_count"] = resource["web_session_count"] + resource["api_session_count"]
                 resource["dataset_count"] = len(set(resource.get("kb_ids") or []))
                 configuration = {
                     "model_settings": resource.pop("llm_setting", {}) or {},
@@ -1506,6 +1524,151 @@ class ResourceMgr:
             "configuration": configuration,
             "related_resources": related_resources,
         }
+
+    @classmethod
+    def list_chat_sessions(
+        cls,
+        resource_id: str,
+        page: int = 1,
+        page_size: int = 20,
+        sources: list[str] | None = None,
+        keywords: str = "",
+    ) -> dict[str, Any]:
+        valid = StatusEnum.VALID.value
+        if not Dialog.select(Dialog.id).where((Dialog.id == resource_id) & (Dialog.status == valid)).exists():
+            raise AdminException("Resource not found", 404)
+
+        selected_sources = set(sources or [])
+        include_web = not selected_sources or "web" in selected_sources
+        include_api = not selected_sources or bool(selected_sources & {"chatbot", "openai", "api"})
+        fetch_limit = page * page_size
+        rows: list[dict[str, Any]] = []
+
+        if include_web:
+            query = Conversation.select(
+                Conversation.id,
+                Conversation.name,
+                Conversation.user_id,
+                Conversation.message,
+                Conversation.create_date,
+                Conversation.update_date,
+            ).where(Conversation.dialog_id == resource_id)
+            if keywords:
+                query = query.where(fn.LOWER(Conversation.message).contains(keywords.lower()))
+            for item in query.order_by(Conversation.update_time.desc()).limit(fetch_limit).dicts():
+                messages = item.pop("message", []) or []
+                item.update(
+                    source="web",
+                    external_user_id=None,
+                    message_count=len(messages),
+                    round=sum(1 for message in messages if message.get("role") == "user"),
+                    tokens=None,
+                    duration=None,
+                    errors=None,
+                )
+                rows.append(item)
+
+        if include_api:
+            query = API4Conversation.select(
+                API4Conversation.id,
+                API4Conversation.name,
+                API4Conversation.user_id,
+                API4Conversation.exp_user_id,
+                API4Conversation.message,
+                API4Conversation.tokens,
+                API4Conversation.duration,
+                API4Conversation.round,
+                API4Conversation.errors,
+                API4Conversation.source,
+                API4Conversation.create_date,
+                API4Conversation.update_date,
+            ).where(API4Conversation.dialog_id == resource_id)
+            if selected_sources:
+                api_sources = selected_sources & {"chatbot", "openai", "api"}
+                conditions = []
+                if "openai" in api_sources:
+                    conditions.append(API4Conversation.source == "openai")
+                if api_sources & {"chatbot", "api"}:
+                    conditions.append(
+                        API4Conversation.source.is_null(True)
+                        | (API4Conversation.source != "openai")
+                    )
+                if conditions:
+                    source_condition = conditions[0]
+                    for condition in conditions[1:]:
+                        source_condition |= condition
+                    query = query.where(source_condition)
+            if keywords:
+                query = query.where(fn.LOWER(API4Conversation.message).contains(keywords.lower()))
+            for item in query.order_by(API4Conversation.update_time.desc()).limit(fetch_limit).dicts():
+                messages = item.pop("message", []) or []
+                item["external_user_id"] = item.pop("exp_user_id", None)
+                item["source"] = "openai" if item.get("source") == "openai" else "chatbot"
+                item["message_count"] = len(messages)
+                rows.append(item)
+
+        rows.sort(key=lambda item: str(item.get("update_date") or item.get("create_date") or ""), reverse=True)
+        offset = (page - 1) * page_size
+
+        web_total = 0
+        api_total = 0
+        if include_web:
+            count_query = Conversation.select().where(Conversation.dialog_id == resource_id)
+            if keywords:
+                count_query = count_query.where(fn.LOWER(Conversation.message).contains(keywords.lower()))
+            web_total = count_query.count()
+        if include_api:
+            count_query = API4Conversation.select().where(API4Conversation.dialog_id == resource_id)
+            selected_api_sources = selected_sources & {"chatbot", "openai", "api"}
+            if "openai" in selected_api_sources and not (selected_api_sources & {"chatbot", "api"}):
+                count_query = count_query.where(API4Conversation.source == "openai")
+            elif selected_api_sources and "openai" not in selected_api_sources:
+                count_query = count_query.where(
+                    API4Conversation.source.is_null(True) | (API4Conversation.source != "openai")
+                )
+            if keywords:
+                count_query = count_query.where(fn.LOWER(API4Conversation.message).contains(keywords.lower()))
+            api_total = count_query.count()
+
+        actor_ids = {
+            row.get("external_user_id") or row.get("user_id")
+            for row in rows
+            if row.get("external_user_id") or row.get("user_id")
+        }
+        actor_names = {
+            user.id: user.nickname or user.email
+            for user in User.select(User.id, User.nickname, User.email).where(User.id.in_(actor_ids))
+        } if actor_ids else {}
+        for row in rows:
+            actor_id = row.get("external_user_id") or row.get("user_id")
+            row["actor_id"] = actor_id
+            row["actor_name"] = actor_names.get(actor_id, actor_id or "")
+
+        return {"sessions": rows[offset : offset + page_size], "total": web_total + api_total}
+
+    @classmethod
+    def get_chat_session_detail(cls, resource_id: str, session_id: str, source: str) -> dict[str, Any]:
+        if source == "web":
+            session = Conversation.select().where(
+                (Conversation.id == session_id) & (Conversation.dialog_id == resource_id)
+            ).dicts().first()
+            normalized_source = "web"
+        else:
+            session = API4Conversation.select().where(
+                (API4Conversation.id == session_id) & (API4Conversation.dialog_id == resource_id)
+            ).dicts().first()
+            normalized_source = "openai" if session and session.get("source") == "openai" else "chatbot"
+        if not session:
+            raise AdminException("Session not found", 404)
+        session["source"] = normalized_source
+        session["messages"] = session.pop("message", []) or []
+        session["references"] = session.pop("reference", []) or []
+        session["message_count"] = len(session["messages"])
+        actor_id = session.get("exp_user_id") or session.get("user_id")
+        actor = User.select(User.nickname, User.email).where(User.id == actor_id).first() if actor_id else None
+        session["actor_id"] = actor_id
+        session["actor_name"] = (actor.nickname or actor.email) if actor else (actor_id or "")
+        return session
 
     @staticmethod
     def _dataset_references(dataset_ids: list[str]) -> list[dict[str, Any]]:

@@ -3756,6 +3756,24 @@ Important structured information may include: names, dates, locations, events, k
             outputs: 'Outputs',
           },
         },
+        chatSessions: {
+          title: 'Sessions',
+          searchPlaceholder: 'Search conversation messages',
+          session: 'Session',
+          sessionDetail: 'Session details',
+          source: 'Source',
+          actor: 'Caller',
+          rounds: 'Rounds',
+          duration: 'Duration',
+          error: 'Error',
+          messageTimeline: 'Message timeline',
+          references: 'Knowledge base references',
+          sources: {
+            web: 'Web',
+            chatbot: 'Shared and embedded API',
+            openai: 'OpenAI-compatible API',
+          },
+        },
       },
 
       modelManagementPage: {

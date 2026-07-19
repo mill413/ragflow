@@ -438,6 +438,10 @@ export default {
   adminListManagedResources: `${restAPIv1}/admin/resources`,
   adminManagedResource: (resourceType: string, resourceId: string) =>
     `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,
+  adminChatSessions: (resourceId: string) =>
+    `${restAPIv1}/admin/resources/chat/${resourceId}/sessions`,
+  adminChatSession: (resourceId: string, sessionId: string) =>
+    `${restAPIv1}/admin/resources/chat/${resourceId}/sessions/${sessionId}`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
   adminQuotas: `${restAPIv1}/admin/quotas`,
   adminQuota: (scopeType: string, scopeId: string) =>

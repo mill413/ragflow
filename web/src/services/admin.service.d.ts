@@ -173,6 +173,8 @@ declare namespace AdminService {
     dataset_count?: number;
     document_count?: number;
     session_count?: number;
+    web_session_count?: number;
+    api_session_count?: number;
     release?: boolean;
     canvas_type?: string;
     memory_type?: number;
@@ -294,6 +296,42 @@ declare namespace AdminService {
     resource: StandardManagedResourceDetail;
     configuration: Record<string, unknown>;
     related_resources: RelatedManagedResource[];
+  };
+
+  export type ManagedChatSessionSource = 'web' | 'chatbot' | 'openai';
+
+  export type ManagedChatSession = {
+    id: string;
+    name?: string;
+    source: ManagedChatSessionSource;
+    user_id?: string;
+    external_user_id?: string;
+    actor_id?: string;
+    actor_name?: string;
+    message_count: number;
+    round?: number;
+    tokens?: number;
+    duration?: number;
+    errors?: string;
+    create_date?: string;
+    update_date?: string;
+  };
+
+  export type ManagedChatMessage = {
+    id?: string;
+    role: string;
+    content: string;
+    created_at?: number;
+  };
+
+  export type ManagedChatSessionDetail = ManagedChatSession & {
+    messages: ManagedChatMessage[];
+    references: unknown[];
+  };
+
+  export type ManagedChatSessionList = {
+    sessions: ManagedChatSession[];
+    total: number;
   };
 
   export type FailedDocumentItem = {
