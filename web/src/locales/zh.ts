@@ -3242,6 +3242,11 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
           team: '团队空间',
           dataset: '知识库',
         },
+        tableTitles: {
+          personal: '个人空间配额',
+          team: '团队空间配额',
+          dataset: '知识库配额',
+        },
         states: {
           unlimited: '未限制',
           configured: '已配置',

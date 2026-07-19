@@ -19,7 +19,6 @@ import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -60,7 +59,6 @@ import { getSortIcon } from './utils';
 
 type QuotaSortKey =
   | 'name'
-  | 'scope_type'
   | 'workspace_name'
   | 'file_count_used'
   | 'file_count_limit'
@@ -182,20 +180,226 @@ function QuotaMetricDetail({
   );
 }
 
-export default function AdminQuotas() {
+function QuotaStateBadge({ quota }: { quota: AdminService.ResourceQuota }) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [query, setQuery] = useState('');
-  const [scopeFilters, setScopeFilters] = useState<string[]>([]);
-  const [stateFilters, setStateFilters] = useState<string[]>([]);
+  const state = getQuotaState(quota);
+  return (
+    <Badge
+      variant={
+        state === 'overLimit'
+          ? 'destructive'
+          : state === 'configured'
+            ? 'success'
+            : 'secondary'
+      }
+    >
+      {t(`admin.quotaManagementPage.states.${state}`)}
+    </Badge>
+  );
+}
+
+function QuotaTableSection({
+  scopeType,
+  quotas,
+  loading,
+  onView,
+  onEdit,
+}: {
+  scopeType: AdminService.ResourceQuotaScopeType;
+  quotas: AdminService.ResourceQuotaItem[];
+  loading: boolean;
+  onView: (quota: AdminService.ResourceQuotaItem) => void;
+  onEdit: (quota: AdminService.ResourceQuotaItem) => void;
+}) {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const [editing, setEditing] = useState<AdminService.ResourceQuotaItem>();
-  const [detail, setDetail] = useState<AdminService.ResourceQuotaItem>();
   const [sort, setSort] = useState<{
     key: QuotaSortKey;
     direction: 'asc' | 'desc';
   }>({ key: 'name', direction: 'asc' });
+  const showWorkspace = scopeType === 'dataset';
+
+  useEffect(() => setPage(1), [quotas]);
+
+  const sorted = useMemo(
+    () =>
+      [...quotas].sort((left, right) => {
+        const result = String(left[sort.key] ?? '').localeCompare(
+          String(right[sort.key] ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return sort.direction === 'asc' ? result : -result;
+      }),
+    [quotas, sort],
+  );
+  const rows = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+  const sortButton = (label: string, key: QuotaSortKey) => (
+    <Button
+      variant="ghost"
+      onClick={() =>
+        setSort((current) => ({
+          key,
+          direction:
+            current.key === key && current.direction === 'asc'
+              ? 'desc'
+              : 'asc',
+        }))
+      }
+    >
+      {label}
+      {getSortIcon(sort.key === key ? sort.direction : false)}
+    </Button>
+  );
+
+  return (
+    <section className="overflow-hidden rounded-lg border-0.5 border-border-button bg-bg-input">
+      <div className="flex items-center justify-between border-b border-border-button px-4 py-3">
+        <div className="font-medium">
+          {t(`admin.quotaManagementPage.tableTitles.${scopeType}`)}
+        </div>
+        <Badge variant="secondary">{quotas.length}</Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <Table
+          rootClassName="max-w-full [contain:inline-size]"
+          className={showWorkspace ? 'min-w-[1080px]' : 'min-w-[960px]'}
+        >
+          <TableHeader>
+            <TableRow>
+              <TableHead>{sortButton(t('admin.name'), 'name')}</TableHead>
+              {showWorkspace && (
+                <TableHead>
+                  {sortButton(
+                    t('admin.quotaManagementPage.workspace'),
+                    'workspace_name',
+                  )}
+                </TableHead>
+              )}
+              <TableHead className="text-center">
+                {sortButton(
+                  t('admin.quotaManagementPage.fileUsage'),
+                  'file_count_used',
+                )}
+              </TableHead>
+              <TableHead className="text-center">
+                {sortButton(
+                  t('admin.quotaManagementPage.fileLimit'),
+                  'file_count_limit',
+                )}
+              </TableHead>
+              <TableHead className="text-center">
+                {sortButton(
+                  t('admin.quotaManagementPage.storageUsage'),
+                  'storage_bytes_used',
+                )}
+              </TableHead>
+              <TableHead className="text-center">
+                {sortButton(
+                  t('admin.quotaManagementPage.storageLimit'),
+                  'storage_bytes_limit',
+                )}
+              </TableHead>
+              <TableHead className="text-center">
+                {t('admin.quotaManagementPage.state')}
+              </TableHead>
+              <TableHead className="text-center">{t('admin.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className={loading ? 'opacity-60' : undefined}>
+            {rows.length ? (
+              rows.map((quota) => (
+                <TableRow
+                  key={quota.scope_id}
+                  className="cursor-pointer"
+                  tabIndex={0}
+                  onClick={() => onView(quota)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') onView(quota);
+                  }}
+                >
+                  <TableCell>
+                    <div className="font-medium">{quota.name}</div>
+                    <div className="max-w-48 truncate text-xs text-text-secondary">
+                      {quota.email || quota.scope_id}
+                    </div>
+                  </TableCell>
+                  {showWorkspace && <TableCell>{quota.workspace_name}</TableCell>}
+                  <TableCell className="text-center">
+                    {quota.file_count_used}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {quota.file_count_limit ??
+                      t('admin.resourceQuota.unlimited')}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <StorageSize bytes={quota.storage_bytes_used} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {quota.storage_bytes_limit === null ? (
+                      t('admin.resourceQuota.unlimited')
+                    ) : (
+                      <StorageSize bytes={quota.storage_bytes_limit} />
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <QuotaStateBadge quota={quota} />
+                  </TableCell>
+                  <TableCell
+                    className="text-center"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title={t('admin.quotaManagementPage.viewDetail')}
+                      aria-label={t('admin.quotaManagementPage.viewDetail')}
+                      onClick={() => onView(quota)}
+                    >
+                      <Eye />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title={t('admin.resourceQuota.configure')}
+                      aria-label={t('admin.resourceQuota.configure')}
+                      onClick={() => onEdit(quota)}
+                    >
+                      <Pencil />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableEmpty columnsLength={showWorkspace ? 8 : 7} />
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="flex justify-end border-t border-border-button px-4 py-3">
+        <RAGFlowPagination
+          total={sorted.length}
+          current={page}
+          pageSize={pageSize}
+          onChange={(nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          }}
+        />
+      </div>
+    </section>
+  );
+}
+
+export default function AdminQuotas() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState('');
+  const [stateFilters, setStateFilters] = useState<string[]>([]);
+  const [editing, setEditing] = useState<AdminService.ResourceQuotaItem>();
+  const [detail, setDetail] = useState<AdminService.ResourceQuotaItem>();
 
   const { data: quotas = [], isFetching } = useQuery({
     queryKey: ['admin/resource-quotas'],
@@ -226,36 +430,31 @@ export default function AdminQuotas() {
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
-    return quotas
-      .filter((quota) => {
-        const searchable = [
-          quota.name,
-          quota.scope_id,
-          quota.workspace_name,
-          quota.email,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLocaleLowerCase();
-        return (
-          (!keyword || searchable.includes(keyword)) &&
-          matchesSelectedFilter(quota.scope_type, scopeFilters) &&
-          matchesSelectedFilter(getQuotaState(quota), stateFilters)
-        );
-      })
-      .sort((left, right) => {
-        const result = String(left[sort.key] ?? '').localeCompare(
-          String(right[sort.key] ?? ''),
-          undefined,
-          { numeric: true },
-        );
-        return sort.direction === 'asc' ? result : -result;
-      });
-  }, [query, quotas, scopeFilters, sort, stateFilters]);
+    return quotas.filter((quota) => {
+      const searchable = [
+        quota.name,
+        quota.scope_id,
+        quota.workspace_name,
+        quota.email,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase();
+      return (
+        (!keyword || searchable.includes(keyword)) &&
+        matchesSelectedFilter(getQuotaState(quota), stateFilters)
+      );
+    });
+  }, [query, quotas, stateFilters]);
+  const quotasByScope = useMemo(
+    () => ({
+      personal: filtered.filter((quota) => quota.scope_type === 'personal'),
+      team: filtered.filter((quota) => quota.scope_type === 'team'),
+      dataset: filtered.filter((quota) => quota.scope_type === 'dataset'),
+    }),
+    [filtered],
+  );
 
-  useEffect(() => setPage(1), [query, scopeFilters, stateFilters]);
-
-  const rows = filtered.slice((page - 1) * pageSize, page * pageSize);
   const configuredCount = quotas.filter(
     (quota) => getQuotaState(quota) !== 'unlimited',
   ).length;
@@ -266,37 +465,8 @@ export default function AdminQuotas() {
     .filter((quota) => quota.scope_type !== 'dataset')
     .reduce((sum, quota) => sum + quota.storage_bytes_used, 0);
 
-  const toggleSort = (key: QuotaSortKey) => {
-    setSort((current) => ({
-      key,
-      direction:
-        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
-    }));
-  };
-  const sortButton = (label: string, key: QuotaSortKey) => (
-    <Button variant="ghost" onClick={() => toggleSort(key)}>
-      {label}
-      {getSortIcon(sort.key === key ? sort.direction : false)}
-    </Button>
-  );
   const scopeLabel = (scope: AdminService.ResourceQuotaScopeType) =>
     t(`admin.quotaManagementPage.scopeTypes.${scope}`);
-  const stateBadge = (quota: AdminService.ResourceQuota) => {
-    const state = getQuotaState(quota);
-    return (
-      <Badge
-        variant={
-          state === 'overLimit'
-            ? 'destructive'
-            : state === 'configured'
-              ? 'success'
-              : 'secondary'
-        }
-      >
-        {t(`admin.quotaManagementPage.states.${state}`)}
-      </Badge>
-    );
-  };
 
   return (
     <TooltipProvider>
@@ -338,15 +508,6 @@ export default function AdminQuotas() {
               <AdminTableMultiFilters
                 filters={[
                   {
-                    id: 'scope-type',
-                    label: t('admin.quotaManagementPage.scopeType'),
-                    options: (['personal', 'team', 'dataset'] as const).map(
-                      (scope) => ({ value: scope, label: scopeLabel(scope) }),
-                    ),
-                    value: scopeFilters,
-                    onChange: setScopeFilters,
-                  },
-                  {
                     id: 'quota-state',
                     label: t('admin.quotaManagementPage.state'),
                     options: (
@@ -361,7 +522,6 @@ export default function AdminQuotas() {
                 ]}
                 resetLabel={t('admin.reset')}
                 onReset={() => {
-                  setScopeFilters([]);
                   setStateFilters([]);
                 }}
               />
@@ -377,155 +537,18 @@ export default function AdminQuotas() {
             </div>
           </CardHeader>
 
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table
-                rootClassName="max-w-full [contain:inline-size]"
-                className="min-w-[1120px]"
-              >
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      {sortButton(t('admin.name'), 'name')}
-                    </TableHead>
-                    <TableHead>
-                      {sortButton(
-                        t('admin.quotaManagementPage.scopeType'),
-                        'scope_type',
-                      )}
-                    </TableHead>
-                    <TableHead>
-                      {sortButton(
-                        t('admin.quotaManagementPage.workspace'),
-                        'workspace_name',
-                      )}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {sortButton(
-                        t('admin.quotaManagementPage.fileUsage'),
-                        'file_count_used',
-                      )}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {sortButton(
-                        t('admin.quotaManagementPage.fileLimit'),
-                        'file_count_limit',
-                      )}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {sortButton(
-                        t('admin.quotaManagementPage.storageUsage'),
-                        'storage_bytes_used',
-                      )}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {sortButton(
-                        t('admin.quotaManagementPage.storageLimit'),
-                        'storage_bytes_limit',
-                      )}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {t('admin.quotaManagementPage.state')}
-                    </TableHead>
-                    <TableHead className="text-center">
-                      {t('admin.actions')}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className={isFetching ? 'opacity-60' : undefined}>
-                  {rows.length ? (
-                    rows.map((quota) => (
-                      <TableRow
-                        key={`${quota.scope_type}-${quota.scope_id}`}
-                        className="cursor-pointer"
-                        tabIndex={0}
-                        onClick={() => setDetail(quota)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') setDetail(quota);
-                        }}
-                      >
-                        <TableCell>
-                          <div className="font-medium">{quota.name}</div>
-                          <div className="max-w-48 truncate text-xs text-text-secondary">
-                            {quota.email || quota.scope_id}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {scopeLabel(quota.scope_type)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {quota.scope_type === 'dataset'
-                            ? quota.workspace_name
-                            : '-'}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quota.file_count_used}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quota.file_count_limit ??
-                            t('admin.resourceQuota.unlimited')}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <StorageSize bytes={quota.storage_bytes_used} />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {quota.storage_bytes_limit === null ? (
-                            t('admin.resourceQuota.unlimited')
-                          ) : (
-                            <StorageSize bytes={quota.storage_bytes_limit} />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {stateBadge(quota)}
-                        </TableCell>
-                        <TableCell
-                          className="text-center"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={t('admin.quotaManagementPage.viewDetail')}
-                            aria-label={t(
-                              'admin.quotaManagementPage.viewDetail',
-                            )}
-                            onClick={() => setDetail(quota)}
-                          >
-                            <Eye />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={t('admin.resourceQuota.configure')}
-                            aria-label={t('admin.resourceQuota.configure')}
-                            onClick={() => setEditing(quota)}
-                          >
-                            <Pencil />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableEmpty columnsLength={9} />
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+          <CardContent className="space-y-5">
+            {(['personal', 'team', 'dataset'] as const).map((scopeType) => (
+              <QuotaTableSection
+                key={scopeType}
+                scopeType={scopeType}
+                quotas={quotasByScope[scopeType]}
+                loading={isFetching}
+                onView={setDetail}
+                onEdit={setEditing}
+              />
+            ))}
           </CardContent>
-
-          <CardFooter className="flex justify-end">
-            <RAGFlowPagination
-              total={filtered.length}
-              current={page}
-              pageSize={pageSize}
-              onChange={(nextPage, nextPageSize) => {
-                setPage(nextPage);
-                setPageSize(nextPageSize);
-              }}
-            />
-          </CardFooter>
         </ScrollArea>
       </Card>
 
@@ -565,7 +588,7 @@ export default function AdminQuotas() {
                 <DetailInformationCard
                   icon={ShieldAlert}
                   label={t('admin.quotaManagementPage.state')}
-                  value={stateBadge(detail)}
+                  value={<QuotaStateBadge quota={detail} />}
                 />
               </div>
               <QuotaMetricDetail

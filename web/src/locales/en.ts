@@ -3504,6 +3504,11 @@ Important structured information may include: names, dates, locations, events, k
           team: 'Team workspace',
           dataset: 'Dataset',
         },
+        tableTitles: {
+          personal: 'Personal workspace quotas',
+          team: 'Team workspace quotas',
+          dataset: 'Dataset quotas',
+        },
         states: {
           unlimited: 'Unlimited',
           configured: 'Configured',
