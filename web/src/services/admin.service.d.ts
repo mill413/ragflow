@@ -44,6 +44,18 @@ declare namespace AdminService {
     storage_bytes_used: number;
   };
 
+  export type ResourceQuotaScopeType = 'personal' | 'team' | 'dataset';
+
+  export type ResourceQuotaItem = ResourceQuota & {
+    scope_type: ResourceQuotaScopeType;
+    scope_id: string;
+    name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type?: 'personal' | 'team';
+    email?: string;
+  };
+
   export type Team = {
     id: string;
     name: string;

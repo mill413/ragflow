@@ -1676,6 +1676,110 @@ class ResourceMgr:
             row["creator_name"] = (creator.nickname or creator.email) if creator else ""
 
 
+class QuotaMgr:
+    SCOPE_TYPES = {"personal", "team", "dataset"}
+
+    @staticmethod
+    def list_quotas() -> list[dict[str, Any]]:
+        valid = StatusEnum.VALID.value
+        users = list(
+            User.select(User.id, User.email, User.nickname).where(User.status == valid)
+        )
+        user_ids = [user.id for user in users]
+
+        tenants = list(
+            Tenant.select(Tenant.id, Tenant.name).where(Tenant.status == valid)
+        )
+        teams = [
+            tenant
+            for tenant in tenants
+            if WorkspaceAccessService.get_workspace_type(tenant.id) == WorkspaceType.TEAM
+        ]
+        team_ids = [team.id for team in teams]
+
+        datasets = list(
+            Knowledgebase.select(
+                Knowledgebase.id,
+                Knowledgebase.name,
+                Knowledgebase.tenant_id,
+            ).where(Knowledgebase.status == valid)
+        )
+        dataset_ids = [dataset.id for dataset in datasets]
+        workspace_quotas = ResourceQuotaService.get_workspace_quotas(user_ids + team_ids)
+        dataset_quotas = ResourceQuotaService.get_dataset_quotas(dataset_ids)
+
+        user_names = {
+            user.id: user.nickname or user.email
+            for user in users
+        }
+        team_names = {team.id: team.name for team in teams}
+
+        rows = [
+            {
+                "scope_type": "personal",
+                "scope_id": user.id,
+                "name": user.nickname or user.email,
+                "workspace_id": user.id,
+                "workspace_name": user.nickname or user.email,
+                "email": user.email,
+                **workspace_quotas[user.id],
+            }
+            for user in users
+        ]
+        rows.extend(
+            {
+                "scope_type": "team",
+                "scope_id": team.id,
+                "name": team.name,
+                "workspace_id": team.id,
+                "workspace_name": team.name,
+                **workspace_quotas[team.id],
+            }
+            for team in teams
+        )
+        rows.extend(
+            {
+                "scope_type": "dataset",
+                "scope_id": dataset.id,
+                "name": dataset.name,
+                "workspace_id": dataset.tenant_id,
+                "workspace_name": user_names.get(dataset.tenant_id)
+                or team_names.get(dataset.tenant_id)
+                or dataset.tenant_id,
+                "workspace_type": (
+                    "personal" if dataset.tenant_id in user_names else "team"
+                ),
+                **dataset_quotas[dataset.id],
+            }
+            for dataset in datasets
+        )
+        return rows
+
+    @classmethod
+    def update_quota(cls, scope_type: str, scope_id: str, data: dict) -> dict:
+        if scope_type not in cls.SCOPE_TYPES:
+            raise AdminException("Unsupported quota scope", 400)
+        if scope_type == "personal":
+            exists = User.select(User.id).where(
+                User.id == scope_id,
+                User.status == StatusEnum.VALID.value,
+            ).exists()
+            if not exists:
+                raise AdminException("User not found", 404)
+            return ResourceQuotaService.set_workspace_quota(scope_id, data)
+        if scope_type == "team":
+            TeamMgr._ensure_team(scope_id)
+            return ResourceQuotaService.set_workspace_quota(scope_id, data)
+
+        exists = Knowledgebase.select(Knowledgebase.id).where(
+            Knowledgebase.id == scope_id,
+            Knowledgebase.status == StatusEnum.VALID.value,
+        ).exists()
+        if not exists:
+            raise AdminException("Resource not found", 404)
+        return ResourceQuotaService.set_dataset_quota(scope_id, data)
+
+
 class AdminModelMgr:
     PROVIDERS = {"MinerU", "OpenAI-API-Compatible", "Xinference"}
     MODEL_TYPES = {"chat", "embedding", "asr", "vision", "rerank", "tts", "ocr"}

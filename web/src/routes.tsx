@@ -82,6 +82,7 @@ export enum Routes {
   AdminAgentManagement = `${AdminResourceManagement}/agents`,
   AdminMemoryManagement = `${AdminResourceManagement}/memories`,
   AdminFileManagement = `${AdminResourceManagement}/files`,
+  AdminQuotaManagement = `${Admin}/quotas`,
   AdminModelManagement = `${Admin}/models`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
@@ -425,6 +426,10 @@ const routeConfigOptions = [
               {
                 path: `${Routes.AdminResourceManagement}/:resourceView`,
                 Component: () => import('@/pages/admin/resources'),
+              },
+              {
+                path: Routes.AdminQuotaManagement,
+                Component: () => import('@/pages/admin/quotas'),
               },
               {
                 path: Routes.AdminModelManagement,

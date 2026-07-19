@@ -3465,6 +3465,7 @@ Important structured information may include: names, dates, locations, events, k
       },
       departmentManagement: 'Departments',
       resourceManagement: 'Resource management',
+      quotaManagement: 'Quota management',
       modelManagement: 'Model management',
       userModelConfiguration: 'Model configuration',
       defaultModelConfiguration: 'Default model configuration',
@@ -3473,6 +3474,34 @@ Important structured information may include: names, dates, locations, events, k
       sandboxSettings: 'Sandbox settings',
       registrationWhitelist: 'Registration whitelist',
       roles: 'Roles',
+
+      quotaManagementPage: {
+        title: 'Quota management',
+        description:
+          'Manage file-count and storage limits for personal workspaces, team workspaces, and datasets in one place.',
+        total: 'Quota targets',
+        configured: 'Limits configured',
+        overLimit: 'Over limit',
+        workspaceStorage: 'Workspace storage',
+        scopeType: 'Target type',
+        workspace: 'Workspace',
+        fileUsage: 'Files used',
+        fileLimit: 'File limit',
+        storageUsage: 'Storage used',
+        storageLimit: 'Storage limit',
+        state: 'Quota status',
+        search: 'Search name, email, ID, or workspace',
+        scopeTypes: {
+          personal: 'Personal workspace',
+          team: 'Team workspace',
+          dataset: 'Dataset',
+        },
+        states: {
+          unlimited: 'Unlimited',
+          configured: 'Configured',
+          overLimit: 'Over limit',
+        },
+      },
 
       monitoringPage: {
         title: 'Overview',

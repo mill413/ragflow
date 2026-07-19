@@ -25,7 +25,21 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import AdminModelMgr, UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import (
+    AdminModelMgr,
+    ConfigMgr,
+    EnvironmentsMgr,
+    MonitoringMgr,
+    OrganizationMgr,
+    QuotaMgr,
+    ResourceMgr,
+    SandboxMgr,
+    ServiceMgr,
+    SettingsMgr,
+    TeamMgr,
+    UserMgr,
+    UserServiceMgr,
+)
 from roles import RoleMgr
 from api.common.exceptions import AdminException
 from common.exceptions import ResourceInUseException
@@ -598,6 +612,32 @@ def update_dataset_quota(resource_id):
     try:
         return success_response(
             ResourceMgr.update_dataset_quota(resource_id, request.get_json() or {})
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/quotas", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_quotas():
+    try:
+        return success_response(QuotaMgr.list_quotas())
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/quotas/<scope_type>/<scope_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_quota(scope_type, scope_id):
+    try:
+        return success_response(
+            QuotaMgr.update_quota(scope_type, scope_id, request.get_json() or {})
         )
     except AdminException as e:
         return error_response(e.message, e.code)

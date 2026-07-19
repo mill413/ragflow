@@ -209,6 +209,108 @@ class ResourceQuotaService:
         quota = cls._normalize_quota(cls._load()["datasets"].get(dataset_id))
         return cls._with_usage(quota, cls.get_dataset_usage(dataset_id))
 
+    @classmethod
+    def get_workspace_quotas(cls, workspace_ids: list[str]) -> dict[str, dict]:
+        workspace_ids = list(dict.fromkeys(workspace_ids))
+        if not workspace_ids:
+            return {}
+
+        valid = StatusEnum.VALID.value
+        linked_document_ids = File2Document.select(File2Document.document_id).where(
+            File2Document.document_id.is_null(False)
+        )
+        document_usage = {
+            row["workspace_id"]: QuotaUsage(
+                int(row["file_count"] or 0),
+                int(row["storage_bytes"] or 0),
+            )
+            for row in (
+                Document.select(
+                    Knowledgebase.tenant_id.alias("workspace_id"),
+                    fn.COUNT(Document.id).alias("file_count"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                )
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .where(
+                    Knowledgebase.tenant_id.in_(workspace_ids),
+                    Document.status == valid,
+                    Knowledgebase.status == valid,
+                    ~(Document.id.in_(linked_document_ids)),
+                )
+                .group_by(Knowledgebase.tenant_id)
+                .dicts()
+            )
+        }
+        file_usage = {
+            row["workspace_id"]: QuotaUsage(
+                int(row["file_count"] or 0),
+                int(row["storage_bytes"] or 0),
+            )
+            for row in (
+                File.select(
+                    File.tenant_id.alias("workspace_id"),
+                    fn.COUNT(File.id).alias("file_count"),
+                    fn.COALESCE(fn.SUM(File.size), 0).alias("storage_bytes"),
+                )
+                .where(
+                    File.tenant_id.in_(workspace_ids),
+                    File.type != FileType.FOLDER.value,
+                )
+                .group_by(File.tenant_id)
+                .dicts()
+            )
+        }
+        configured = cls._load()["workspaces"]
+        result = {}
+        for workspace_id in workspace_ids:
+            documents = document_usage.get(workspace_id, QuotaUsage(0, 0))
+            files = file_usage.get(workspace_id, QuotaUsage(0, 0))
+            usage = QuotaUsage(
+                documents.file_count + files.file_count,
+                documents.storage_bytes + files.storage_bytes,
+            )
+            result[workspace_id] = cls._with_usage(
+                cls._normalize_quota(configured.get(workspace_id)), usage
+            )
+        return result
+
+    @classmethod
+    def get_dataset_quotas(cls, dataset_ids: list[str]) -> dict[str, dict]:
+        dataset_ids = list(dict.fromkeys(dataset_ids))
+        if not dataset_ids:
+            return {}
+
+        valid = StatusEnum.VALID.value
+        usage_by_dataset = {
+            row["dataset_id"]: QuotaUsage(
+                int(row["file_count"] or 0),
+                int(row["storage_bytes"] or 0),
+            )
+            for row in (
+                Document.select(
+                    Document.kb_id.alias("dataset_id"),
+                    fn.COUNT(Document.id).alias("file_count"),
+                    fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
+                )
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .where(
+                    Document.kb_id.in_(dataset_ids),
+                    Document.status == valid,
+                    Knowledgebase.status == valid,
+                )
+                .group_by(Document.kb_id)
+                .dicts()
+            )
+        }
+        configured = cls._load()["datasets"]
+        return {
+            dataset_id: cls._with_usage(
+                cls._normalize_quota(configured.get(dataset_id)),
+                usage_by_dataset.get(dataset_id, QuotaUsage(0, 0)),
+            )
+            for dataset_id in dataset_ids
+        }
+
     @staticmethod
     def _ensure_scope(
         scope: str,

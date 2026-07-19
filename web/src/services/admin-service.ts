@@ -118,6 +118,8 @@ const {
   adminListManagedResources,
   adminManagedResource,
   adminListFailedDocuments,
+  adminQuotas,
+  adminQuota,
   adminManagedModels,
   adminManagedModel,
   adminModelWorkspaces,
@@ -373,6 +375,20 @@ export const updateDatasetQuota = (
 ) =>
   request.put<ResponseData<AdminService.ResourceQuota>>(
     `${adminManagedResource('dataset', resourceId)}/quota`,
+    quota,
+  );
+export const listResourceQuotas = () =>
+  request.get<ResponseData<AdminService.ResourceQuotaItem[]>>(adminQuotas);
+export const updateResourceQuota = (
+  scopeType: AdminService.ResourceQuotaScopeType,
+  scopeId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    adminQuota(scopeType, scopeId),
     quota,
   );
 export const getManagedResourceDetail = (

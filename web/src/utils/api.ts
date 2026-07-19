@@ -439,6 +439,9 @@ export default {
   adminManagedResource: (resourceType: string, resourceId: string) =>
     `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
+  adminQuotas: `${restAPIv1}/admin/quotas`,
+  adminQuota: (scopeType: string, scopeId: string) =>
+    `${restAPIv1}/admin/quotas/${scopeType}/${scopeId}`,
   adminManagedModels: `${restAPIv1}/admin/models`,
   adminManagedModel: (modelId: string) =>
     `${restAPIv1}/admin/models/${modelId}`,

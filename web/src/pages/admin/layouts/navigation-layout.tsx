@@ -19,6 +19,7 @@ import {
   LucideMessageSquare,
   LucidePanelLeftClose,
   LucidePanelLeftOpen,
+  LucideGauge,
   LucideServerCrash,
   LucideSquareUserRound,
   LucideUserCog,
@@ -127,6 +128,11 @@ const AdminNavigationLayout = () => {
             icon: <LucideFile className="size-[1em]" />,
           },
         ],
+      },
+      {
+        path: Routes.AdminQuotaManagement,
+        name: t('admin.quotaManagement'),
+        icon: <LucideGauge className="size-[1em]" />,
       },
       {
         path: Routes.AdminModelManagement,
