@@ -141,7 +141,10 @@ function UserModelTable({ data }: { data: AdminService.UserModelConfig[] }) {
         }}
       />
 
-      <Table rootClassName="max-w-full" className="min-w-[1280px]">
+      <Table
+        rootClassName="max-w-full [contain:inline-size]"
+        className="min-w-[1280px]"
+      >
         <TableHeader>
           <TableRow>
             <TableHead>

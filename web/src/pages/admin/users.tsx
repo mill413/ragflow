@@ -738,7 +738,10 @@ function AdminUserManagement() {
 
           <CardContent>
             <div className="w-full min-w-0 max-w-full overflow-x-auto">
-              <Table className="min-w-[1660px]">
+              <Table
+                rootClassName="max-w-full [contain:inline-size]"
+                className="min-w-[1660px]"
+              >
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow key={headerGroup.id}>

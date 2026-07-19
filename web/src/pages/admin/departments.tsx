@@ -291,7 +291,7 @@ export default function AdminDepartments() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table rootClassName="max-w-full [contain:inline-size]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[25%]">

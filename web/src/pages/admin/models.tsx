@@ -358,7 +358,10 @@ export default function AdminModels() {
 
           <CardContent>
             <div className="overflow-x-auto">
-              <Table className="min-w-[1180px]">
+              <Table
+                rootClassName="max-w-full [contain:inline-size]"
+                className="min-w-[1180px]"
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>

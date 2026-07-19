@@ -770,7 +770,10 @@ export default function AdminResources() {
 
           <CardContent className="space-y-4">
             <div className="overflow-x-auto">
-              <Table className="min-w-[1080px]">
+              <Table
+                rootClassName="max-w-full [contain:inline-size]"
+                className="min-w-[1080px]"
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>
@@ -960,7 +963,10 @@ export default function AdminResources() {
                   </p>
                 </div>
                 <div className="overflow-x-auto">
-                  <Table className="min-w-[980px]">
+                  <Table
+                    rootClassName="max-w-full [contain:inline-size]"
+                    className="min-w-[980px]"
+                  >
                     <TableHeader>
                       <TableRow>
                         <TableHead>
@@ -1121,7 +1127,7 @@ export default function AdminResources() {
           open={Boolean(selectedDetail)}
           onOpenChange={(open) => !open && setSelectedDetail(undefined)}
         >
-          <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+          <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
             <SheetHeader className="border-b border-border-button px-6 py-5">
               <SheetTitle>
                 {detailName || t('admin.unnamedResource')}
@@ -1131,7 +1137,7 @@ export default function AdminResources() {
                 {detailId || '-'}
               </SheetDescription>
             </SheetHeader>
-            <ScrollArea className="h-[calc(100vh-97px)] px-6">
+            <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
               <section className="py-5">
                 <div className="mb-3 text-sm font-medium">
                   {t('admin.resourceManagementPage.resourceInformation')}

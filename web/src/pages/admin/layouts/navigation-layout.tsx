@@ -308,7 +308,7 @@ const AdminNavigationLayout = () => {
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 h-full">
+      <section className="h-full min-w-0 flex-1 overflow-hidden">
         <Outlet />
       </section>
     </main>

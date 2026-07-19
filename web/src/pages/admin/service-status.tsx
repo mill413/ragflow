@@ -254,7 +254,7 @@ function AdminServiceStatus() {
           </CardHeader>
 
           <CardContent>
-            <Table>
+            <Table rootClassName="max-w-full [contain:inline-size]">
               <colgroup>
                 <col className="w-[6%]" />
                 <col />

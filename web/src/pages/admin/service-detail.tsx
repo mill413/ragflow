@@ -82,7 +82,7 @@ function ServiceDetail({ content }: ServiceDetailProps) {
             resetLabel={t('admin.reset')}
             onReset={() => setFilters({})}
           />
-          <Table rootClassName="min-w-max">
+          <Table rootClassName="max-w-full [contain:inline-size]">
             <TableHeader>
               <TableRow>
                 {headers.map((header) => (

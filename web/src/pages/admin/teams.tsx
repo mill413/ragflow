@@ -449,7 +449,7 @@ export default function AdminTeams() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table rootClassName="max-w-full [contain:inline-size]">
             <TableHeader>
               <TableRow>
                 <TableHead>
@@ -634,7 +634,7 @@ export default function AdminTeams() {
         open={Boolean(selectedTeam)}
         onOpenChange={(open) => !open && setSelectedTeam(undefined)}
       >
-        <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+        <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
             <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
             <SheetDescription className="font-mono text-xs">
@@ -642,7 +642,7 @@ export default function AdminTeams() {
               {selectedTeamDetails?.id || '-'}
             </SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100vh-97px)] px-6">
+          <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
             <section className="border-b border-border-button py-5">
               <div className="mb-3 text-sm font-medium">
                 {t('admin.teamManagement.teamInformation')}
@@ -748,7 +748,7 @@ export default function AdminTeams() {
                 setMemberStatuses([]);
               }}
             />
-            <Table>
+            <Table rootClassName="max-w-full [contain:inline-size]">
               <TableHeader>
                 <TableRow>
                   <TableHead>
@@ -829,11 +829,14 @@ export default function AdminTeams() {
                 )}
               </TableBody>
             </Table>
-            <section className="border-t border-border-button py-5">
+            <section className="min-w-0 border-t border-border-button py-5">
               <div className="mb-3 text-sm font-medium">
                 {t('admin.resourceManagement')}
               </div>
-              <Tabs defaultValue="dataset">
+              <Tabs
+                className="min-w-0 w-full [contain:inline-size]"
+                defaultValue="dataset"
+              >
                 <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
                   {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
                     <TabsTrigger

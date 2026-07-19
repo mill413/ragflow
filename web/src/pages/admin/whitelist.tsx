@@ -299,7 +299,7 @@ function AdminWhitelist() {
           </CardHeader>
 
           <CardContent>
-            <Table>
+            <Table rootClassName="max-w-full [contain:inline-size]">
               <colgroup>
                 <col />
                 <col className="w-[25%]" />

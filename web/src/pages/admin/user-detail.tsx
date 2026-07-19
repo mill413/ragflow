@@ -404,7 +404,7 @@ export function WorkspaceResourceTable({
   };
 
   return (
-    <section className="space-y-4">
+    <section className="min-w-0 w-full space-y-4 overflow-hidden [contain:inline-size]">
       <AdminTableMultiFilters
         filters={[
           {
@@ -433,7 +433,10 @@ export function WorkspaceResourceTable({
         resetLabel={t('admin.reset')}
         onReset={resetFilters}
       />
-      <Table className="min-w-[900px]">
+      <Table
+        rootClassName="max-w-full [contain:inline-size]"
+        className="min-w-[900px]"
+      >
         <TableHeader>
           <TableRow>
             {columns.map((column) => (
@@ -636,7 +639,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
           onOpenChange(open);
         }}
       >
-        <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+        <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
             <div className="flex items-center gap-3 pr-8">
               <RAGFlowAvatar
@@ -674,7 +677,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
             </div>
           </SheetHeader>
 
-          <ScrollArea className="h-[calc(100vh-97px)] px-6">
+          <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
             <section className="border-b border-border-button py-5">
               <div className="mb-3 text-sm font-medium">
                 {t('admin.userInformation')}
@@ -700,8 +703,11 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
               )}
             </section>
 
-            <section className="py-5">
-              <Tabs defaultValue="dataset">
+            <section className="min-w-0 py-5">
+              <Tabs
+                className="min-w-0 w-full [contain:inline-size]"
+                defaultValue="dataset"
+              >
                 <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
                   {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
                     <TabsTrigger
