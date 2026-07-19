@@ -3598,6 +3598,27 @@ Important structured information may include: names, dates, locations, events, k
             image_context_size: 'Image context size',
           },
         },
+        resourceDetail: {
+          configuration: 'Configuration',
+          relatedResources: 'Related resources',
+          language: 'Language',
+          chatModel: 'Chat model',
+          rerankModel: 'Rerank model',
+          promptType: 'Prompt mode',
+          topN: 'Top N',
+          canvasCategory: 'Canvas category',
+          tags: 'Tags',
+          forgettingPolicy: 'Forgetting policy',
+          configurationSections: {
+            model_settings: 'Model settings',
+            prompt: 'Prompt configuration',
+            metadata_filter: 'Metadata filter',
+            search: 'Search and retrieval configuration',
+            canvas: 'Agent canvas configuration',
+            extraction: 'Memory extraction configuration',
+            storage: 'File storage configuration',
+          },
+        },
       },
 
       modelManagementPage: {

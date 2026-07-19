@@ -342,6 +342,13 @@ export const getDatasetResourceDetail = (
     adminManagedResource('dataset', resourceId),
     { params: { page, page_size: pageSize } },
   );
+export const getManagedResourceDetail = (
+  resourceType: Exclude<AdminService.ManagedResourceType, 'dataset'>,
+  resourceId: string,
+) =>
+  request.get<ResponseData<AdminService.StandardManagedResourceDetailResponse>>(
+    adminManagedResource(resourceType, resourceId),
+  );
 export const listManagedModels = () =>
   request.get<ResponseData<AdminService.ManagedModel[]>>(adminManagedModels);
 export const listModelWorkspaces = () =>

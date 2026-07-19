@@ -243,6 +243,37 @@ declare namespace AdminService {
     document_total: number;
   };
 
+  export type StandardManagedResourceDetail = ManagedResourceItem & {
+    description?: string;
+    language?: string;
+    llm_id?: string;
+    rerank_id?: string;
+    prompt_type?: string;
+    similarity_threshold?: number;
+    vector_similarity_weight?: number;
+    top_n?: number;
+    top_k?: number;
+    do_refer?: string;
+    canvas_category?: string;
+    tags?: string;
+    embd_id?: string;
+    forgetting_policy?: string;
+    location?: string;
+  };
+
+  export type RelatedManagedResource = {
+    resource_type: ManagedResourceType;
+    id: string;
+    name: string;
+    detail?: string;
+  };
+
+  export type StandardManagedResourceDetailResponse = {
+    resource: StandardManagedResourceDetail;
+    configuration: Record<string, unknown>;
+    related_resources: RelatedManagedResource[];
+  };
+
   export type FailedDocumentItem = {
     id: string;
     name: string;

@@ -52,6 +52,7 @@ from api.db.db_models import (
     Dialog,
     Document,
     File,
+    File2Document,
     Knowledgebase,
     Memory,
     Search,
@@ -1130,7 +1131,7 @@ class ResourceMgr:
         page_size: int = 20,
     ) -> dict[str, Any]:
         if resource_type != "dataset":
-            raise AdminException(f"Unsupported resource detail type: {resource_type}", 400)
+            return cls._get_standard_resource_detail(resource_type, resource_id)
 
         valid = StatusEnum.VALID.value
         dataset = (
@@ -1222,6 +1223,242 @@ class ResourceMgr:
             "documents": documents,
             "document_total": document_total,
         }
+
+    @classmethod
+    def _get_standard_resource_detail(
+        cls, resource_type: str, resource_id: str
+    ) -> dict[str, Any]:
+        valid = StatusEnum.VALID.value
+        configuration: dict[str, Any] = {}
+        related_resources: list[dict[str, Any]] = []
+
+        if resource_type == "chat":
+            resource = (
+                Dialog.select(
+                    Dialog.id,
+                    Dialog.name,
+                    Dialog.tenant_id.alias("workspace_id"),
+                    Dialog.description,
+                    Dialog.language,
+                    Dialog.llm_id,
+                    Dialog.prompt_type,
+                    Dialog.similarity_threshold,
+                    Dialog.vector_similarity_weight,
+                    Dialog.top_n,
+                    Dialog.top_k,
+                    Dialog.do_refer,
+                    Dialog.rerank_id,
+                    Dialog.kb_ids,
+                    Dialog.llm_setting,
+                    Dialog.prompt_config,
+                    Dialog.meta_data_filter,
+                    Dialog.create_date,
+                    Dialog.update_date,
+                )
+                .where((Dialog.id == resource_id) & (Dialog.status == valid))
+                .dicts()
+                .first()
+            )
+            if resource:
+                resource["session_count"] = Conversation.select().where(
+                    Conversation.dialog_id == resource_id
+                ).count()
+                resource["dataset_count"] = len(set(resource.get("kb_ids") or []))
+                configuration = {
+                    "model_settings": resource.pop("llm_setting", {}) or {},
+                    "prompt": resource.pop("prompt_config", {}) or {},
+                    "metadata_filter": resource.pop("meta_data_filter", {}) or {},
+                }
+                related_resources = cls._dataset_references(resource.pop("kb_ids", []) or [])
+        elif resource_type == "search":
+            resource = (
+                Search.select(
+                    Search.id,
+                    Search.name,
+                    Search.tenant_id.alias("workspace_id"),
+                    Search.created_by.alias("creator_id"),
+                    Search.description,
+                    Search.search_config,
+                    Search.create_date,
+                    Search.update_date,
+                )
+                .where((Search.id == resource_id) & (Search.status == valid))
+                .dicts()
+                .first()
+            )
+            if resource:
+                search_config = resource.pop("search_config", {}) or {}
+                dataset_ids = search_config.get("kb_ids") or search_config.get("dataset_ids") or []
+                document_ids = search_config.get("doc_ids") or search_config.get("document_ids") or []
+                resource["dataset_count"] = len(set(dataset_ids))
+                resource["document_count"] = len(set(document_ids))
+                configuration = {"search": search_config}
+                related_resources = cls._dataset_references(dataset_ids)
+                related_resources.extend(cls._document_references(document_ids))
+        elif resource_type == "agent":
+            resource = (
+                UserCanvas.select(
+                    UserCanvas.id,
+                    UserCanvas.title.alias("name"),
+                    UserCanvas.user_id.alias("workspace_id"),
+                    UserCanvas.permission,
+                    UserCanvas.release,
+                    UserCanvas.description,
+                    UserCanvas.canvas_type,
+                    UserCanvas.canvas_category,
+                    UserCanvas.tags,
+                    UserCanvas.dsl,
+                    UserCanvas.create_date,
+                    UserCanvas.update_date,
+                )
+                .where(
+                    (UserCanvas.id == resource_id)
+                    & (UserCanvas.canvas_category == CanvasCategory.Agent.value)
+                )
+                .dicts()
+                .first()
+            )
+            if resource:
+                resource["session_count"] = API4Conversation.select().where(
+                    API4Conversation.dialog_id == resource_id
+                ).count()
+                configuration = {"canvas": resource.pop("dsl", {}) or {}}
+        elif resource_type == "memory":
+            resource = (
+                Memory.select(
+                    Memory.id,
+                    Memory.name,
+                    Memory.tenant_id.alias("workspace_id"),
+                    Memory.permissions.alias("permission"),
+                    Memory.description,
+                    Memory.memory_type,
+                    Memory.storage_type,
+                    Memory.memory_size,
+                    Memory.embd_id,
+                    Memory.llm_id,
+                    Memory.forgetting_policy,
+                    Memory.temperature,
+                    Memory.system_prompt,
+                    Memory.user_prompt,
+                    Memory.create_date,
+                    Memory.update_date,
+                )
+                .where(Memory.id == resource_id)
+                .dicts()
+                .first()
+            )
+            if resource:
+                configuration = {
+                    "extraction": {
+                        "temperature": resource.pop("temperature", None),
+                        "system_prompt": resource.pop("system_prompt", "") or "",
+                        "user_prompt": resource.pop("user_prompt", "") or "",
+                    }
+                }
+        elif resource_type == "file":
+            resource = (
+                File.select(
+                    File.id,
+                    File.name,
+                    File.tenant_id.alias("workspace_id"),
+                    File.created_by.alias("creator_id"),
+                    File.parent_id,
+                    File.location,
+                    File.size,
+                    File.type.alias("file_type"),
+                    File.source_type,
+                    File.create_date,
+                    File.update_date,
+                )
+                .where(File.id == resource_id)
+                .dicts()
+                .first()
+            )
+            if resource:
+                relations = list(
+                    File2Document.select(
+                        Document.id,
+                        Document.name,
+                        Document.kb_id,
+                        Knowledgebase.name.alias("dataset_name"),
+                    )
+                    .join(Document, on=(File2Document.document_id == Document.id))
+                    .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                    .where(File2Document.file_id == resource_id)
+                    .dicts()
+                )
+                related_resources = [
+                    {
+                        "resource_type": "file",
+                        "id": row["id"],
+                        "name": row["name"],
+                        "detail": row["dataset_name"],
+                    }
+                    for row in relations
+                ]
+                configuration = {
+                    "storage": {
+                        "location": resource.pop("location", "") or "",
+                        "parent_id": resource.get("parent_id") or "",
+                    }
+                }
+        else:
+            raise AdminException(f"Unsupported resource detail type: {resource_type}", 400)
+
+        if not resource:
+            raise AdminException("Resource not found", 404)
+
+        cls._attach_ownership([resource])
+        if not resource.get("permission"):
+            resource["permission"] = (
+                TenantPermission.ME.value
+                if resource["workspace_type"] == "personal"
+                else TenantPermission.TEAM.value
+            )
+        resource["resource_type"] = resource_type
+        resource["deletable"] = not (
+            resource_type == "file"
+            and (
+                resource.get("parent_id") == resource["id"]
+                or resource.get("name") in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                or resource.get("source_type") in {"knowledgebase", "skill_space"}
+            )
+        )
+        return {
+            "resource": resource,
+            "configuration": configuration,
+            "related_resources": related_resources,
+        }
+
+    @staticmethod
+    def _dataset_references(dataset_ids: list[str]) -> list[dict[str, Any]]:
+        if not dataset_ids:
+            return []
+        return [
+            {
+                "resource_type": "dataset",
+                "id": row["id"],
+                "name": row["name"],
+            }
+            for row in Knowledgebase.select(Knowledgebase.id, Knowledgebase.name)
+            .where(Knowledgebase.id.in_(set(dataset_ids)))
+            .dicts()
+        ]
+
+    @staticmethod
+    def _document_references(document_ids: list[str]) -> list[dict[str, Any]]:
+        if not document_ids:
+            return []
+        return [
+            {
+                "resource_type": "file",
+                "id": row["id"],
+                "name": row["name"],
+            }
+            for row in Document.select(Document.id, Document.name)
+            .where(Document.id.in_(set(document_ids)))
+            .dicts()
+        ]
 
     @classmethod
     async def delete_resource(

@@ -87,6 +87,7 @@ import {
 import {
   deleteManagedResource,
   getDatasetResourceDetail,
+  getManagedResourceDetail,
   getMonitoringSummary,
   listFailedDocuments,
   listManagedResources,
@@ -97,6 +98,7 @@ import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
+import { StandardResourceDetail } from './components/resource-detail';
 import { StorageSize } from './components/storage-size';
 import {
   AdminFileTreeName,
@@ -226,6 +228,11 @@ export default function AdminResources() {
     selectedDetail.resource.resource_type === 'dataset'
       ? selectedDetail.resource.id
       : undefined;
+  const selectedStandardResource =
+    selectedDetail?.kind === 'resource' &&
+    selectedDetail.resource.resource_type !== 'dataset'
+      ? selectedDetail.resource
+      : undefined;
 
   useEffect(() => {
     setPage(1);
@@ -300,6 +307,25 @@ export default function AdminResources() {
       ).data.data,
     enabled: Boolean(selectedDatasetId),
   });
+  const { data: standardResourceDetail, isFetching: standardDetailFetching } =
+    useQuery({
+      queryKey: [
+        'admin/resources/detail',
+        selectedStandardResource?.resource_type,
+        selectedStandardResource?.id,
+      ],
+      queryFn: async () =>
+        (
+          await getManagedResourceDetail(
+            selectedStandardResource!.resource_type as Exclude<
+              AdminService.ManagedResourceType,
+              'dataset'
+            >,
+            selectedStandardResource!.id,
+          )
+        ).data.data,
+      enabled: Boolean(selectedStandardResource),
+    });
 
   useEffect(() => {
     setDatasetDocumentPage(1);
@@ -1182,6 +1208,7 @@ export default function AdminResources() {
             <SheetHeader className="border-b border-border-button px-6 py-5">
               <SheetTitle>
                 {datasetDetail?.dataset.name ||
+                  standardResourceDetail?.resource.name ||
                   detailName ||
                   t('admin.unnamedResource')}
               </SheetTitle>
@@ -1558,6 +1585,11 @@ export default function AdminResources() {
                     />
                   </TabsContent>
                 </Tabs>
+              ) : selectedStandardResource ? (
+                <StandardResourceDetail
+                  detail={standardResourceDetail}
+                  loading={standardDetailFetching}
+                />
               ) : (
                 <section className="py-5">
                   <div className="mb-3 text-sm font-medium">
