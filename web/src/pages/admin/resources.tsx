@@ -61,6 +61,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
@@ -104,7 +111,7 @@ import {
   isSupportedPreviewDocumentType,
 } from '@/utils/document-util';
 import { downloadFileFromBlob } from '@/utils/file-util';
-import { getSortIcon, openMainAppAsAdmin } from './utils';
+import { getMainAppUrlAsAdmin, getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StandardResourceDetail } from './components/resource-detail';
@@ -254,6 +261,8 @@ export default function AdminResources() {
     direction: 'desc',
   });
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
+  const [previewingFile, setPreviewingFile] =
+    useState<AdminService.ManagedResourceItem>();
   const [selectedDetail, setSelectedDetail] =
     useState<SelectedResourceDetail>();
   const [datasetDocumentPage, setDatasetDocumentPage] = useState(1);
@@ -422,7 +431,7 @@ export default function AdminResources() {
               aria-label={t('admin.resourceManagementPage.previewFile', {
                 name: resource.name,
               })}
-              onClick={() => openMainAppAsAdmin(getFilePreviewPath(resource))}
+              onClick={() => setPreviewingFile(resource)}
             >
               <Eye className="size-4" />
             </Button>
@@ -1752,6 +1761,52 @@ export default function AdminResources() {
             </ScrollArea>
           </SheetContent>
         </Sheet>
+
+        <Dialog
+          open={Boolean(previewingFile)}
+          onOpenChange={(open) => !open && setPreviewingFile(undefined)}
+        >
+          <DialogContent className="grid h-[min(880px,92vh)] w-[min(1280px,94vw)] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
+            <DialogHeader className="m-0 px-5 py-4 pr-14">
+              <div className="flex min-w-0 items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <DialogTitle className="truncate">
+                    {previewingFile?.name || '-'}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 truncate font-mono text-xs">
+                    {previewingFile?.id || '-'}
+                  </DialogDescription>
+                </div>
+                {previewingFile && (
+                  <Button
+                    className="shrink-0"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      downloadMutation.isPending &&
+                      downloadMutation.variables?.id === previewingFile.id
+                    }
+                    onClick={() => downloadMutation.mutate(previewingFile)}
+                  >
+                    <ArrowDownToLine className="size-4" />
+                    {t('admin.resourceManagementPage.downloadFile', {
+                      name: previewingFile.name,
+                    })}
+                  </Button>
+                )}
+              </div>
+            </DialogHeader>
+            {previewingFile && (
+              <iframe
+                className="size-full min-h-0 border-0 bg-white"
+                src={getMainAppUrlAsAdmin(getFilePreviewPath(previewingFile))}
+                title={t('admin.resourceManagementPage.previewFile', {
+                  name: previewingFile.name,
+                })}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </Card>
     </TooltipProvider>
   );

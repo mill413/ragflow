@@ -86,10 +86,14 @@ export function getSortIcon(sorting: false | SortDirection) {
   );
 }
 
-export function openMainAppAsAdmin(path: string) {
+export function getMainAppUrlAsAdmin(path: string) {
   const url = new URL(path, window.location.origin);
   url.searchParams.set('admin_view', '1');
-  window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  return url.toString();
+}
+
+export function openMainAppAsAdmin(path: string) {
+  window.open(getMainAppUrlAsAdmin(path), '_blank', 'noopener,noreferrer');
 }
 
 export const PERMISSION_TYPES = ['enable', 'read', 'write', 'share'] as const;
