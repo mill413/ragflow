@@ -362,6 +362,19 @@ def list_team_members(team_id):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/teams/<team_id>/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_team_resources(team_id):
+    try:
+        return success_response(TeamMgr.get_resources(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to list team resources")
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/teams/<team_id>/members", methods=["POST"])
 @login_required
 @check_admin_auth

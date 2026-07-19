@@ -212,7 +212,7 @@ export const listUserAgents = (email: string) =>
     adminListUserAgents(email),
   );
 export const listUserResources = (email: string) =>
-  request.get<ResponseData<AdminService.UserResourceMap>>(
+  request.get<ResponseData<AdminService.WorkspaceResourceMap>>(
     adminListUserResources(email),
   );
 export const updateUserDepartment = (email: string, departmentId?: string) =>
@@ -264,6 +264,10 @@ export const deleteAdminTeam = (teamId: string) =>
 export const listAdminTeamMembers = (teamId: string) =>
   request.get<ResponseData<AdminService.TeamMember[]>>(
     api.adminTeamMembers(teamId),
+  );
+export const listAdminTeamResources = (teamId: string) =>
+  request.get<ResponseData<AdminService.WorkspaceResourceMap>>(
+    api.adminTeamResources(teamId),
   );
 export const addAdminTeamMember = (
   teamId: string,

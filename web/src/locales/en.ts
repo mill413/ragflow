@@ -3453,6 +3453,7 @@ Important structured information may include: names, dates, locations, events, k
       userModelConfiguration: 'Model configuration',
       defaultModelConfiguration: 'Default model configuration',
       personalModels: 'Personal models',
+      teamModels: 'Team models',
       sandboxSettings: 'Sandbox settings',
       registrationWhitelist: 'Registration whitelist',
       roles: 'Roles',

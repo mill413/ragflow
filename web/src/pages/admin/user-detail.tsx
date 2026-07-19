@@ -93,7 +93,7 @@ import {
 } from './components/file-tree';
 import { UserModelConfiguration } from './components/user-model-configuration';
 
-const USER_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
+export const WORKSPACE_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
   'chat',
   'search',
@@ -124,7 +124,7 @@ function workspaceLabel(
   )}-${resource.workspace_name}`;
 }
 
-function UserResourceTable({
+export function WorkspaceResourceTable({
   data,
   resourceType,
 }: {
@@ -703,7 +703,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
             <section className="py-5">
               <Tabs defaultValue="dataset">
                 <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
-                  {USER_RESOURCE_TYPES.map((resourceType) => (
+                  {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
                     <TabsTrigger
                       key={resourceType}
                       className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
@@ -728,9 +728,9 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                   </TabsTrigger>
                 </TabsList>
 
-                {USER_RESOURCE_TYPES.map((resourceType) => (
+                {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
                   <TabsContent key={resourceType} value={resourceType}>
-                    <UserResourceTable
+                    <WorkspaceResourceTable
                       data={resources?.[resourceType] ?? []}
                       resourceType={resourceType}
                     />

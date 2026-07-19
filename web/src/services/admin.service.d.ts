@@ -189,7 +189,7 @@ declare namespace AdminService {
     models: UserModelConfig[];
   };
 
-  export type UserResourceMap = Record<
+  export type WorkspaceResourceMap = Record<
     ManagedResourceType,
     ManagedResourceItem[]
   > & {

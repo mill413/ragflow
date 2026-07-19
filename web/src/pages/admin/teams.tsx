@@ -65,12 +65,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   addAdminTeamMember,
   createAdminTeam,
   deleteAdminTeam,
   deleteAdminTeamMember,
   listAdminTeamMembers,
+  listAdminTeamResources,
   listAdminTeams,
   listUsers,
   updateAdminTeam,
@@ -86,6 +88,11 @@ import {
 } from './components/table-filter-utils';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StorageSize } from './components/storage-size';
+import { UserModelConfiguration } from './components/user-model-configuration';
+import {
+  WORKSPACE_RESOURCE_TYPES,
+  WorkspaceResourceTable,
+} from './user-detail';
 
 type TeamSortKey =
   | 'name'
@@ -152,6 +159,13 @@ export default function AdminTeams() {
     queryKey: ['admin/teams/members', selectedTeam?.id],
     queryFn: async () =>
       (await listAdminTeamMembers(selectedTeam!.id)).data.data,
+    enabled: Boolean(selectedTeam),
+    retry: false,
+  });
+  const { data: resources } = useQuery({
+    queryKey: ['admin/teams/resources', selectedTeam?.id],
+    queryFn: async () =>
+      (await listAdminTeamResources(selectedTeam!.id)).data.data,
     enabled: Boolean(selectedTeam),
     retry: false,
   });
@@ -815,6 +829,53 @@ export default function AdminTeams() {
                 )}
               </TableBody>
             </Table>
+            <section className="border-t border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceManagement')}
+              </div>
+              <Tabs defaultValue="dataset">
+                <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+                  {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                    <TabsTrigger
+                      key={resourceType}
+                      className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
+                      value={resourceType}
+                    >
+                      {t(`admin.resourceType.${resourceType}`)}
+                      <Badge className="ml-1" variant="secondary">
+                        {resources?.[resourceType]?.length ?? 0}
+                      </Badge>
+                    </TabsTrigger>
+                  ))}
+                  <TabsTrigger
+                    className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
+                    value="model"
+                  >
+                    {t('admin.userModelConfiguration')}
+                    <Badge className="ml-1" variant="secondary">
+                      {(resources?.model?.defaults.filter(
+                        (model) => model.model_name,
+                      ).length ?? 0) + (resources?.model?.models.length ?? 0)}
+                    </Badge>
+                  </TabsTrigger>
+                </TabsList>
+
+                {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                  <TabsContent key={resourceType} value={resourceType}>
+                    <WorkspaceResourceTable
+                      data={resources?.[resourceType] ?? []}
+                      resourceType={resourceType}
+                    />
+                  </TabsContent>
+                ))}
+                <TabsContent value="model">
+                  <UserModelConfiguration
+                    configuration={resources?.model}
+                    modelsLabel={t('admin.teamModels')}
+                  />
+                </TabsContent>
+              </Tabs>
+            </section>
           </ScrollArea>
         </SheetContent>
       </Sheet>

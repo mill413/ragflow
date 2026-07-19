@@ -236,8 +236,10 @@ function UserModelTable({ data }: { data: AdminService.UserModelConfig[] }) {
 
 export function UserModelConfiguration({
   configuration,
+  modelsLabel,
 }: {
   configuration?: AdminService.UserModelConfiguration;
+  modelsLabel?: string;
 }) {
   const { t } = useTranslation();
   const defaults = configuration?.defaults ?? [];
@@ -272,7 +274,9 @@ export function UserModelConfiguration({
       </section>
 
       <section className="space-y-3">
-        <div className="text-sm font-medium">{t('admin.personalModels')}</div>
+        <div className="text-sm font-medium">
+          {modelsLabel || t('admin.personalModels')}
+        </div>
         <UserModelTable data={models} />
       </section>
     </div>
