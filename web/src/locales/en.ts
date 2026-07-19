@@ -3488,7 +3488,7 @@ Important structured information may include: names, dates, locations, events, k
         teams: 'Teams joined',
         datasets: 'Datasets created',
         documents: 'Files uploaded',
-        storage: 'File storage',
+        storage: 'Personal file storage',
         totalUsers: '{{count}} users',
         activeUsers: '{{count}} active',
         totalStorage: '{{size}} uploaded by users',

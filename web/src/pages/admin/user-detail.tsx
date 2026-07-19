@@ -1,4 +1,10 @@
-import { type ReactNode, useContext, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -80,6 +86,11 @@ import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StorageSize } from './components/storage-size';
+import {
+  AdminFileTreeName,
+  type AdminFileTreeRow,
+  buildAdminFileTreeRows,
+} from './components/file-tree';
 
 const USER_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
@@ -128,6 +139,20 @@ function UserResourceTable({
     key: 'update_date',
     direction: 'desc',
   });
+  const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    if (resourceType !== 'file') return;
+    const rootIds = data
+      .filter((resource) => resource.parent_id === resource.id)
+      .map((resource) => resource.id);
+    setExpandedFileIds((current) => {
+      if (rootIds.every((id) => current.has(id))) return current;
+      return new Set([...current, ...rootIds]);
+    });
+  }, [data, resourceType]);
 
   const columns = useMemo<ResourceColumn[]>(() => {
     const commonColumns: ResourceColumn[] = [
@@ -312,11 +337,49 @@ function UserResourceTable({
       }),
     [filteredData, sort],
   );
+  const filtersActive = nameFilters.length > 0 || workspaceFilters.length > 0;
+  const fileRows = useMemo(
+    () =>
+      resourceType === 'file'
+        ? buildAdminFileTreeRows(data, {
+            sort,
+            expandedIds: expandedFileIds,
+            matches: (resource) =>
+              matchesSelectedFilter(resource.name, nameFilters) &&
+              matchesSelectedFilter(
+                workspaceLabel(resource, t),
+                workspaceFilters,
+              ),
+            expandMatches: filtersActive,
+          })
+        : [],
+    [
+      data,
+      expandedFileIds,
+      filtersActive,
+      nameFilters,
+      resourceType,
+      sort,
+      t,
+      workspaceFilters,
+    ],
+  );
   const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const rows = sortedData.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
+  const rows = useMemo<AdminFileTreeRow[]>(
+    () =>
+      resourceType === 'file'
+        ? fileRows
+        : sortedData
+            .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+            .map((resource) => ({
+              resource,
+              depth: 0,
+              hasChildren: false,
+              expanded: false,
+              workspaceRoot: false,
+            })),
+    [currentPage, fileRows, pageSize, resourceType, sortedData],
   );
   const toggleSort = (key: keyof AdminService.ManagedResourceItem) => {
     setSort((current) => ({
@@ -329,6 +392,14 @@ function UserResourceTable({
     setNameFilters([]);
     setWorkspaceFilters([]);
     setPage(1);
+  };
+  const toggleFileExpanded = (resourceId: string) => {
+    setExpandedFileIds((current) => {
+      const next = new Set(current);
+      if (next.has(resourceId)) next.delete(resourceId);
+      else next.add(resourceId);
+      return next;
+    });
   };
 
   return (
@@ -381,14 +452,21 @@ function UserResourceTable({
         </TableHeader>
         <TableBody>
           {rows.length ? (
-            rows.map((resource) => (
-              <TableRow key={resource.id}>
+            rows.map((row) => (
+              <TableRow key={row.resource.id}>
                 {columns.map((column) => (
                   <TableCell
                     key={column.key}
                     className={column.numeric ? 'text-center' : undefined}
                   >
-                    {column.render(resource)}
+                    {resourceType === 'file' && column.key === 'name' ? (
+                      <AdminFileTreeName
+                        row={row}
+                        onToggle={toggleFileExpanded}
+                      />
+                    ) : (
+                      column.render(row.resource)
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
@@ -398,15 +476,17 @@ function UserResourceTable({
           )}
         </TableBody>
       </Table>
-      <RAGFlowPagination
-        total={filteredData.length}
-        current={currentPage}
-        pageSize={pageSize}
-        onChange={(nextPage, nextPageSize) => {
-          setPage(nextPage);
-          setPageSize(nextPageSize);
-        }}
-      />
+      {resourceType !== 'file' && (
+        <RAGFlowPagination
+          total={filteredData.length}
+          current={currentPage}
+          pageSize={pageSize}
+          onChange={(nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -1,6 +1,5 @@
 import {
   type Dispatch,
-  type MouseEvent,
   type ReactNode,
   type SetStateAction,
   useDeferredValue,
@@ -17,16 +16,12 @@ import {
   Bot,
   Brain,
   CalendarPlus,
-  ChevronDown,
-  ChevronRight,
   Clock3,
   Database,
   File,
   FileSearch,
   FileText,
   FileType,
-  Folder,
-  FolderOpen,
   FolderTree,
   HardDrive,
   Hash,
@@ -97,6 +92,11 @@ import { getSortIcon } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StorageSize } from './components/storage-size';
+import {
+  AdminFileTreeName,
+  type AdminFileTreeRow,
+  buildAdminFileTreeRows,
+} from './components/file-tree';
 
 type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
@@ -110,13 +110,6 @@ type ResourceDetailItem = {
   label: string;
   value: ReactNode;
   icon: LucideIcon;
-};
-type ResourceTableRow = {
-  resource: AdminService.ManagedResourceItem;
-  depth: number;
-  hasChildren: boolean;
-  expanded: boolean;
-  workspaceRoot: boolean;
 };
 type SelectedResourceDetail =
   | {
@@ -179,107 +172,6 @@ function sortRows<T>(rows: T[], sort: SortState): T[] {
     );
     return sort.direction === 'asc' ? result : -result;
   });
-}
-
-function compareResources(
-  left: AdminService.ManagedResourceItem,
-  right: AdminService.ManagedResourceItem,
-  sort: SortState,
-) {
-  const leftValue = left[sort.key as keyof AdminService.ManagedResourceItem];
-  const rightValue = right[sort.key as keyof AdminService.ManagedResourceItem];
-  const result = String(leftValue ?? '').localeCompare(
-    String(rightValue ?? ''),
-    undefined,
-    { numeric: true },
-  );
-  return sort.direction === 'asc' ? result : -result;
-}
-
-function buildFileTreeRows(
-  resources: AdminService.ManagedResourceItem[],
-  sort: SortState,
-  expandedIds: Set<string>,
-  keywords: string,
-): ResourceTableRow[] {
-  const byId = new Map(resources.map((resource) => [resource.id, resource]));
-  const childrenByParent = new Map<
-    string,
-    AdminService.ManagedResourceItem[]
-  >();
-  const roots: AdminService.ManagedResourceItem[] = [];
-
-  resources.forEach((resource) => {
-    const parent = resource.parent_id
-      ? byId.get(resource.parent_id)
-      : undefined;
-    if (
-      !parent ||
-      parent.id === resource.id ||
-      parent.workspace_id !== resource.workspace_id
-    ) {
-      roots.push(resource);
-      return;
-    }
-    const siblings = childrenByParent.get(parent.id) ?? [];
-    siblings.push(resource);
-    childrenByParent.set(parent.id, siblings);
-  });
-
-  const normalizedKeywords = keywords.trim().toLocaleLowerCase();
-  const matches = (resource: AdminService.ManagedResourceItem) =>
-    !normalizedKeywords ||
-    resource.name.toLocaleLowerCase().includes(normalizedKeywords) ||
-    resource.id.toLocaleLowerCase().includes(normalizedKeywords);
-  const visibleIds = new Set<string>();
-
-  const markVisible = (
-    resource: AdminService.ManagedResourceItem,
-    visiting: Set<string>,
-  ): boolean => {
-    if (visiting.has(resource.id)) return false;
-    const nextVisiting = new Set(visiting).add(resource.id);
-    let hasVisibleChild = false;
-    (childrenByParent.get(resource.id) ?? []).forEach((child) => {
-      if (markVisible(child, nextVisiting)) hasVisibleChild = true;
-    });
-    const visible = matches(resource) || hasVisibleChild;
-    if (visible) visibleIds.add(resource.id);
-    return visible;
-  };
-
-  roots.forEach((root) => markVisible(root, new Set()));
-
-  const rows: ResourceTableRow[] = [];
-  const append = (
-    resource: AdminService.ManagedResourceItem,
-    depth: number,
-    visited: Set<string>,
-  ) => {
-    if (visited.has(resource.id) || !visibleIds.has(resource.id)) return;
-    const nextVisited = new Set(visited).add(resource.id);
-    const children = (childrenByParent.get(resource.id) ?? [])
-      .filter((child) => visibleIds.has(child.id))
-      .sort((left, right) => compareResources(left, right, sort));
-    const expanded =
-      Boolean(normalizedKeywords) || expandedIds.has(resource.id);
-    rows.push({
-      resource,
-      depth,
-      hasChildren: children.length > 0,
-      expanded,
-      workspaceRoot: resource.parent_id === resource.id,
-    });
-    if (expanded) {
-      children.forEach((child) => append(child, depth + 1, nextVisited));
-    }
-  };
-
-  roots
-    .filter((root) => visibleIds.has(root.id))
-    .sort((left, right) => compareResources(left, right, sort))
-    .forEach((root) => append(root, 0, new Set()));
-  return rows;
 }
 
 export default function AdminResources() {
@@ -393,15 +285,22 @@ export default function AdminResources() {
     () => sortRows(resourceData?.resources ?? [], resourceSort),
     [resourceData?.resources, resourceSort],
   );
-  const resourceRows = useMemo<ResourceTableRow[]>(
+  const resourceRows = useMemo<AdminFileTreeRow[]>(
     () =>
       resourceType === 'file'
-        ? buildFileTreeRows(
-            resourceData?.resources ?? [],
-            resourceSort,
-            expandedFileIds,
-            deferredKeywords,
-          )
+        ? buildAdminFileTreeRows(resourceData?.resources ?? [], {
+            sort: resourceSort,
+            expandedIds: expandedFileIds,
+            matches: (resource) => {
+              const keywords = deferredKeywords.trim().toLocaleLowerCase();
+              return (
+                !keywords ||
+                resource.name.toLocaleLowerCase().includes(keywords) ||
+                resource.id.toLocaleLowerCase().includes(keywords)
+              );
+            },
+            expandMatches: Boolean(deferredKeywords.trim()),
+          })
         : sortedResources.map((resource) => ({
             resource,
             depth: 0,
@@ -942,79 +841,27 @@ export default function AdminResources() {
                           }
                         >
                           <TableCell>
-                            <div
-                              className="flex min-w-56 items-center gap-2"
-                              style={{
-                                paddingLeft:
-                                  resourceType === 'file' ? depth * 20 : 0,
-                              }}
-                            >
-                              {resourceType === 'file' && (
-                                <>
-                                  {hasChildren ? (
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      className="size-6 shrink-0"
-                                      aria-label={t(
-                                        expanded
-                                          ? 'admin.resourceManagementPage.collapseFolder'
-                                          : 'admin.resourceManagementPage.expandFolder',
-                                        {
-                                          name: workspaceRoot
-                                            ? `${t(
-                                                resource.workspace_type ===
-                                                  'team'
-                                                  ? 'admin.teamWorkspace'
-                                                  : 'admin.personalWorkspace',
-                                              )}-${resource.workspace_name}`
-                                            : resource.name,
-                                        },
-                                      )}
-                                      onClick={(
-                                        event: MouseEvent<HTMLButtonElement>,
-                                      ) => {
-                                        event.stopPropagation();
-                                        toggleFileExpanded(resource.id);
-                                      }}
-                                    >
-                                      {expanded ? (
-                                        <ChevronDown className="size-4" />
-                                      ) : (
-                                        <ChevronRight className="size-4" />
-                                      )}
-                                    </Button>
-                                  ) : (
-                                    <span className="size-6 shrink-0" />
-                                  )}
-                                  {resource.file_type === 'folder' ? (
-                                    expanded ? (
-                                      <FolderOpen className="size-4 shrink-0 text-text-secondary" />
-                                    ) : (
-                                      <Folder className="size-4 shrink-0 text-text-secondary" />
-                                    )
-                                  ) : (
-                                    <FileText className="size-4 shrink-0 text-text-secondary" />
-                                  )}
-                                </>
-                              )}
+                            {resourceType === 'file' ? (
+                              <AdminFileTreeName
+                                row={{
+                                  resource,
+                                  depth,
+                                  hasChildren,
+                                  expanded,
+                                  workspaceRoot,
+                                }}
+                                onToggle={toggleFileExpanded}
+                              />
+                            ) : (
                               <div className="min-w-0">
                                 <div className="truncate font-medium">
-                                  {workspaceRoot
-                                    ? `${t(
-                                        resource.workspace_type === 'team'
-                                          ? 'admin.teamWorkspace'
-                                          : 'admin.personalWorkspace',
-                                      )}-${resource.workspace_name}`
-                                    : resource.name ||
-                                      t('admin.unnamedResource')}
+                                  {resource.name || t('admin.unnamedResource')}
                                 </div>
                                 <div className="max-w-48 truncate text-xs text-text-secondary">
                                   {resource.id}
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge variant="secondary">

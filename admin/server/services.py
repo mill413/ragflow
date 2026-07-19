@@ -334,7 +334,16 @@ class UserMgr:
                 Document.select(
                     Document.created_by.alias("user_id"),
                     fn.COUNT(Document.id).alias("uploaded_documents"),
-                    fn.COALESCE(fn.SUM(Document.size), 0).alias("uploaded_storage_bytes"),
+                    fn.COALESCE(
+                        fn.SUM(
+                            Case(
+                                None,
+                                [(Knowledgebase.tenant_id == Document.created_by, Document.size)],
+                                0,
+                            )
+                        ),
+                        0,
+                    ).alias("uploaded_storage_bytes"),
                 )
                 .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
                 .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
