@@ -3567,6 +3567,10 @@ Important structured information may include: names, dates, locations, events, k
         openInRagflow: 'Open {{name}} in RAGFlow',
         previewFile: 'Preview {{name}}',
         downloadFile: 'Download {{name}}',
+        rawFileLoadFailed: 'Unable to read the original file content',
+        binaryFile: 'Binary file',
+        binaryFileDescription:
+          'This file has no directly displayable text content. Download the original file to view it.',
         managedBySource:
           'This folder or file is managed by the system or its source resource and cannot be deleted here',
         datasetDetail: {

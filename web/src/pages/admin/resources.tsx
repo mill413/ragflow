@@ -106,12 +106,9 @@ import {
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
-import {
-  getExtension,
-  isSupportedPreviewDocumentType,
-} from '@/utils/document-util';
+import { getExtension, isImage, isPdf } from '@/utils/document-util';
 import { downloadFileFromBlob } from '@/utils/file-util';
-import { getMainAppUrlAsAdmin, getSortIcon, openMainAppAsAdmin } from './utils';
+import { getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StandardResourceDetail } from './components/resource-detail';
@@ -228,13 +225,49 @@ function getMainResourcePath(resource: AdminService.ManagedResourceItem) {
   }
 }
 
-function getFilePreviewPath(resource: AdminService.ManagedResourceItem) {
-  const search = new URLSearchParams({
-    ext: getExtension(resource.name),
-    resource: 'files',
-    workspace_id: resource.workspace_id,
-  });
-  return `/document/${resource.id}?${search.toString()}`;
+const TEXT_FILE_EXTENSIONS = new Set([
+  'css',
+  'csv',
+  'htm',
+  'html',
+  'ini',
+  'js',
+  'json',
+  'jsx',
+  'log',
+  'md',
+  'mdx',
+  'py',
+  'sql',
+  'toml',
+  'ts',
+  'tsx',
+  'txt',
+  'xml',
+  'yaml',
+  'yml',
+]);
+
+function isTextFile(resource: AdminService.ManagedResourceItem, blob: Blob) {
+  return (
+    blob.type.startsWith('text/') ||
+    ['application/json', 'application/xml'].includes(blob.type) ||
+    TEXT_FILE_EXTENSIONS.has(getExtension(resource.name))
+  );
+}
+
+function getRawFileDisplayType(
+  resource: AdminService.ManagedResourceItem,
+  blob: Blob,
+) {
+  if (isTextFile(resource, blob)) return 'text' as const;
+  if (blob.type.startsWith('image/') || isImage(getExtension(resource.name))) {
+    return 'image' as const;
+  }
+  if (blob.type === 'application/pdf' || isPdf(resource.name)) {
+    return 'pdf' as const;
+  }
+  return 'binary' as const;
 }
 
 export default function AdminResources() {
@@ -263,6 +296,7 @@ export default function AdminResources() {
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
   const [previewingFile, setPreviewingFile] =
     useState<AdminService.ManagedResourceItem>();
+  const [rawFileObjectUrl, setRawFileObjectUrl] = useState<string>();
   const [selectedDetail, setSelectedDetail] =
     useState<SelectedResourceDetail>();
   const [datasetDocumentPage, setDatasetDocumentPage] = useState(1);
@@ -321,6 +355,49 @@ export default function AdminResources() {
     queryKey: ['admin/model-workspaces'],
     queryFn: async () => (await listModelWorkspaces()).data.data,
   });
+  const {
+    data: rawFilePreview,
+    isFetching: rawFilePreviewFetching,
+    isError: rawFilePreviewError,
+  } = useQuery({
+    queryKey: [
+      'admin/file-raw-content',
+      previewingFile?.id,
+      previewingFile?.workspace_id,
+    ],
+    queryFn: async () => {
+      const resource = previewingFile!;
+      const response = await downloadManagedFile(
+        resource.id,
+        resource.workspace_id,
+      );
+      const blob = response.data;
+      const displayType = getRawFileDisplayType(resource, blob);
+
+      return {
+        blob,
+        content: displayType === 'text' ? await blob.text() : undefined,
+        displayType,
+        mimeType: blob.type || 'application/octet-stream',
+        size: blob.size,
+      };
+    },
+    enabled: Boolean(previewingFile),
+    retry: false,
+  });
+  useEffect(() => {
+    if (
+      !rawFilePreview?.blob ||
+      !['image', 'pdf'].includes(rawFilePreview.displayType)
+    ) {
+      setRawFileObjectUrl(undefined);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(rawFilePreview.blob);
+    setRawFileObjectUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [rawFilePreview]);
   const { data: failureData, isFetching: failuresFetching } = useQuery({
     queryKey: [
       'admin/resources/failures',
@@ -414,9 +491,7 @@ export default function AdminResources() {
   });
 
   const canPreviewFile = (resource: AdminService.ManagedResourceItem) =>
-    resource.resource_type === 'file' &&
-    resource.file_type !== 'folder' &&
-    isSupportedPreviewDocumentType(getExtension(resource.name));
+    resource.resource_type === 'file' && resource.file_type !== 'folder';
 
   const renderResourceActions = (
     resource: AdminService.ManagedResourceItem,
@@ -1796,15 +1871,51 @@ export default function AdminResources() {
                 )}
               </div>
             </DialogHeader>
-            {previewingFile && (
-              <iframe
-                className="size-full min-h-0 border-0 bg-white"
-                src={getMainAppUrlAsAdmin(getFilePreviewPath(previewingFile))}
-                title={t('admin.resourceManagementPage.previewFile', {
-                  name: previewingFile.name,
-                })}
-              />
-            )}
+            <div className="min-h-0 overflow-auto border-t bg-muted/20 p-5">
+              {rawFilePreviewFetching ? (
+                <div className="flex h-full items-center justify-center text-sm text-text-secondary">
+                  {t('common.loading')}
+                </div>
+              ) : rawFilePreviewError ? (
+                <div className="flex h-full items-center justify-center text-sm text-state-error">
+                  {t('admin.resourceManagementPage.rawFileLoadFailed')}
+                </div>
+              ) : rawFilePreview?.content !== undefined ? (
+                <pre className="min-h-full min-w-max whitespace-pre font-mono text-sm leading-6 text-text-primary">
+                  {rawFilePreview.content}
+                </pre>
+              ) : rawFilePreview?.displayType === 'image' &&
+                rawFileObjectUrl ? (
+                <div className="flex size-full items-center justify-center">
+                  <img
+                    className="max-h-full max-w-full object-contain"
+                    src={rawFileObjectUrl}
+                    alt={previewingFile?.name || ''}
+                  />
+                </div>
+              ) : rawFilePreview?.displayType === 'pdf' && rawFileObjectUrl ? (
+                <iframe
+                  className="size-full min-h-[480px] border-0 bg-white"
+                  src={rawFileObjectUrl}
+                  title={previewingFile?.name || ''}
+                />
+              ) : rawFilePreview ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-text-secondary">
+                  <File className="size-10" />
+                  <div className="font-medium text-text-primary">
+                    {t('admin.resourceManagementPage.binaryFile')}
+                  </div>
+                  <div>
+                    {t('admin.resourceManagementPage.binaryFileDescription')}
+                  </div>
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span>{rawFilePreview.mimeType}</span>
+                    <span aria-hidden="true">·</span>
+                    <StorageSize bytes={rawFilePreview.size} />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </DialogContent>
         </Dialog>
       </Card>
