@@ -43,7 +43,7 @@ export function parseBooleanish(value: any): boolean {
 export function createFuzzySearchFn<TData extends RowData>(
   columns: (keyof TData)[] = [],
 ) {
-  return (row: Row<TData>, columnId: string, filterValue: string) => {
+  return (row: Row<TData>, _columnId: string, filterValue: string) => {
     const searchText = filterValue.trim().toLowerCase();
 
     return columns
@@ -84,6 +84,12 @@ export function getSortIcon(sorting: false | SortDirection) {
       desc: <LucideSortDesc />,
     }[sorting as string] ?? <LucideArrowUpDown className="opacity-50" />
   );
+}
+
+export function openMainAppAsAdmin(path: string) {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set('admin_view', '1');
+  window.open(url.toString(), '_blank', 'noopener,noreferrer');
 }
 
 export const PERMISSION_TYPES = ['enable', 'read', 'write', 'share'] as const;

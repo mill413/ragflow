@@ -3562,6 +3562,9 @@ Important structured information may include: names, dates, locations, events, k
           'Delete “{{name}}”? Related data owned by this resource will also be removed. This cannot be undone.',
         deleted: 'Resource deleted',
         deleteAction: 'Delete {{name}}',
+        openInRagflow: 'Open {{name}} in RAGFlow',
+        previewFile: 'Preview {{name}}',
+        downloadFile: 'Download {{name}}',
         managedBySource:
           'This folder or file is managed by the system or its source resource and cannot be deleted here',
         datasetDetail: {

@@ -4,6 +4,7 @@ const KeySet = [Authorization, Token, UserInfo];
 const AdminAuthorization = 'adminAuthorization';
 const AdminToken = 'adminToken';
 const AdminUserInfo = 'adminUserInfo';
+const AdminViewSession = 'adminViewSession';
 const AdminKeySet = [AdminAuthorization, AdminToken, AdminUserInfo];
 
 const storage = {
@@ -42,6 +43,7 @@ const storage = {
     KeySet.forEach((x) => {
       localStorage.removeItem(x);
     });
+    sessionStorage.removeItem(AdminViewSession);
   },
   setLanguage: (lng: string) => {
     localStorage.setItem('lng', lng);
@@ -53,9 +55,15 @@ const storage = {
 
 export const getAuthorization = () => {
   const auth = getSearchValue('auth');
+  const requestedAdminView = getSearchValue('admin_view') === '1';
+  if (requestedAdminView) sessionStorage.setItem(AdminViewSession, '1');
+  const useAdminAuthorization =
+    requestedAdminView || sessionStorage.getItem(AdminViewSession) === '1';
   const authorization = auth
     ? 'Bearer ' + auth
-    : storage.getAuthorization() || '';
+    : useAdminAuthorization
+      ? localStorage.getItem(AdminAuthorization) || ''
+      : storage.getAuthorization() || '';
 
   return authorization;
 };

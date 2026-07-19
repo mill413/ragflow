@@ -9,17 +9,18 @@ import { useNavigate } from 'react-router';
 
 export const useNavigateToOtherFolder = () => {
   const navigate = useNavigate();
-  const { isAllWorkspaces, targetWorkspaceId } = useFileWorkspace();
+  const { isAllWorkspaces, isRouteWorkspace, targetWorkspaceId } =
+    useFileWorkspace();
 
   const navigateToOtherFolder = useCallback(
     (folderId: string) => {
       const search = new URLSearchParams({ folderId });
-      if (isAllWorkspaces && targetWorkspaceId) {
+      if ((isAllWorkspaces || isRouteWorkspace) && targetWorkspaceId) {
         search.set('workspaceId', targetWorkspaceId);
       }
       navigate(`${Routes.Files}?${search.toString()}`);
     },
-    [isAllWorkspaces, navigate, targetWorkspaceId],
+    [isAllWorkspaces, isRouteWorkspace, navigate, targetWorkspaceId],
   );
 
   return navigateToOtherFolder;
@@ -28,11 +29,15 @@ export const useNavigateToOtherFolder = () => {
 export const useSelectBreadcrumbItems = () => {
   const parentFolderList = useFetchParentFolderList();
   const { t } = useTranslation();
-  const { isAllWorkspaces, targetWorkspace, targetWorkspaceId } =
-    useFileWorkspace();
+  const {
+    isAllWorkspaces,
+    isRouteWorkspace,
+    targetWorkspace,
+    targetWorkspaceId,
+  } = useFileWorkspace();
 
   const workspaceSearch =
-    isAllWorkspaces && targetWorkspaceId
+    (isAllWorkspaces || isRouteWorkspace) && targetWorkspaceId
       ? `workspaceId=${encodeURIComponent(targetWorkspaceId)}`
       : '';
   const breadcrumbFolders = (

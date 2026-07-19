@@ -349,6 +349,11 @@ export const getManagedResourceDetail = (
   request.get<ResponseData<AdminService.StandardManagedResourceDetailResponse>>(
     adminManagedResource(resourceType, resourceId),
   );
+export const downloadManagedFile = (resourceId: string, workspaceId: string) =>
+  request.get<Blob>(`${api.getFile}/${resourceId}`, {
+    params: { workspace_id: workspaceId },
+    responseType: 'blob',
+  });
 export const listManagedModels = () =>
   request.get<ResponseData<AdminService.ManagedModel[]>>(adminManagedModels);
 export const listModelWorkspaces = () =>

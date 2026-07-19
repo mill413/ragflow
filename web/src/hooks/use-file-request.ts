@@ -53,14 +53,15 @@ export const useFileWorkspace = () => {
     (option) =>
       option.value !== AllWorkspacesId && option.value === routeWorkspaceId,
   );
-  const targetWorkspace = workspace.isAllWorkspaces
-    ? routeWorkspace
-    : workspace.selectedWorkspace;
+  const targetWorkspace =
+    routeWorkspace ||
+    (workspace.isAllWorkspaces ? undefined : workspace.selectedWorkspace);
 
   return {
     ...workspace,
     targetWorkspaceId: targetWorkspace?.value,
     targetWorkspace,
+    isRouteWorkspace: Boolean(routeWorkspace),
     isWorkspaceOverview:
       workspace.isAllWorkspaces && targetWorkspace === undefined,
     visibleWorkspaceOptions: workspace.options.filter(

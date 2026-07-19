@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Activity,
+  ArrowDownToLine,
   Bot,
   Brain,
   CalendarPlus,
@@ -24,6 +25,7 @@ import {
   FileText,
   FileType,
   FolderTree,
+  ExternalLink,
   HardDrive,
   Hash,
   Import,
@@ -31,6 +33,7 @@ import {
   Library,
   Languages,
   MessageSquare,
+  Eye,
   Rocket,
   Search,
   Settings2,
@@ -86,6 +89,7 @@ import {
 } from '@/components/ui/sheet';
 import {
   deleteManagedResource,
+  downloadManagedFile,
   getDatasetResourceDetail,
   getManagedResourceDetail,
   getMonitoringSummary,
@@ -95,7 +99,12 @@ import {
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
-import { getSortIcon } from './utils';
+import {
+  getExtension,
+  isSupportedPreviewDocumentType,
+} from '@/utils/document-util';
+import { downloadFileFromBlob } from '@/utils/file-util';
+import { getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
 import { StandardResourceDetail } from './components/resource-detail';
@@ -187,6 +196,38 @@ function formatDetailValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+function getMainResourcePath(resource: AdminService.ManagedResourceItem) {
+  switch (resource.resource_type) {
+    case 'dataset':
+      return `${Routes.DatasetBase}${Routes.Files}/${resource.id}`;
+    case 'chat':
+      return `${Routes.Chat}/${resource.id}`;
+    case 'search':
+      return `${Routes.Search}/${resource.id}`;
+    case 'agent':
+      return `${Routes.Agent}/${resource.id}`;
+    case 'memory':
+      return `${Routes.Memory}${Routes.MemorySetting}/${resource.id}`;
+    case 'file': {
+      const search = new URLSearchParams({
+        workspaceId: resource.workspace_id,
+      });
+      if (resource.file_type === 'folder') search.set('folderId', resource.id);
+      else if (resource.parent_id) search.set('folderId', resource.parent_id);
+      return `${Routes.Files}?${search.toString()}`;
+    }
+  }
+}
+
+function getFilePreviewPath(resource: AdminService.ManagedResourceItem) {
+  const search = new URLSearchParams({
+    ext: getExtension(resource.name),
+    resource: 'files',
+    workspace_id: resource.workspace_id,
+  });
+  return `/document/${resource.id}?${search.toString()}`;
 }
 
 export default function AdminResources() {
@@ -352,6 +393,95 @@ export default function AdminResources() {
       setDeleting(undefined);
     },
   });
+  const downloadMutation = useMutation({
+    mutationFn: async (resource: AdminService.ManagedResourceItem) => {
+      const response = await downloadManagedFile(
+        resource.id,
+        resource.workspace_id,
+      );
+      return { blob: response.data, name: resource.name };
+    },
+    onSuccess: ({ blob, name }) => downloadFileFromBlob(blob, name),
+  });
+
+  const canPreviewFile = (resource: AdminService.ManagedResourceItem) =>
+    resource.resource_type === 'file' &&
+    resource.file_type !== 'folder' &&
+    isSupportedPreviewDocumentType(getExtension(resource.name));
+
+  const renderResourceActions = (
+    resource: AdminService.ManagedResourceItem,
+  ) => (
+    <>
+      {canPreviewFile(resource) && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={t('admin.resourceManagementPage.previewFile', {
+                name: resource.name,
+              })}
+              onClick={() => openMainAppAsAdmin(getFilePreviewPath(resource))}
+            >
+              <Eye className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t('admin.resourceManagementPage.previewFile', {
+              name: resource.name,
+            })}
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {resource.resource_type === 'file' && resource.file_type !== 'folder' && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={
+                  downloadMutation.isPending &&
+                  downloadMutation.variables?.id === resource.id
+                }
+                aria-label={t('admin.resourceManagementPage.downloadFile', {
+                  name: resource.name,
+                })}
+                onClick={() => downloadMutation.mutate(resource)}
+              >
+                <ArrowDownToLine className="size-4" />
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t('admin.resourceManagementPage.downloadFile', {
+              name: resource.name,
+            })}
+          </TooltipContent>
+        </Tooltip>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={t('admin.resourceManagementPage.openInRagflow', {
+              name: resource.name,
+            })}
+            onClick={() => openMainAppAsAdmin(getMainResourcePath(resource))}
+          >
+            <ExternalLink className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {t('admin.resourceManagementPage.openInRagflow', {
+            name: resource.name,
+          })}
+        </TooltipContent>
+      </Tooltip>
+    </>
+  );
 
   const sortedResources = useMemo(
     () => sortRows(resourceData?.resources ?? [], resourceSort),
@@ -602,6 +732,8 @@ export default function AdminResources() {
     selectedDetail?.kind === 'resource'
       ? selectedDetail.resource.id
       : selectedDetail?.document.id;
+  const selectedResource =
+    selectedDetail?.kind === 'resource' ? selectedDetail.resource : undefined;
   const detailItems: ResourceDetailItem[] = (() => {
     if (!selectedDetail) return [];
 
@@ -973,6 +1105,7 @@ export default function AdminResources() {
                             className="text-center"
                             onClick={(event) => event.stopPropagation()}
                           >
+                            {renderResourceActions(resource)}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="inline-flex">
@@ -1206,16 +1339,25 @@ export default function AdminResources() {
         >
           <SheetContent className="w-[min(980px,90vw)] max-w-none overflow-hidden p-0">
             <SheetHeader className="border-b border-border-button px-6 py-5">
-              <SheetTitle>
-                {datasetDetail?.dataset.name ||
-                  standardResourceDetail?.resource.name ||
-                  detailName ||
-                  t('admin.unnamedResource')}
-              </SheetTitle>
-              <SheetDescription className="font-mono text-xs">
-                {t('admin.resourceManagementPage.resourceId')}：
-                {detailId || '-'}
-              </SheetDescription>
+              <div className="flex items-start justify-between gap-4 pr-8">
+                <div className="min-w-0">
+                  <SheetTitle>
+                    {datasetDetail?.dataset.name ||
+                      standardResourceDetail?.resource.name ||
+                      detailName ||
+                      t('admin.unnamedResource')}
+                  </SheetTitle>
+                  <SheetDescription className="mt-1 truncate font-mono text-xs">
+                    {t('admin.resourceManagementPage.resourceId')}：
+                    {detailId || '-'}
+                  </SheetDescription>
+                </div>
+                {selectedResource && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {renderResourceActions(selectedResource)}
+                  </div>
+                )}
+              </div>
             </SheetHeader>
             <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
               {selectedDatasetId ? (

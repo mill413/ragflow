@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BrainCircuit,
+  ExternalLink,
   KeyRound,
   Pencil,
   Plus,
@@ -67,7 +68,8 @@ import {
   updateManagedModel,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
-import { getSortIcon } from './utils';
+import { Routes } from '@/routes';
+import { getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import {
   createFilterOptions,
@@ -481,6 +483,31 @@ export default function AdminModels() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label={t(
+                                    'admin.resourceManagementPage.openInRagflow',
+                                    { name: model.name },
+                                  )}
+                                  onClick={() =>
+                                    openMainAppAsAdmin(
+                                      `${Routes.UserSetting}${Routes.Model}`,
+                                    )
+                                  }
+                                >
+                                  <ExternalLink className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {t(
+                                  'admin.resourceManagementPage.openInRagflow',
+                                  { name: model.name },
+                                )}
+                              </TooltipContent>
+                            </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button

@@ -3269,6 +3269,9 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
           '确定要删除“{{name}}”吗？该操作会同时清理该资源的关联数据，且无法撤销。',
         deleted: '资源已删除',
         deleteAction: '删除 {{name}}',
+        openInRagflow: '在 RAGFlow 中打开 {{name}}',
+        previewFile: '预览 {{name}}',
+        downloadFile: '下载 {{name}}',
         managedBySource:
           '该目录或文件由系统/来源资源统一管理，不能在这里单独删除',
         datasetDetail: {
