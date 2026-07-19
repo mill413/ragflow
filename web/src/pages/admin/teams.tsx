@@ -3,8 +3,13 @@ import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CalendarPlus,
+  Clock3,
+  Crown,
+  FileText,
   HardDrive,
   Library,
+  MailQuestion,
   Pencil,
   Plus,
   Search,
@@ -80,6 +85,7 @@ import {
   createFilterOptions,
   matchesSelectedFilter,
 } from './components/table-filter-utils';
+import { DetailInformationCard } from './components/detail-information-card';
 
 type TeamSortKey =
   | 'name'
@@ -624,56 +630,59 @@ export default function AdminTeams() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  [
-                    t('admin.teamManagement.owner'),
-                    [
-                      selectedTeamDetails?.owner_name,
-                      selectedTeamDetails?.owner_email,
-                    ]
-                      .filter(Boolean)
-                      .join(' / ') || '-',
-                  ],
-                  [
-                    t('admin.teamManagement.members'),
-                    selectedTeamDetails?.member_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.pendingInvites'),
-                    selectedTeamDetails?.invite_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.datasets'),
-                    selectedTeamDetails?.dataset_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.documents'),
-                    selectedTeamDetails?.document_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.storage'),
-                    formatBytes(selectedTeamDetails?.storage_bytes ?? 0),
-                  ],
-                  [
-                    t('admin.createTime'),
-                    formatDate(selectedTeamDetails?.create_date) || '-',
-                  ],
-                  [
-                    t('admin.lastUpdateTime'),
-                    formatDate(selectedTeamDetails?.update_date) || '-',
-                  ],
-                ].map(([label, value]) => (
-                  <div
-                    key={String(label)}
-                    className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
-                  >
-                    <div className="text-xs text-text-secondary">{label}</div>
-                    <div
-                      className="mt-2 truncate text-sm font-medium text-text-primary"
-                      title={String(value || '')}
-                    >
-                      {value}
-                    </div>
-                  </div>
+                  {
+                    label: t('admin.teamManagement.owner'),
+                    value:
+                      [
+                        selectedTeamDetails?.owner_name,
+                        selectedTeamDetails?.owner_email,
+                      ]
+                        .filter(Boolean)
+                        .join(' / ') || '-',
+                    icon: Crown,
+                  },
+                  {
+                    label: t('admin.teamManagement.members'),
+                    value: selectedTeamDetails?.member_count ?? 0,
+                    icon: UsersRound,
+                  },
+                  {
+                    label: t('admin.teamManagement.pendingInvites'),
+                    value: selectedTeamDetails?.invite_count ?? 0,
+                    icon: MailQuestion,
+                  },
+                  {
+                    label: t('admin.teamManagement.datasets'),
+                    value: selectedTeamDetails?.dataset_count ?? 0,
+                    icon: Library,
+                  },
+                  {
+                    label: t('admin.teamManagement.documents'),
+                    value: selectedTeamDetails?.document_count ?? 0,
+                    icon: FileText,
+                  },
+                  {
+                    label: t('admin.teamManagement.storage'),
+                    value: formatBytes(selectedTeamDetails?.storage_bytes ?? 0),
+                    icon: HardDrive,
+                  },
+                  {
+                    label: t('admin.createTime'),
+                    value: formatDate(selectedTeamDetails?.create_date) || '-',
+                    icon: CalendarPlus,
+                  },
+                  {
+                    label: t('admin.lastUpdateTime'),
+                    value: formatDate(selectedTeamDetails?.update_date) || '-',
+                    icon: Clock3,
+                  },
+                ].map(({ label, value, icon }) => (
+                  <DetailInformationCard
+                    key={label}
+                    icon={icon}
+                    label={label}
+                    value={value}
+                  />
                 ))}
               </div>
             </section>

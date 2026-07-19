@@ -1,7 +1,21 @@
 import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { LucidePencil } from 'lucide-react';
+import {
+  Activity,
+  Building2,
+  CalendarPlus,
+  Clock3,
+  EyeOff,
+  KeyRound,
+  Languages,
+  LogIn,
+  LucidePencil,
+  ShieldCheck,
+  StickyNote,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -74,6 +88,7 @@ import {
 } from './components/table-filter-utils';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
+import { DetailInformationCard } from './components/detail-information-card';
 
 const ASSET_NAMES = ['dataset', 'flow'];
 
@@ -383,18 +398,25 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
     setEditOpen(true);
   };
   const isMe = detail?.email === userInfo?.email;
-  const informationItems: Array<{ label: string; value: ReactNode }> = [
+  const informationItems: Array<{
+    label: string;
+    value: ReactNode;
+    icon: LucideIcon;
+  }> = [
     {
       label: t('admin.nickname'),
       value: detail?.nickname || '-',
+      icon: UserRound,
     },
     {
       label: t('admin.department'),
       value: detail?.department_path || t('admin.noDepartment'),
+      icon: Building2,
     },
     {
       label: t('admin.status'),
       value: <UserStatusBadge active={detail?.is_active} />,
+      icon: Activity,
     },
     {
       label: t('admin.userType'),
@@ -403,32 +425,39 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
           {t(detail?.is_superuser ? 'admin.superuser' : 'admin.normalUser')}
         </Badge>
       ),
+      icon: ShieldCheck,
     },
     {
       label: t('admin.password'),
       value: detail?.password_plain || '-',
+      icon: KeyRound,
     },
     {
       label: t('admin.lastLoginTime'),
       value: formatDate(detail?.last_login_time) || '-',
+      icon: LogIn,
     },
     {
       label: t('admin.createTime'),
       value: formatDate(detail?.create_date) || '-',
+      icon: CalendarPlus,
     },
     {
       label: t('admin.lastUpdateTime'),
       value: formatDate(detail?.update_date) || '-',
+      icon: Clock3,
     },
     {
       label: t('admin.language'),
       value: detail?.language || '-',
+      icon: Languages,
     },
     {
       label: t('admin.isAnonymous'),
       value: t(
         parseBooleanish(detail?.is_anonymous) ? 'admin.yes' : 'admin.no',
       ),
+      icon: EyeOff,
     },
   ];
 
@@ -485,27 +514,23 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                 {t('admin.userInformation')}
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {informationItems.map(({ label, value }) => (
-                  <div
+                {informationItems.map(({ label, value, icon }) => (
+                  <DetailInformationCard
                     key={label}
-                    className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
-                  >
-                    <div className="text-xs text-text-secondary">{label}</div>
-                    <div className="mt-2 truncate text-sm font-medium text-text-primary">
-                      {value}
-                    </div>
-                  </div>
+                    label={label}
+                    value={value}
+                    icon={icon}
+                  />
                 ))}
               </div>
               {detail?.remark && (
-                <div className="mt-3 rounded-lg border-0.5 border-border-button bg-bg-input p-3">
-                  <div className="text-xs text-text-secondary">
-                    {t('admin.remark')}
-                  </div>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-text-primary">
-                    {detail.remark}
-                  </div>
-                </div>
+                <DetailInformationCard
+                  className="mt-3"
+                  icon={StickyNote}
+                  label={t('admin.remark')}
+                  value={detail.remark}
+                  valueClassName="whitespace-pre-wrap font-normal"
+                />
               )}
             </section>
 

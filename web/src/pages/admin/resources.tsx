@@ -16,18 +16,33 @@ import {
   AlertTriangle,
   Bot,
   Brain,
+  CalendarPlus,
   ChevronDown,
   ChevronRight,
+  Clock3,
+  Database,
   File,
   FileSearch,
   FileText,
+  FileType,
   Folder,
   FolderOpen,
+  FolderTree,
   HardDrive,
+  Hash,
+  Import,
+  Layers3,
   Library,
   MessageSquare,
+  Rocket,
   Search,
+  Shapes,
+  ShieldCheck,
   Trash2,
+  UserRound,
+  UsersRound,
+  Workflow,
+  type LucideIcon,
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
@@ -81,6 +96,7 @@ import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
+import { DetailInformationCard } from './components/detail-information-card';
 
 type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
@@ -89,6 +105,11 @@ type ResourceColumn = {
   label: string;
   numeric?: boolean;
   render: (resource: AdminService.ManagedResourceItem) => ReactNode;
+};
+type ResourceDetailItem = {
+  label: string;
+  value: ReactNode;
+  icon: LucideIcon;
 };
 type ResourceTableRow = {
   resource: AdminService.ManagedResourceItem;
@@ -119,6 +140,24 @@ const RESOURCE_VIEWS: Array<{
   { type: 'memory', label: 'memory', icon: Brain },
   { type: 'file', label: 'file', icon: File },
 ];
+
+const RESOURCE_DETAIL_FIELD_ICONS: Record<string, LucideIcon> = {
+  doc_num: FileText,
+  chunk_num: Layers3,
+  storage_bytes: HardDrive,
+  failed_documents: AlertTriangle,
+  dataset_count: Library,
+  session_count: MessageSquare,
+  document_count: FileText,
+  canvas_type: Workflow,
+  release: Rocket,
+  memory_type: Brain,
+  storage_type: Database,
+  memory_size: HardDrive,
+  file_type: FileType,
+  size: HardDrive,
+  source_type: Import,
+};
 
 const RESOURCE_VIEW_ROUTES: Record<string, ResourceView> = {
   datasets: 'dataset',
@@ -586,7 +625,7 @@ export default function AdminResources() {
     selectedDetail?.kind === 'resource'
       ? selectedDetail.resource.id
       : selectedDetail?.document.id;
-  const detailItems: Array<{ label: string; value: ReactNode }> = (() => {
+  const detailItems: ResourceDetailItem[] = (() => {
     if (!selectedDetail) return [];
 
     if (selectedDetail.kind === 'failure') {
@@ -595,6 +634,7 @@ export default function AdminResources() {
         {
           label: t('admin.resourceManagementPage.resourceType'),
           value: t('admin.resourceType.file'),
+          icon: File,
         },
         {
           label: t('admin.workspaceOwner'),
@@ -603,35 +643,42 @@ export default function AdminResources() {
               ? 'admin.teamWorkspace'
               : 'admin.personalWorkspace',
           )}-${document.workspace_name}`,
+          icon: UsersRound,
         },
         {
           label: t('admin.knowledgeMonitoring.dataset'),
           value: document.dataset_name,
+          icon: Library,
         },
         {
           label: t('admin.resourceManagementPage.datasetId'),
           value: document.dataset_id,
+          icon: Hash,
         },
         {
           label: t('admin.knowledgeMonitoring.fileSize'),
           value: formatBytes(document.size ?? 0, { decimals: 1 }),
+          icon: HardDrive,
         },
         {
           label: t('admin.knowledgeMonitoring.failureReason'),
           value: document.failure_reason || '-',
+          icon: AlertTriangle,
         },
         {
           label: t('admin.createTime'),
           value: formatDate(document.create_date) || '-',
+          icon: CalendarPlus,
         },
       ];
     }
 
     const resource = selectedDetail.resource;
-    const items: Array<{ label: string; value: ReactNode }> = [
+    const items: ResourceDetailItem[] = [
       {
         label: t('admin.resourceManagementPage.resourceType'),
         value: t(`admin.resourceType.${resource.resource_type}`),
+        icon: Shapes,
       },
       {
         label: t('admin.workspaceOwner'),
@@ -640,10 +687,12 @@ export default function AdminResources() {
             ? 'admin.teamWorkspace'
             : 'admin.personalWorkspace',
         )}-${resource.workspace_name}`,
+        icon: UsersRound,
       },
       {
         label: t('admin.creator'),
         value: resource.creator_name || '-',
+        icon: UserRound,
       },
       {
         label: t('admin.permission'),
@@ -652,12 +701,14 @@ export default function AdminResources() {
             ? 'admin.teamWorkspace'
             : 'admin.personalWorkspace',
         ),
+        icon: ShieldCheck,
       },
       ...resourceColumns
         .filter((column) => column.key !== 'creator_name')
         .map((column) => ({
           label: column.label,
           value: column.render(resource),
+          icon: RESOURCE_DETAIL_FIELD_ICONS[column.key] ?? Shapes,
         })),
     ];
 
@@ -665,12 +716,14 @@ export default function AdminResources() {
       items.push({
         label: t('admin.tokenNum'),
         value: resource.token_num ?? 0,
+        icon: Hash,
       });
     }
     if (resource.resource_type === 'file' && resource.parent_id) {
       items.push({
         label: t('admin.resourceManagementPage.parentId'),
         value: resource.parent_id,
+        icon: FolderTree,
       });
     }
 
@@ -678,10 +731,12 @@ export default function AdminResources() {
       {
         label: t('admin.createTime'),
         value: formatDate(resource.create_date) || '-',
+        icon: CalendarPlus,
       },
       {
         label: t('admin.lastUpdateTime'),
         value: formatDate(resource.update_date) || '-',
+        icon: Clock3,
       },
     );
     return items;
@@ -1234,16 +1289,13 @@ export default function AdminResources() {
                   {t('admin.resourceManagementPage.resourceInformation')}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {detailItems.map(({ label, value }, index) => (
-                    <div
+                  {detailItems.map(({ label, value, icon }, index) => (
+                    <DetailInformationCard
                       key={`${label}-${index}`}
-                      className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
-                    >
-                      <div className="text-xs text-text-secondary">{label}</div>
-                      <div className="mt-2 break-words text-sm font-medium text-text-primary">
-                        {value}
-                      </div>
-                    </div>
+                      icon={icon}
+                      label={label}
+                      value={value}
+                    />
                   ))}
                 </div>
               </section>
