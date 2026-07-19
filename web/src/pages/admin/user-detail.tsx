@@ -13,6 +13,7 @@ import {
   CalendarPlus,
   Clock3,
   EyeOff,
+  Gauge,
   KeyRound,
   Languages,
   LogIn,
@@ -69,6 +70,7 @@ import {
   listDepartments,
   listUserResources,
   updateUser,
+  updateUserQuota,
 } from '@/services/admin-service';
 import { rsaPsw } from '@/utils';
 import { formatDate } from '@/utils/date';
@@ -92,6 +94,10 @@ import {
   buildAdminFileTreeRows,
 } from './components/file-tree';
 import { UserModelConfiguration } from './components/user-model-configuration';
+import {
+  ResourceQuotaCards,
+  ResourceQuotaDialog,
+} from './components/resource-quota';
 
 export const WORKSPACE_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
@@ -505,6 +511,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
   const queryClient = useQueryClient();
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
   const [editOpen, setEditOpen] = useState(false);
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     nickname: '',
     password: '',
@@ -552,6 +559,19 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
       queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
       message.success(t('admin.userUpdated'));
       setEditOpen(false);
+    },
+  });
+  const quotaMutation = useMutation({
+    mutationFn: (
+      quota: Pick<
+        AdminService.ResourceQuota,
+        'file_count_limit' | 'storage_bytes_limit'
+      >,
+    ) => updateUserQuota(email!, quota),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
+      message.success(t('admin.resourceQuota.updated'));
+      setQuotaOpen(false);
     },
   });
   const openEdit = () => {
@@ -636,6 +656,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
         open={Boolean(email)}
         onOpenChange={(open) => {
           if (!open) setEditOpen(false);
+          if (!open) setQuotaOpen(false);
           onOpenChange(open);
         }}
       >
@@ -667,6 +688,15 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
               </EnterpriseFeature>
               <Button
                 className="ml-auto shrink-0"
+                variant="outline"
+                disabled={!detail}
+                onClick={() => setQuotaOpen(true)}
+              >
+                <Gauge />
+                {t('admin.resourceQuota.configure')}
+              </Button>
+              <Button
+                className="shrink-0"
                 variant="outline"
                 disabled={!detail}
                 onClick={openEdit}
@@ -701,6 +731,13 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                   valueClassName="whitespace-pre-wrap font-normal"
                 />
               )}
+            </section>
+
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceQuota.title')}
+              </div>
+              <ResourceQuotaCards quota={detail?.quota} />
             </section>
 
             <section className="min-w-0 py-5">
@@ -868,6 +905,14 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ResourceQuotaDialog
+        open={quotaOpen}
+        quota={detail?.quota}
+        saving={quotaMutation.isPending}
+        onOpenChange={setQuotaOpen}
+        onSave={(quota) => quotaMutation.mutate(quota)}
+      />
     </>
   );
 }

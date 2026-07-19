@@ -230,6 +230,9 @@ def delete_user_data(user_id: str) -> dict:
             done_msg += f"- Deleted {user_tenant_delete_res} user-tenant records.\n"
         # step3 finally delete user
         user_delete_res = UserService.delete_by_id(usr.id)
+        from api.db.services.resource_quota_service import ResourceQuotaService
+
+        ResourceQuotaService.remove_workspace_quota(usr.id)
         done_msg += f"- Deleted {user_delete_res} user.\nDelete done!"
 
         return {"success": True, "message": f"Successfully deleted user. Details:\n{done_msg}"}

@@ -203,6 +203,17 @@ export const updateUser = (
     adminGetUserDetails(email),
     data,
   );
+export const updateUserQuota = (
+  email: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${adminGetUserDetails(email)}/quota`,
+    quota,
+  );
 export const listUserDatasets = (email: string) =>
   request.get<ResponseData<AdminService.ListUserDatasetItem[]>>(
     adminListUserDatasets(email),
@@ -261,6 +272,17 @@ export const updateAdminTeam = (
   });
 export const deleteAdminTeam = (teamId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeam(teamId));
+export const updateAdminTeamQuota = (
+  teamId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${api.adminTeam(teamId)}/quota`,
+    quota,
+  );
 export const listAdminTeamMembers = (teamId: string) =>
   request.get<ResponseData<AdminService.TeamMember[]>>(
     api.adminTeamMembers(teamId),
@@ -341,6 +363,17 @@ export const getDatasetResourceDetail = (
   request.get<ResponseData<AdminService.DatasetResourceDetailResponse>>(
     adminManagedResource('dataset', resourceId),
     { params: { page, page_size: pageSize } },
+  );
+export const updateDatasetQuota = (
+  resourceId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${adminManagedResource('dataset', resourceId)}/quota`,
+    quota,
   );
 export const getManagedResourceDetail = (
   resourceType: Exclude<AdminService.ManagedResourceType, 'dataset'>,

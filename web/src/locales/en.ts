@@ -3391,6 +3391,20 @@ Important structured information may include: names, dates, locations, events, k
         memory: 'Memory',
       },
 
+      resourceQuota: {
+        title: 'Upload quota settings',
+        fileCount: 'File count usage',
+        storage: 'File storage usage',
+        fileCountLimit: 'File count limit',
+        storageLimit: 'File storage limit',
+        unlimited: 'Unlimited',
+        invalidLimit:
+          'Quota limits must be valid values greater than or equal to 0',
+        help: 'Leave blank for unlimited. Set to 0 to prevent further uploads. Both workspace and dataset quotas are checked during upload.',
+        configure: 'Configure upload quota',
+        updated: 'Upload quota updated',
+      },
+
       permissionType: {
         enable: 'Enable',
         read: 'Read',

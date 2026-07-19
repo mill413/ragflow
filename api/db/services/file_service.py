@@ -34,6 +34,7 @@ from api.db.services import duplicate_name
 from api.db.services.common_service import CommonService
 from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
+from api.db.services.resource_quota_service import ResourceQuotaService
 from common.misc_utils import get_uuid
 from common.ssrf_guard import assert_url_is_safe
 from common.constants import TaskStatus, FileSource, ParserType, MAXIMUM_PAGE_NUMBER
@@ -551,11 +552,23 @@ class FileService(CommonService):
                     incoming_fp = getattr(file, "fingerprint", None)
                     new_hash = incoming_fp or xxhash.xxh128(blob).hexdigest()
                     old_hash = doc.content_hash or ""
+                    ResourceQuotaService.ensure_upload_allowed(
+                        kb.tenant_id,
+                        kb.id,
+                        0,
+                        len(blob) - int(doc.size or 0),
+                    )
                     settings.STORAGE_IMPL.put(kb.id, doc.location, blob, kb.tenant_id)
                     doc.size = len(blob)
                     doc.content_hash = new_hash
                     doc = doc.to_dict()
                     DocumentService.update_by_id(doc["id"], doc)
+                    links = File2DocumentService.get_by_document_id(doc["id"])
+                    if links:
+                        FileService.update_by_id(
+                            links[0].file_id,
+                            {"size": len(blob)},
+                        )
                     if new_hash != old_hash:
                         files.append((doc, blob))
                 except Exception as exc:
@@ -576,6 +589,12 @@ class FileService(CommonService):
                 blob = file.read()
                 if filetype == FileType.PDF.value:
                     blob = read_potential_broken_pdf(blob)
+                ResourceQuotaService.ensure_upload_allowed(
+                    kb.tenant_id,
+                    kb.id,
+                    1,
+                    len(blob),
+                )
                 settings.STORAGE_IMPL.put(kb.id, location, blob)
 
                 img = thumbnail_img(filename, blob)

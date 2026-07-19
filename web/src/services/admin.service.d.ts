@@ -37,6 +37,13 @@ declare namespace AdminService {
 
   export type TeamMemberRole = 'owner' | 'admin' | 'normal' | 'invite';
 
+  export type ResourceQuota = {
+    file_count_limit: number | null;
+    storage_bytes_limit: number | null;
+    file_count_used: number;
+    storage_bytes_used: number;
+  };
+
   export type Team = {
     id: string;
     name: string;
@@ -48,6 +55,7 @@ declare namespace AdminService {
     dataset_count: number;
     document_count: number;
     storage_bytes: number;
+    quota: ResourceQuota;
     create_date: string;
     update_date: string;
   };
@@ -101,6 +109,7 @@ declare namespace AdminService {
     status: '0' | '1';
     update_date: string;
     role: string;
+    quota: ResourceQuota;
   };
 
   export type ListUserDatasetItem = {
@@ -162,6 +171,7 @@ declare namespace AdminService {
     file_type?: string;
     source_type?: string;
     deletable: boolean;
+    quota?: ResourceQuota;
   };
 
   export type UserModelConfig = {

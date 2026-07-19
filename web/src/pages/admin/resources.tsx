@@ -25,6 +25,7 @@ import {
   FileText,
   FileType,
   FolderTree,
+  Gauge,
   ExternalLink,
   HardDrive,
   Hash,
@@ -103,6 +104,7 @@ import {
   listFailedDocuments,
   listManagedResources,
   listModelWorkspaces,
+  updateDatasetQuota,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
@@ -118,6 +120,10 @@ import {
   type AdminFileTreeRow,
   buildAdminFileTreeRows,
 } from './components/file-tree';
+import {
+  ResourceQuotaCards,
+  ResourceQuotaDialog,
+} from './components/resource-quota';
 
 type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
@@ -296,6 +302,7 @@ export default function AdminResources() {
   const [deleting, setDeleting] = useState<AdminService.ManagedResourceItem>();
   const [previewingFile, setPreviewingFile] =
     useState<AdminService.ManagedResourceItem>();
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [rawFileObjectUrl, setRawFileObjectUrl] = useState<string>();
   const [selectedDetail, setSelectedDetail] =
     useState<SelectedResourceDetail>();
@@ -477,6 +484,22 @@ export default function AdminResources() {
       queryClient.invalidateQueries({ queryKey: ['admin/monitoring'] });
       message.success(t('admin.resourceManagementPage.deleted'));
       setDeleting(undefined);
+    },
+  });
+  const quotaMutation = useMutation({
+    mutationFn: (
+      quota: Pick<
+        AdminService.ResourceQuota,
+        'file_count_limit' | 'storage_bytes_limit'
+      >,
+    ) => updateDatasetQuota(selectedDatasetId!, quota),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['admin/resources/dataset-detail'],
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin/resources'] });
+      setQuotaOpen(false);
+      message.success(t('admin.resourceQuota.updated'));
     },
   });
   const downloadMutation = useMutation({
@@ -1419,7 +1442,10 @@ export default function AdminResources() {
 
         <Sheet
           open={Boolean(selectedDetail)}
-          onOpenChange={(open) => !open && setSelectedDetail(undefined)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedDetail(undefined);
+            if (!open) setQuotaOpen(false);
+          }}
         >
           <SheetContent className="w-[min(980px,90vw)] max-w-none overflow-hidden p-0">
             <SheetHeader className="border-b border-border-button px-6 py-5">
@@ -1438,6 +1464,16 @@ export default function AdminResources() {
                 </div>
                 {selectedResource && (
                   <div className="flex shrink-0 items-center gap-1">
+                    {selectedDatasetId && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setQuotaOpen(true)}
+                      >
+                        <Gauge className="size-4" />
+                        {t('admin.resourceQuota.configure')}
+                      </Button>
+                    )}
                     {renderResourceActions(selectedResource)}
                   </div>
                 )}
@@ -1488,6 +1524,15 @@ export default function AdminResources() {
                             value={datasetDetail.dataset.token_num ?? 0}
                           />
                         </div>
+
+                        <section className="space-y-3">
+                          <div className="text-sm font-medium">
+                            {t('admin.resourceQuota.title')}
+                          </div>
+                          <ResourceQuotaCards
+                            quota={datasetDetail.dataset.quota}
+                          />
+                        </section>
 
                         <section className="space-y-3">
                           <div className="text-sm font-medium">
@@ -1836,6 +1881,14 @@ export default function AdminResources() {
             </ScrollArea>
           </SheetContent>
         </Sheet>
+
+        <ResourceQuotaDialog
+          open={quotaOpen}
+          quota={datasetDetail?.dataset.quota}
+          saving={quotaMutation.isPending}
+          onOpenChange={setQuotaOpen}
+          onSave={(quota) => quotaMutation.mutate(quota)}
+        />
 
         <Dialog
           open={Boolean(previewingFile)}

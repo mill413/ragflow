@@ -221,6 +221,9 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
         if not KnowledgebaseService.delete_by_id(kb_id):
             errors.append(f"Delete dataset error for {kb_id}")
             continue
+        from api.db.services.resource_quota_service import ResourceQuotaService
+
+        ResourceQuotaService.remove_dataset_quota(kb_id)
         success_count += 1
 
     if not errors:

@@ -24,6 +24,10 @@ from api.common.check_team_permission import check_file_write_permission
 from api.db.services import duplicate_name
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.resource_quota_service import (
+    ResourceQuotaExceededError,
+    ResourceQuotaService,
+)
 
 from api.apps import login_required, current_user
 from api.db.services.knowledgebase_service import KnowledgebaseService
@@ -152,6 +156,7 @@ async def convert():
                 all_file_ids.append(file_id)
 
         user_id = current_user.id
+        expanded_files = {}
         for file_id in all_file_ids:
             e, file = FileService.get_by_id(file_id)
             if not e or not file:
@@ -172,6 +177,7 @@ async def convert():
                     kb_ids,
                 )
                 return get_data_error_result(message="No authorization.")
+            expanded_files[file_id] = file
 
         for kb_id, kb in kb_map.items():
             if not KnowledgebaseService.modifiable(kb_id, user_id):
@@ -183,6 +189,36 @@ async def convert():
                     kb_ids,
                 )
                 return get_data_error_result(message="No authorization.")
+            if any(
+                expanded_files[file_id].tenant_id != kb.tenant_id
+                for file_id in all_file_ids
+            ):
+                return get_data_error_result(
+                    message="Files and datasets must belong to the same workspace."
+                )
+
+            additional_count = 0
+            additional_storage = 0
+            for file_id in all_file_ids:
+                linked_to_dataset = False
+                for link in File2DocumentService.get_by_file_id(file_id):
+                    exists, linked_document = DocumentService.get_by_id(
+                        link.document_id
+                    )
+                    if exists and linked_document and linked_document.kb_id == kb_id:
+                        linked_to_dataset = True
+                        break
+                if not linked_to_dataset:
+                    additional_count += 1
+                    additional_storage += int(expanded_files[file_id].size or 0)
+            try:
+                ResourceQuotaService.ensure_dataset_capacity(
+                    kb_id,
+                    additional_count,
+                    additional_storage,
+                )
+            except ResourceQuotaExceededError as exc:
+                return get_data_error_result(message=str(exc))
 
         if mode == "replace":
             for file_id in all_file_ids:

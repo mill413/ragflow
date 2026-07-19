@@ -193,6 +193,20 @@ def change_password(username):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/users/<username>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_user_quota(username):
+    try:
+        return success_response(UserMgr.update_user_quota(username, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/users/<username>/activate", methods=["PUT"])
 @login_required
 @check_admin_auth
@@ -358,6 +372,20 @@ def list_team_members(team_id):
         return success_response(TeamMgr.list_members(team_id))
     except AdminException as e:
         return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team_quota(team_id):
+    try:
+        return success_response(TeamMgr.update_quota(team_id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
     except Exception as e:
         return error_response(str(e), 500)
 
@@ -560,6 +588,22 @@ def delete_resource(resource_type, resource_id):
         return error_response(e.message, e.code)
     except Exception as e:
         logging.exception("Failed to delete admin resource")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/dataset/<resource_id>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_dataset_quota(resource_id):
+    try:
+        return success_response(
+            ResourceMgr.update_dataset_quota(resource_id, request.get_json() or {})
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
         return error_response(str(e), 500)
 
 

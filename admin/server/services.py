@@ -69,6 +69,7 @@ from api.utils.crypt import check_password_hash, decrypt
 from api.utils.model_utils import calculate_model_type, get_model_type_human
 from api.utils import health_utils
 from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.resource_quota_service import ResourceQuotaService
 from api.db.services.shared_model_service import SharedModelService
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
@@ -395,9 +396,17 @@ class UserMgr:
                     "update_date": user.update_date,
                     **departments.get(user.id, {"department_id": None, "department_path": ""}),
                     "remark": OrganizationMgr.get_user_metadata(user.id).get("remark", ""),
+                    "quota": ResourceQuotaService.get_workspace_quota(user.id),
                 }
             )
         return result
+
+    @staticmethod
+    def update_user_quota(username, data):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        return ResourceQuotaService.set_workspace_quota(users[0].id, data)
 
     @staticmethod
     def update_user_profile(username, data):
@@ -471,6 +480,7 @@ class UserMgr:
         result = delete_user_data(usr.id)
         if result.get("success"):
             OrganizationMgr.remove_user(usr.id)
+            ResourceQuotaService.remove_workspace_quota(usr.id)
         return result
 
     @staticmethod
@@ -735,11 +745,17 @@ class TeamMgr:
                     "dataset_count": dataset_query.count(),
                     "document_count": int(document_stats.get("document_count", 0) or 0),
                     "storage_bytes": int(document_stats.get("storage_bytes", 0) or 0),
+                    "quota": ResourceQuotaService.get_workspace_quota(tenant.id),
                     "create_date": tenant.create_date,
                     "update_date": tenant.update_date,
                 }
             )
         return teams
+
+    @classmethod
+    def update_quota(cls, team_id, data):
+        cls._ensure_team(team_id)
+        return ResourceQuotaService.set_workspace_quota(team_id, data)
 
     @classmethod
     def create_team(cls, owner_id, name):
@@ -770,6 +786,7 @@ class TeamMgr:
         cls._ensure_team(team_id)
         try:
             TeamService.delete(cls._owner_id(team_id), team_id)
+            ResourceQuotaService.remove_workspace_quota(team_id)
             return True
         except (LookupError, PermissionError, ValueError) as exc:
             raise AdminException(str(exc), 409) from exc
@@ -1209,6 +1226,7 @@ class ResourceMgr:
 
         cls._attach_ownership([dataset])
         cls._attach_dataset_metrics([dataset])
+        dataset["quota"] = ResourceQuotaService.get_dataset_quota(resource_id)
         dataset["resource_type"] = resource_type
         dataset["deletable"] = True
 
@@ -1264,6 +1282,16 @@ class ResourceMgr:
             "documents": documents,
             "document_total": document_total,
         }
+
+    @staticmethod
+    def update_dataset_quota(resource_id: str, data: dict) -> dict:
+        exists = Knowledgebase.select(Knowledgebase.id).where(
+            (Knowledgebase.id == resource_id)
+            & (Knowledgebase.status == StatusEnum.VALID.value)
+        ).exists()
+        if not exists:
+            raise AdminException("Resource not found", 404)
+        return ResourceQuotaService.set_dataset_quota(resource_id, data)
 
     @classmethod
     def _get_standard_resource_detail(
@@ -1572,6 +1600,8 @@ class ResourceMgr:
 
         if not success:
             raise AdminException(str(result), 409)
+        if resource_type == "dataset":
+            ResourceQuotaService.remove_dataset_quota(resource_id)
         return {"resource_type": resource_type, "resource_id": resource_id, "result": result}
 
     @staticmethod

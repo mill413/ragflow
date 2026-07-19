@@ -7,6 +7,7 @@ import {
   Clock3,
   Crown,
   FileText,
+  Gauge,
   HardDrive,
   Library,
   MailQuestion,
@@ -76,6 +77,7 @@ import {
   listAdminTeams,
   listUsers,
   updateAdminTeam,
+  updateAdminTeamQuota,
   updateAdminTeamMember,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
@@ -89,6 +91,10 @@ import {
 import { DetailInformationCard } from './components/detail-information-card';
 import { StorageSize } from './components/storage-size';
 import { UserModelConfiguration } from './components/user-model-configuration';
+import {
+  ResourceQuotaCards,
+  ResourceQuotaDialog,
+} from './components/resource-quota';
 import {
   WORKSPACE_RESOURCE_TYPES,
   WorkspaceResourceTable,
@@ -137,6 +143,7 @@ export default function AdminTeams() {
   const [ownerId, setOwnerId] = useState('');
   const [deletingTeam, setDeletingTeam] = useState<AdminService.Team>();
   const [selectedTeam, setSelectedTeam] = useState<AdminService.Team>();
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [memberUserId, setMemberUserId] = useState('');
   const [memberRole, setMemberRole] =
@@ -229,6 +236,19 @@ export default function AdminTeams() {
       invalidateTeams();
       setDeletingMember(undefined);
       message.success(t('admin.teamManagement.memberDeleted'));
+    },
+  });
+  const quotaMutation = useMutation({
+    mutationFn: (
+      quota: Pick<
+        AdminService.ResourceQuota,
+        'file_count_limit' | 'storage_bytes_limit'
+      >,
+    ) => updateAdminTeamQuota(selectedTeam!.id, quota),
+    onSuccess: () => {
+      invalidateTeams();
+      setQuotaOpen(false);
+      message.success(t('admin.resourceQuota.updated'));
     },
   });
 
@@ -632,15 +652,30 @@ export default function AdminTeams() {
 
       <Sheet
         open={Boolean(selectedTeam)}
-        onOpenChange={(open) => !open && setSelectedTeam(undefined)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTeam(undefined);
+          if (!open) setQuotaOpen(false);
+        }}
       >
         <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
-            <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
-            <SheetDescription className="font-mono text-xs">
-              {t('admin.teamManagement.teamId')}：
-              {selectedTeamDetails?.id || '-'}
-            </SheetDescription>
+            <div className="flex items-center gap-3 pr-8">
+              <div className="min-w-0">
+                <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
+                <SheetDescription className="truncate font-mono text-xs">
+                  {t('admin.teamManagement.teamId')}：
+                  {selectedTeamDetails?.id || '-'}
+                </SheetDescription>
+              </div>
+              <Button
+                className="ml-auto shrink-0"
+                variant="outline"
+                onClick={() => setQuotaOpen(true)}
+              >
+                <Gauge />
+                {t('admin.resourceQuota.configure')}
+              </Button>
+            </div>
           </SheetHeader>
           <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
             <section className="border-b border-border-button py-5">
@@ -708,6 +743,12 @@ export default function AdminTeams() {
                   />
                 ))}
               </div>
+            </section>
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceQuota.title')}
+              </div>
+              <ResourceQuotaCards quota={selectedTeamDetails?.quota} />
             </section>
             <div className="flex items-center justify-between py-4">
               <div className="text-sm font-medium">
@@ -882,6 +923,14 @@ export default function AdminTeams() {
           </ScrollArea>
         </SheetContent>
       </Sheet>
+
+      <ResourceQuotaDialog
+        open={quotaOpen}
+        quota={selectedTeamDetails?.quota}
+        saving={quotaMutation.isPending}
+        onOpenChange={setQuotaOpen}
+        onSave={(quota) => quotaMutation.mutate(quota)}
+      />
 
       <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
         <DialogContent>

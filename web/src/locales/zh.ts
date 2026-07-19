@@ -3131,6 +3131,19 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
         memory: '记忆',
       },
 
+      resourceQuota: {
+        title: '上传配额设置',
+        fileCount: '文件数量用量',
+        storage: '文件存储用量',
+        fileCountLimit: '文件数量上限',
+        storageLimit: '文件存储上限',
+        unlimited: '不限制',
+        invalidLimit: '配额必须是大于或等于 0 的有效数值',
+        help: '留空表示不限制；设置为 0 表示禁止继续上传文件。上传时会同时检查工作空间和知识库配额。',
+        configure: '设置上传配额',
+        updated: '上传配额已更新',
+      },
+
       permissionType: {
         enable: '启用',
         read: '读取',
