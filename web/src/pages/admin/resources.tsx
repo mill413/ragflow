@@ -381,8 +381,9 @@ export default function AdminResources() {
             label: t('admin.knowledgeMonitoring.parseStatus'),
             numeric: true,
             render: (resource) => (
-              <div className="flex justify-center gap-2">
+              <div className="flex flex-col items-center justify-center gap-1.5">
                 <Badge
+                  className="whitespace-nowrap"
                   variant={
                     (resource.failed_documents ?? 0) > 0
                       ? 'destructive'
@@ -394,7 +395,7 @@ export default function AdminResources() {
                   })}
                 </Badge>
                 {(resource.processing_documents ?? 0) > 0 && (
-                  <Badge variant="secondary">
+                  <Badge className="whitespace-nowrap" variant="secondary">
                     {t('admin.knowledgeMonitoring.processingCount', {
                       count: resource.processing_documents,
                     })}
