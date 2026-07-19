@@ -180,7 +180,7 @@ const AdminNavigationLayout = () => {
       >
         <div
           className={cn(
-            'flex h-8 items-center mb-6',
+            'mb-0 flex h-8 items-center',
             sidebarCollapsed && 'justify-center',
           )}
         >
