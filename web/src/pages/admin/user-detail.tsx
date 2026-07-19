@@ -18,15 +18,6 @@ import {
 } from 'lucide-react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,12 +61,12 @@ import {
 import {
   getUserDetails,
   listDepartments,
-  listUserAgents,
-  listUserDatasets,
+  listUserResources,
   updateUser,
 } from '@/services/admin-service';
 import { rsaPsw } from '@/utils';
 import { formatDate } from '@/utils/date';
+import { formatBytes } from '@/lib/utils';
 
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
@@ -90,242 +81,329 @@ import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 import { DetailInformationCard } from './components/detail-information-card';
 
-const ASSET_NAMES = ['dataset', 'flow'];
+const USER_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
+  'dataset',
+  'chat',
+  'search',
+  'agent',
+  'memory',
+  'file',
+];
+type ResourceColumn = {
+  key: keyof AdminService.ManagedResourceItem;
+  label: string;
+  numeric?: boolean;
+  render: (resource: AdminService.ManagedResourceItem) => ReactNode;
+};
 
-const datasetColumnHelper =
-  createColumnHelper<AdminService.ListUserDatasetItem>();
-const agentColumnHelper = createColumnHelper<AdminService.ListUserAgentItem>();
+type SortState = {
+  key: keyof AdminService.ManagedResourceItem;
+  direction: 'asc' | 'desc';
+};
 
-function UserDatasetTable(props: {
-  data?: AdminService.ListUserDatasetItem[];
+function workspaceLabel(
+  resource: AdminService.ManagedResourceItem,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  return `${t(
+    resource.workspace_type === 'team'
+      ? 'admin.teamWorkspace'
+      : 'admin.personalWorkspace',
+  )}-${resource.workspace_name}`;
+}
+
+function UserResourceTable({
+  data,
+  resourceType,
+}: {
+  data: AdminService.ManagedResourceItem[];
+  resourceType: AdminService.ManagedResourceType;
 }) {
   const { t } = useTranslation();
   const [nameFilters, setNameFilters] = useState<string[]>([]);
+  const [workspaceFilters, setWorkspaceFilters] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sort, setSort] = useState<SortState>({
+    key: 'update_date',
+    direction: 'desc',
+  });
+
+  const columns = useMemo<ResourceColumn[]>(() => {
+    const commonColumns: ResourceColumn[] = [
+      {
+        key: 'name',
+        label: t('admin.name'),
+        render: (resource) => resource.name,
+      },
+      {
+        key: 'workspace_name',
+        label: t('admin.workspaceOwner'),
+        render: (resource) => workspaceLabel(resource, t),
+      },
+    ];
+    const updatedAt: ResourceColumn = {
+      key: 'update_date',
+      label: t('admin.lastUpdateTime'),
+      render: (resource) => formatDate(resource.update_date) || '-',
+    };
+
+    switch (resourceType) {
+      case 'dataset':
+        return [
+          ...commonColumns,
+          {
+            key: 'doc_num',
+            label: t('admin.knowledgeMonitoring.documentCount'),
+            numeric: true,
+            render: (resource) => resource.doc_num ?? 0,
+          },
+          {
+            key: 'chunk_num',
+            label: t('admin.knowledgeMonitoring.chunkCount'),
+            numeric: true,
+            render: (resource) => resource.chunk_num ?? 0,
+          },
+          {
+            key: 'storage_bytes',
+            label: t('admin.knowledgeMonitoring.storage'),
+            numeric: true,
+            render: (resource) =>
+              formatBytes(resource.storage_bytes ?? 0, { decimals: 1 }),
+          },
+          updatedAt,
+        ];
+      case 'chat':
+        return [
+          ...commonColumns,
+          {
+            key: 'dataset_count',
+            label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
+            render: (resource) => resource.dataset_count ?? 0,
+          },
+          {
+            key: 'session_count',
+            label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
+            render: (resource) => resource.session_count ?? 0,
+          },
+          updatedAt,
+        ];
+      case 'search':
+        return [
+          ...commonColumns,
+          {
+            key: 'dataset_count',
+            label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
+            render: (resource) => resource.dataset_count ?? 0,
+          },
+          {
+            key: 'document_count',
+            label: t('admin.resourceManagementPage.referencedDocuments'),
+            numeric: true,
+            render: (resource) => resource.document_count ?? 0,
+          },
+          {
+            key: 'creator_name',
+            label: t('admin.creator'),
+            render: (resource) => resource.creator_name || '-',
+          },
+          updatedAt,
+        ];
+      case 'agent':
+        return [
+          ...commonColumns,
+          {
+            key: 'canvas_type',
+            label: t('admin.resourceManagementPage.canvasType'),
+            render: (resource) => resource.canvas_type || '-',
+          },
+          {
+            key: 'release',
+            label: t('admin.resourceManagementPage.releaseStatus'),
+            render: (resource) => (
+              <Badge variant={resource.release ? 'success' : 'secondary'}>
+                {t(
+                  resource.release
+                    ? 'admin.resourceManagementPage.released'
+                    : 'admin.resourceManagementPage.unreleased',
+                )}
+              </Badge>
+            ),
+          },
+          {
+            key: 'session_count',
+            label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
+            render: (resource) => resource.session_count ?? 0,
+          },
+          updatedAt,
+        ];
+      case 'memory':
+        return [
+          ...commonColumns,
+          {
+            key: 'memory_type',
+            label: t('admin.resourceManagementPage.memoryType'),
+            render: (resource) => resource.memory_type ?? '-',
+          },
+          {
+            key: 'storage_type',
+            label: t('admin.resourceManagementPage.storageType'),
+            render: (resource) => resource.storage_type || '-',
+          },
+          {
+            key: 'memory_size',
+            label: t('admin.resourceManagementPage.capacity'),
+            numeric: true,
+            render: (resource) =>
+              formatBytes(resource.memory_size ?? 0, { decimals: 1 }),
+          },
+          updatedAt,
+        ];
+      case 'file':
+        return [
+          ...commonColumns,
+          {
+            key: 'file_type',
+            label: t('admin.resourceManagementPage.fileType'),
+            render: (resource) => resource.file_type || '-',
+          },
+          {
+            key: 'size',
+            label: t('admin.knowledgeMonitoring.fileSize'),
+            numeric: true,
+            render: (resource) =>
+              formatBytes(resource.size ?? 0, { decimals: 1 }),
+          },
+          {
+            key: 'creator_name',
+            label: t('admin.creator'),
+            render: (resource) => resource.creator_name || '-',
+          },
+          updatedAt,
+        ];
+    }
+  }, [resourceType, t]);
+
   const filteredData = useMemo(
     () =>
-      (props.data ?? []).filter((dataset) =>
-        matchesSelectedFilter(dataset.name, nameFilters),
+      data.filter(
+        (resource) =>
+          matchesSelectedFilter(resource.name, nameFilters) &&
+          matchesSelectedFilter(workspaceLabel(resource, t), workspaceFilters),
       ),
-    [nameFilters, props.data],
+    [data, nameFilters, t, workspaceFilters],
   );
-
-  const columnDefs = useMemo(
-    () => [
-      datasetColumnHelper.accessor('name', {
-        header: t('admin.name'),
-        cell: ({ row, cell }) => (
-          <div className="flex items-center gap-2">
-            <RAGFlowAvatar
-              avatar={row.original.avatar}
-              name={cell.getValue()}
-            />
-            <span>{cell.getValue()}</span>
-          </div>
-        ),
+  const sortedData = useMemo(
+    () =>
+      [...filteredData].sort((left, right) => {
+        const leftValue = left[sort.key];
+        const rightValue = right[sort.key];
+        const result = String(leftValue ?? '').localeCompare(
+          String(rightValue ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return sort.direction === 'asc' ? result : -result;
       }),
-    ],
-    [t],
+    [filteredData, sort],
   );
-
-  const table = useReactTable({
-    data: filteredData,
-    columns: columnDefs,
-
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const rows = sortedData.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+  const toggleSort = (key: keyof AdminService.ManagedResourceItem) => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+  const resetFilters = () => {
+    setNameFilters([]);
+    setWorkspaceFilters([]);
+    setPage(1);
+  };
 
   return (
     <section className="space-y-4">
       <AdminTableMultiFilters
         filters={[
           {
-            id: 'dataset-name',
+            id: `${resourceType}-name`,
             label: t('admin.name'),
-            options: createFilterOptions(
-              props.data ?? [],
-              (dataset) => dataset.name,
-            ),
+            options: createFilterOptions(data, (resource) => resource.name),
             value: nameFilters,
-            onChange: setNameFilters,
+            onChange: (value) => {
+              setNameFilters(value);
+              setPage(1);
+            },
           },
-        ]}
-        resetLabel={t('admin.reset')}
-        onReset={() => setNameFilters([])}
-      />
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <Button
-                      variant="ghost"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {getSortIcon(header.column.getIsSorted())}
-                    </Button>
-                  ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
-                  )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableEmpty columnsLength={columnDefs.length} />
-          )}
-        </TableBody>
-      </Table>
-
-      <RAGFlowPagination
-        total={filteredData.length}
-        current={table.getState().pagination.pageIndex + 1}
-        pageSize={table.getState().pagination.pageSize}
-        onChange={(page, pageSize) => {
-          table.setPagination({
-            pageIndex: page - 1,
-            pageSize,
-          });
-        }}
-      />
-    </section>
-  );
-}
-
-function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
-  const { t } = useTranslation();
-  const [titleFilters, setTitleFilters] = useState<string[]>([]);
-  const filteredData = useMemo(
-    () =>
-      (props.data ?? []).filter((agent) =>
-        matchesSelectedFilter(agent.title, titleFilters),
-      ),
-    [props.data, titleFilters],
-  );
-
-  const columnDefs = useMemo(
-    () => [
-      agentColumnHelper.accessor('title', {
-        header: t('admin.agentTitle'),
-        cell: ({ row, cell }) => (
-          <div className="flex items-center gap-2">
-            <RAGFlowAvatar
-              avatar={row.original.avatar}
-              name={cell.getValue()}
-            />
-            <span>{cell.getValue()}</span>
-          </div>
-        ),
-      }),
-    ],
-    [t],
-  );
-
-  const table = useReactTable({
-    data: filteredData,
-    columns: columnDefs,
-
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  return (
-    <section className="space-y-4">
-      <AdminTableMultiFilters
-        filters={[
           {
-            id: 'agent-title',
-            label: t('admin.agentTitle'),
-            options: createFilterOptions(
-              props.data ?? [],
-              (agent) => agent.title,
+            id: `${resourceType}-workspace`,
+            label: t('admin.workspaceOwner'),
+            options: createFilterOptions(data, (resource) =>
+              workspaceLabel(resource, t),
             ),
-            value: titleFilters,
-            onChange: setTitleFilters,
+            value: workspaceFilters,
+            onChange: (value) => {
+              setWorkspaceFilters(value);
+              setPage(1);
+            },
           },
         ]}
         resetLabel={t('admin.reset')}
-        onReset={() => setTitleFilters([])}
+        onReset={resetFilters}
       />
-      <Table>
+      <Table className="min-w-[900px]">
         <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <Button
-                      variant="ghost"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {getSortIcon(header.column.getIsSorted())}
-                    </Button>
-                  ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
+          <TableRow>
+            {columns.map((column) => (
+              <TableHead
+                key={column.key}
+                className={column.numeric ? 'text-center' : undefined}
+              >
+                <Button variant="ghost" onClick={() => toggleSort(column.key)}>
+                  {column.label}
+                  {getSortIcon(
+                    sort.key === column.key ? sort.direction : false,
                   )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
+                </Button>
+              </TableHead>
+            ))}
+          </TableRow>
         </TableHeader>
-
         <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          {rows.length ? (
+            rows.map((resource) => (
+              <TableRow key={resource.id}>
+                {columns.map((column) => (
+                  <TableCell
+                    key={column.key}
+                    className={column.numeric ? 'text-center' : undefined}
+                  >
+                    {column.render(resource)}
                   </TableCell>
                 ))}
               </TableRow>
             ))
           ) : (
-            <TableEmpty columnsLength={columnDefs.length} />
+            <TableEmpty columnsLength={columns.length} />
           )}
         </TableBody>
       </Table>
-
       <RAGFlowPagination
         total={filteredData.length}
-        current={table.getState().pagination.pageIndex + 1}
-        pageSize={table.getState().pagination.pageSize}
-        onChange={(page, pageSize) => {
-          table.setPagination({
-            pageIndex: page - 1,
-            pageSize,
-          });
+        current={currentPage}
+        pageSize={pageSize}
+        onChange={(nextPage, nextPageSize) => {
+          setPage(nextPage);
+          setPageSize(nextPageSize);
         }}
       />
     </section>
@@ -351,19 +429,17 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
     remark: '',
   });
 
-  const { data: { detail, datasets, agents } = {} } = useQuery({
+  const { data: { detail, resources } = {} } = useQuery({
     queryKey: ['admin/userDetail', email],
     queryFn: async () => {
-      const [userDetails, userDatasets, userAgents] = await Promise.all([
+      const [userDetails, userResources] = await Promise.all([
         getUserDetails(email!),
-        listUserDatasets(email!),
-        listUserAgents(email!),
+        listUserResources(email!),
       ]);
 
       return {
         detail: userDetails.data.data[0],
-        datasets: userDatasets.data.data,
-        agents: userAgents.data.data,
+        resources: userResources.data.data,
       };
     },
     enabled: Boolean(email),
@@ -544,25 +620,29 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
 
             <section className="py-5">
               <Tabs defaultValue="dataset">
-                <TabsList className="mb-4 justify-start gap-4 bg-transparent p-0">
-                  {ASSET_NAMES.map((name) => (
+                <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+                  {USER_RESOURCE_TYPES.map((resourceType) => (
                     <TabsTrigger
-                      key={name}
+                      key={resourceType}
                       className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
-                      value={name}
+                      value={resourceType}
                     >
-                      {t(`header.${name}`)}
+                      {t(`admin.resourceType.${resourceType}`)}
+                      <Badge className="ml-1" variant="secondary">
+                        {resources?.[resourceType]?.length ?? 0}
+                      </Badge>
                     </TabsTrigger>
                   ))}
                 </TabsList>
 
-                <TabsContent value="dataset">
-                  <UserDatasetTable data={datasets} />
-                </TabsContent>
-
-                <TabsContent value="flow">
-                  <UserAgentTable data={agents} />
-                </TabsContent>
+                {USER_RESOURCE_TYPES.map((resourceType) => (
+                  <TabsContent key={resourceType} value={resourceType}>
+                    <UserResourceTable
+                      data={resources?.[resourceType] ?? []}
+                      resourceType={resourceType}
+                    />
+                  </TabsContent>
+                ))}
               </Tabs>
             </section>
           </ScrollArea>

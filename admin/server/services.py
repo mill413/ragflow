@@ -770,6 +770,30 @@ class UserServiceMgr:
         return [{"title": r["title"], "permission": r["permission"], "canvas_category": r["canvas_category"].split("_")[0], "avatar": r["avatar"]} for r in res]
 
     @staticmethod
+    def get_user_resources(username):
+        user_list = UserService.query_user_by_email(username)
+        if not user_list:
+            raise UserNotFoundError(username)
+        if len(user_list) > 1:
+            raise AdminException(f"Exist more than 1 user: {username}!")
+
+        user = user_list[0]
+        workspace_ids = [
+            membership["tenant_id"]
+            for membership in TenantService.list_accessible_by_user_id(user.id)
+        ]
+        return {
+            resource_type: ResourceMgr.list_resources(
+                resource_type,
+                page=1,
+                page_size=1,
+                workspace_ids=workspace_ids,
+                paginate=False,
+            )["resources"]
+            for resource_type in ResourceMgr.RESOURCE_SPECS
+        }
+
+    @staticmethod
     def get_user_tenants(email: str) -> list[dict[str, Any]]:
         users: list[Any] = UserService.query_user_by_email(email)
         if not users:
@@ -832,6 +856,7 @@ class ResourceMgr:
         keywords: str = "",
         workspace_ids: list[str] | None = None,
         hierarchy: bool = False,
+        paginate: bool = True,
     ) -> dict[str, Any]:
         spec = cls.RESOURCE_SPECS.get(resource_type)
         if not spec:
@@ -880,7 +905,7 @@ class ResourceMgr:
 
         total = query.count()
         ordered_query = query.order_by(model.create_time.desc())
-        if resource_type == "file" and hierarchy:
+        if not paginate or (resource_type == "file" and hierarchy):
             rows = list(ordered_query.dicts())
         else:
             rows = list(ordered_query.paginate(page, page_size).dicts())

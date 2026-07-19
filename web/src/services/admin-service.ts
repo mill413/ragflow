@@ -110,6 +110,7 @@ const {
   adminDeleteUser,
   adminListUserDatasets,
   adminListUserAgents,
+  adminListUserResources,
   adminUpdateUserDepartment,
   adminGetUserLoginUrl,
   adminDepartments,
@@ -209,6 +210,10 @@ export const listUserDatasets = (email: string) =>
 export const listUserAgents = (email: string) =>
   request.get<ResponseData<AdminService.ListUserAgentItem[]>>(
     adminListUserAgents(email),
+  );
+export const listUserResources = (email: string) =>
+  request.get<ResponseData<AdminService.UserResourceMap>>(
+    adminListUserResources(email),
   );
 export const updateUserDepartment = (email: string, departmentId?: string) =>
   request.put<ResponseData<boolean>>(adminUpdateUserDepartment(email), {

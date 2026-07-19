@@ -286,6 +286,18 @@ def get_user_agents(username):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/users/<username>/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_user_resources(username):
+    try:
+        return success_response(UserServiceMgr.get_user_resources(username))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/teams", methods=["GET"])
 @login_required
 @check_admin_auth

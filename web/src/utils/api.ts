@@ -418,6 +418,8 @@ export default {
     `${restAPIv1}/admin/users/${username}/datasets`,
   adminListUserAgents: (username: string) =>
     `${restAPIv1}/admin/users/${username}/agents`,
+  adminListUserResources: (username: string) =>
+    `${restAPIv1}/admin/users/${username}/resources`,
   adminUpdateUserDepartment: (username: string) =>
     `${restAPIv1}/admin/users/${username}/department`,
   adminGetUserLoginUrl: (username: string) =>

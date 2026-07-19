@@ -164,6 +164,11 @@ declare namespace AdminService {
     deletable: boolean;
   };
 
+  export type UserResourceMap = Record<
+    ManagedResourceType,
+    ManagedResourceItem[]
+  >;
+
   export type ManagedResourceList = {
     resources: ManagedResourceItem[];
     total: number;
