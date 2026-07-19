@@ -17,10 +17,11 @@
 import base64
 import binascii
 import json
-import os
 import logging
+import os
 import re
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
@@ -1038,6 +1039,8 @@ class ResourceMgr:
                 config = row.pop("search_config", {}) or {}
                 row["dataset_count"] = len(set(config.get("kb_ids") or config.get("dataset_ids") or []))
                 row["document_count"] = len(set(config.get("doc_ids") or config.get("document_ids") or []))
+        elif resource_type == "file":
+            cls._attach_file_metrics(rows)
         for row in rows:
             row["resource_type"] = resource_type
             if not row.get("permission"):
@@ -1054,6 +1057,44 @@ class ResourceMgr:
             )
 
         return {"resources": rows, "total": total}
+
+    @staticmethod
+    def _attach_file_metrics(rows):
+        """Replace folder sizes with the sum of all descendant file sizes."""
+        if not rows:
+            return
+
+        rows_by_key = {(row["workspace_id"], row["id"]): row for row in rows}
+        children_by_parent = defaultdict(list)
+        for row in rows:
+            parent_id = row.get("parent_id")
+            key = (row["workspace_id"], row["id"])
+            parent_key = (row["workspace_id"], parent_id)
+            if parent_id and parent_key != key and parent_key in rows_by_key:
+                children_by_parent[parent_key].append(key)
+
+        totals = {}
+
+        def calculate_size(key, ancestors):
+            if key in totals:
+                return totals[key]
+            if key in ancestors:
+                return 0
+
+            row = rows_by_key[key]
+            if row.get("file_type") != FileType.FOLDER.value:
+                size = int(row.get("size", 0) or 0)
+            else:
+                size = sum(
+                    calculate_size(child_key, ancestors | {key})
+                    for child_key in children_by_parent.get(key, [])
+                )
+                row["size"] = size
+            totals[key] = size
+            return size
+
+        for key in rows_by_key:
+            calculate_size(key, set())
 
     @staticmethod
     def _attach_dataset_metrics(rows):
