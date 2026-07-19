@@ -364,6 +364,8 @@ declare namespace AdminService {
     provider_name: string;
     provider_id: string;
     owner_workspace_id: string;
+    owner_workspace_name: string;
+    owner_workspace: ModelWorkspace;
     instance_name: string;
     instance_id: string;
     api_key: string;
@@ -371,7 +373,8 @@ declare namespace AdminService {
     model_types: string[];
     max_tokens: number;
     status: 'active' | 'inactive';
-    visibility: 'all' | 'selected';
+    source: 'shared' | 'private';
+    visibility: 'all' | 'selected' | 'private';
     workspace_ids: string[];
     workspaces: ModelWorkspace[];
     created_by: string;

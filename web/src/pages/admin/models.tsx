@@ -112,6 +112,7 @@ export default function AdminModels() {
   const [providerFilters, setProviderFilters] = useState<string[]>([]);
   const [typeFilters, setTypeFilters] = useState<string[]>([]);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [visibilityFilters, setVisibilityFilters] = useState<string[]>([]);
   const [sort, setSort] = useState<SortState>({
     key: 'update_date',
@@ -153,7 +154,13 @@ export default function AdminModels() {
     const keyword = query.trim().toLocaleLowerCase();
     const rows = keyword
       ? models.filter((model) =>
-          [model.name, model.provider_name, model.instance_name, model.base_url]
+          [
+            model.name,
+            model.provider_name,
+            model.instance_name,
+            model.base_url,
+            model.owner_workspace.name,
+          ]
             .join(' ')
             .toLocaleLowerCase()
             .includes(keyword),
@@ -163,6 +170,7 @@ export default function AdminModels() {
       .filter(
         (model) =>
           matchesSelectedFilter(model.provider_name, providerFilters) &&
+          matchesSelectedFilter(model.source, sourceFilters) &&
           matchesSelectedFilter(model.status, statusFilters) &&
           matchesSelectedFilter(model.visibility, visibilityFilters) &&
           (!typeFilters.length ||
@@ -182,6 +190,7 @@ export default function AdminModels() {
     models,
     providerFilters,
     query,
+    sourceFilters,
     sort,
     statusFilters,
     typeFilters,
@@ -231,7 +240,7 @@ export default function AdminModels() {
       model_types: [...model.model_types],
       max_tokens: model.max_tokens,
       status: model.status,
-      visibility: model.visibility,
+      visibility: model.visibility === 'private' ? 'all' : model.visibility,
       workspace_ids: [...model.workspace_ids],
     });
     setDialogOpen(true);
@@ -249,6 +258,11 @@ export default function AdminModels() {
     form.instance_name.trim() &&
     form.model_types.length > 0 &&
     (form.visibility === 'all' || form.workspace_ids.length > 0);
+
+  const sharedModelCount = models.filter(
+    (model) => model.source === 'shared',
+  ).length;
+  const privateModelCount = models.length - sharedModelCount;
 
   return (
     <TooltipProvider>
@@ -268,7 +282,7 @@ export default function AdminModels() {
               </Button>
             </div>
 
-            <div className="grid max-w-xs gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border-0.5 border-border-button bg-bg-input p-4">
                 <div className="flex items-center justify-between text-xs text-text-secondary">
                   <span>{t('admin.modelManagementPage.total')}</span>
@@ -276,6 +290,24 @@ export default function AdminModels() {
                 </div>
                 <div className="mt-2 text-2xl font-semibold">
                   {models.length}
+                </div>
+              </div>
+              <div className="rounded-lg border-0.5 border-border-button bg-bg-input p-4">
+                <div className="flex items-center justify-between text-xs text-text-secondary">
+                  <span>{t('admin.modelManagementPage.sharedTotal')}</span>
+                  <BrainCircuit className="size-4" />
+                </div>
+                <div className="mt-2 text-2xl font-semibold">
+                  {sharedModelCount}
+                </div>
+              </div>
+              <div className="rounded-lg border-0.5 border-border-button bg-bg-input p-4">
+                <div className="flex items-center justify-between text-xs text-text-secondary">
+                  <span>{t('admin.modelManagementPage.privateTotal')}</span>
+                  <KeyRound className="size-4" />
+                </div>
+                <div className="mt-2 text-2xl font-semibold">
+                  {privateModelCount}
                 </div>
               </div>
             </div>
@@ -292,6 +324,22 @@ export default function AdminModels() {
                     ),
                     value: providerFilters,
                     onChange: setProviderFilters,
+                  },
+                  {
+                    id: 'source',
+                    label: t('admin.modelManagementPage.source'),
+                    options: [
+                      {
+                        value: 'shared',
+                        label: t('admin.modelManagementPage.sharedSource'),
+                      },
+                      {
+                        value: 'private',
+                        label: t('admin.modelManagementPage.privateSource'),
+                      },
+                    ],
+                    value: sourceFilters,
+                    onChange: setSourceFilters,
                   },
                   {
                     id: 'model-type',
@@ -333,6 +381,10 @@ export default function AdminModels() {
                           'admin.modelManagementPage.selectedWorkspaces',
                         ),
                       },
+                      {
+                        value: 'private',
+                        label: t('admin.modelManagementPage.privateVisibility'),
+                      },
                     ],
                     value: visibilityFilters,
                     onChange: setVisibilityFilters,
@@ -341,6 +393,7 @@ export default function AdminModels() {
                 resetLabel={t('admin.reset')}
                 onReset={() => {
                   setProviderFilters([]);
+                  setSourceFilters([]);
                   setTypeFilters([]);
                   setStatusFilters([]);
                   setVisibilityFilters([]);
@@ -366,6 +419,18 @@ export default function AdminModels() {
               >
                 <TableHeader>
                   <TableRow>
+                    <TableHead>
+                      {sortButton(
+                        t('admin.modelManagementPage.source'),
+                        'source',
+                      )}
+                    </TableHead>
+                    <TableHead>
+                      {sortButton(
+                        t('admin.modelManagementPage.ownerWorkspace'),
+                        'owner_workspace_name',
+                      )}
+                    </TableHead>
                     <TableHead>
                       {sortButton(
                         t('admin.modelManagementPage.modelName'),
@@ -415,6 +480,22 @@ export default function AdminModels() {
                     filteredModels.map((model) => (
                       <TableRow key={model.id}>
                         <TableCell>
+                          <Badge variant="secondary">
+                            {t(
+                              model.source === 'shared'
+                                ? 'admin.modelManagementPage.sharedSource'
+                                : 'admin.modelManagementPage.privateSource',
+                            )}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {`${t(
+                            model.owner_workspace.type === 'team'
+                              ? 'admin.teamWorkspace'
+                              : 'admin.personalWorkspace',
+                          )}-${model.owner_workspace.name}`}
+                        </TableCell>
+                        <TableCell>
                           <div className="font-medium">{model.name}</div>
                           <div className="max-w-48 truncate text-xs text-text-secondary">
                             {model.id}
@@ -449,7 +530,11 @@ export default function AdminModels() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {model.visibility === 'all' ? (
+                          {model.visibility === 'private' ? (
+                            <Badge variant="secondary">
+                              {t('admin.modelManagementPage.privateVisibility')}
+                            </Badge>
+                          ) : model.visibility === 'all' ? (
                             <Badge variant="secondary">
                               {t('admin.modelManagementPage.allWorkspaces')}
                             </Badge>
@@ -483,63 +568,72 @@ export default function AdminModels() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-center gap-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  aria-label={t(
-                                    'admin.resourceManagementPage.openInRagflow',
-                                    { name: model.name },
-                                  )}
-                                  onClick={() =>
-                                    openMainAppAsAdmin(
-                                      `${Routes.UserSetting}${Routes.Model}`,
-                                    )
-                                  }
-                                >
-                                  <ExternalLink className="size-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {t(
-                                  'admin.resourceManagementPage.openInRagflow',
-                                  { name: model.name },
-                                )}
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => openEdit(model)}
-                                >
-                                  <Pencil className="size-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {t('admin.modelManagementPage.editAction', {
-                                  name: model.name,
-                                })}
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => setDeleting(model)}
-                                >
-                                  <Trash2 className="size-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {t('admin.modelManagementPage.deleteAction', {
-                                  name: model.name,
-                                })}
-                              </TooltipContent>
-                            </Tooltip>
+                            {model.source === 'shared' ? (
+                              <>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      aria-label={t(
+                                        'admin.resourceManagementPage.openInRagflow',
+                                        { name: model.name },
+                                      )}
+                                      onClick={() =>
+                                        openMainAppAsAdmin(
+                                          `${Routes.UserSetting}${Routes.Model}`,
+                                        )
+                                      }
+                                    >
+                                      <ExternalLink className="size-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {t(
+                                      'admin.resourceManagementPage.openInRagflow',
+                                      { name: model.name },
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => openEdit(model)}
+                                    >
+                                      <Pencil className="size-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {t('admin.modelManagementPage.editAction', {
+                                      name: model.name,
+                                    })}
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={() => setDeleting(model)}
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {t(
+                                      'admin.modelManagementPage.deleteAction',
+                                      { name: model.name },
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </>
+                            ) : (
+                              <span className="text-xs text-text-secondary">
+                                {t('admin.modelManagementPage.monitorOnly')}
+                              </span>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -547,7 +641,7 @@ export default function AdminModels() {
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={8}
+                        colSpan={10}
                         className="h-40 text-center text-text-secondary"
                       >
                         {t('common.noData')}

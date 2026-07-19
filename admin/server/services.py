@@ -59,6 +59,7 @@ from api.db.db_models import (
     Search,
     Task,
     Tenant,
+    TenantModel,
     TenantModelInstance,
     TenantModelProvider,
     User,
@@ -1995,9 +1996,9 @@ class AdminModelMgr:
     @classmethod
     def list_models(cls) -> list[dict[str, Any]]:
         entries = SharedModelService.list_entries()
-        if not entries:
+        models = {model.id: model for model in TenantModel.select()}
+        if not models:
             return []
-        models = {model.id: model for model in TenantModelService.get_models_by_ids(set(entries))}
         provider_ids = {model.provider_id for model in models.values()}
         instance_ids = {model.instance_id for model in models.values()}
         providers = {
@@ -2010,15 +2011,19 @@ class AdminModelMgr:
         }
         workspaces = {workspace["id"]: workspace for workspace in cls.list_workspaces()}
         rows = []
-        for model_id, entry in entries.items():
-            model = models.get(model_id)
-            provider = providers.get(model.provider_id) if model else None
-            instance = instances.get(model.instance_id) if model else None
-            if not model or not provider or not instance:
+        for model in models.values():
+            provider = providers.get(model.provider_id)
+            instance = instances.get(model.instance_id)
+            if not provider or not instance:
                 continue
+            entry = entries.get(model.id)
+            owner_workspace = workspaces.get(
+                provider.tenant_id,
+                {"id": provider.tenant_id, "name": provider.tenant_id, "type": "team"},
+            )
             instance_extra = cls._parse_extra(instance.extra)
             model_extra = cls._parse_extra(model.extra)
-            target_ids = entry.get("workspace_ids") or []
+            target_ids = (entry.get("workspace_ids") or []) if entry else [provider.tenant_id]
             rows.append(
                 {
                     "id": model.id,
@@ -2026,6 +2031,8 @@ class AdminModelMgr:
                     "provider_name": provider.provider_name,
                     "provider_id": provider.id,
                     "owner_workspace_id": provider.tenant_id,
+                    "owner_workspace_name": owner_workspace["name"],
+                    "owner_workspace": owner_workspace,
                     "instance_name": instance.instance_name,
                     "instance_id": instance.id,
                     "api_key": instance.api_key,
@@ -2033,10 +2040,11 @@ class AdminModelMgr:
                     "model_types": get_model_type_human(model.model_type),
                     "max_tokens": int(model_extra.get("max_tokens") or 8192),
                     "status": model.status,
-                    "visibility": entry.get("visibility", "all"),
+                    "source": "shared" if entry else "private",
+                    "visibility": entry.get("visibility", "all") if entry else "private",
                     "workspace_ids": target_ids,
                     "workspaces": [workspaces[workspace_id] for workspace_id in target_ids if workspace_id in workspaces],
-                    "created_by": entry.get("created_by", ""),
+                    "created_by": entry.get("created_by", "") if entry else provider.tenant_id,
                     "create_date": model.create_date,
                     "update_date": model.update_date,
                 }
