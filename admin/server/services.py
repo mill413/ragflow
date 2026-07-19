@@ -336,7 +336,14 @@ class UserMgr:
                     fn.COUNT(Document.id).alias("uploaded_documents"),
                     fn.COALESCE(fn.SUM(Document.size), 0).alias("uploaded_storage_bytes"),
                 )
-                .where((Document.created_by.in_(user_ids)) & (Document.status == valid))
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+                .where(
+                    (Document.created_by.in_(user_ids))
+                    & (Document.status == valid)
+                    & (Knowledgebase.status == valid)
+                    & (Tenant.status == valid)
+                )
                 .group_by(Document.created_by)
                 .dicts()
             )
@@ -1462,7 +1469,16 @@ class MonitoringMgr:
             .count()
         )
         datasets_total = Knowledgebase.select().where(Knowledgebase.status == valid).count()
-        documents = Document.select().where(Document.status == valid)
+        documents = (
+            Document.select()
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+            .where(
+                (Document.status == valid)
+                & (Knowledgebase.status == valid)
+                & (Tenant.status == valid)
+            )
+        )
         documents_total = documents.count()
         storage_bytes = documents.select(fn.COALESCE(fn.SUM(Document.size), 0)).scalar() or 0
         files = (
@@ -1506,15 +1522,20 @@ class MonitoringMgr:
     def get_storage_distribution():
         valid = StatusEnum.VALID.value
         rows = list(
-            File.select(
-                File.tenant_id.alias("workspace_id"),
-                fn.COUNT(File.id).alias("files_total"),
-                fn.COALESCE(fn.SUM(File.size), 0).alias("storage_bytes"),
+            Document.select(
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                fn.COUNT(Document.id).alias("files_total"),
+                fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
             )
-            .join(Tenant, on=(File.tenant_id == Tenant.id))
-            .where((File.type != FileType.FOLDER.value) & (Tenant.status == valid))
-            .group_by(File.tenant_id)
-            .order_by(fn.SUM(File.size).desc(), File.tenant_id.asc())
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+            .where(
+                (Document.status == valid)
+                & (Knowledgebase.status == valid)
+                & (Tenant.status == valid)
+            )
+            .group_by(Knowledgebase.tenant_id)
+            .order_by(fn.SUM(Document.size).desc(), Knowledgebase.tenant_id.asc())
             .dicts()
         )
         ResourceMgr._attach_ownership(rows)

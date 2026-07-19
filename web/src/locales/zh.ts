@@ -3106,7 +3106,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
         share: '共享',
       },
 
-      serviceStatus: '服务状态',
+      serviceStatus: '总览',
       userManagement: '用户管理',
       teamManagement: {
         title: '团队管理',
@@ -3164,7 +3164,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       roles: '角色管理',
 
       monitoringPage: {
-        title: '运行监控',
+        title: '总览',
         description:
           '实时查看业务规模、知识处理情况和存储分布，每 30 秒自动刷新。',
         refresh: '刷新',
@@ -3173,7 +3173,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
         teams: '团队总数',
         datasets: '知识库',
         files: '文件',
-        storage: '存储总量',
+        storage: '知识库存储总量',
         chats: '聊天',
         searches: '搜索',
         agents: '智能体',

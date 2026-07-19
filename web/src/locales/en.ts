@@ -3396,7 +3396,7 @@ Important structured information may include: names, dates, locations, events, k
         share: 'Share',
       },
 
-      serviceStatus: 'Service status',
+      serviceStatus: 'Overview',
       userManagement: 'User management',
       teamManagement: {
         title: 'Team management',
@@ -3455,7 +3455,7 @@ Important structured information may include: names, dates, locations, events, k
       roles: 'Roles',
 
       monitoringPage: {
-        title: 'Operations monitoring',
+        title: 'Overview',
         description:
           'Live business, ingestion, and storage metrics. Refreshes every 30 seconds.',
         refresh: 'Refresh',
@@ -3464,7 +3464,7 @@ Important structured information may include: names, dates, locations, events, k
         teams: 'Teams',
         datasets: 'Datasets',
         files: 'Files',
-        storage: 'Total storage',
+        storage: 'Dataset storage',
         chats: 'Chats',
         searches: 'Searches',
         agents: 'Agents',

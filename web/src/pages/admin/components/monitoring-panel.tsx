@@ -139,7 +139,7 @@ export default function MonitoringPanel() {
       {
         label: t('admin.monitoringPage.storage'),
         value: data
-          ? formatBytes(data.files_storage_bytes, { decimals: 1 })
+          ? formatBytes(data.storage_bytes, { decimals: 1 })
           : undefined,
         icon: HardDrive,
       },
