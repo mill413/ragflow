@@ -1,6 +1,6 @@
 import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 
@@ -9,6 +9,8 @@ import {
   LucideBot,
   LucideBrain,
   LucideBuilding2,
+  LucideChevronDown,
+  LucideChevronRight,
   LucideFile,
   LucideFileSearch,
   LucideLogOut,
@@ -37,6 +39,7 @@ import { IS_ENTERPRISE } from '../utils';
 import { CurrentUserInfoContext } from './root-layout';
 
 const ADMIN_SIDEBAR_COLLAPSED_KEY = 'admin-sidebar-collapsed';
+const ADMIN_RESOURCE_MENU_EXPANDED_KEY = 'admin-resource-menu-expanded';
 
 type AdminNavigationItem = {
   path: string;
@@ -48,10 +51,17 @@ type AdminNavigationItem = {
 const AdminNavigationLayout = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [, setCurrentUserInfo] = useContext(CurrentUserInfoContext);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY) !== 'false';
+  });
+  const [resourceMenuExpanded, setResourceMenuExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return (
+      window.localStorage.getItem(ADMIN_RESOURCE_MENU_EXPANDED_KEY) !== 'false'
+    );
   });
 
   const { data: version } = useQuery({
@@ -167,6 +177,16 @@ const AdminNavigationLayout = () => {
       return next;
     });
   };
+  const toggleResourceMenu = () => {
+    setResourceMenuExpanded((expanded) => {
+      const next = !expanded;
+      window.localStorage.setItem(
+        ADMIN_RESOURCE_MENU_EXPANDED_KEY,
+        String(next),
+      );
+      return next;
+    });
+  };
 
   return (
     <main className="relative w-screen h-screen flex flex-row gap-6 px-3 pt-12 pb-3 dark:*:focus-visible:ring-white">
@@ -224,31 +244,66 @@ const AdminNavigationLayout = () => {
           <ul className="space-y-2">
             {navItems.map((it) => (
               <li key={it.path}>
-                <NavLink
-                  to={it.path}
-                  end={!it.children}
-                  className={({ isActive }) =>
-                    cn(
-                      'px-4 py-3 rounded-lg',
-                      'text-base w-full flex items-center justify-start text-text-secondary',
-                      'hover:bg-bg-card focus:bg-bg-card focus-visible:bg-bg-card',
-                      'hover:text-text-primary focus:text-text-primary focus-visible:text-text-primary',
-                      'active:text-text-primary',
-                      'transition-colors',
+                {it.children ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      'relative flex w-full items-center justify-start rounded-lg px-4 py-3 text-base text-text-secondary transition-colors',
+                      'hover:bg-bg-card hover:text-text-primary focus:bg-bg-card focus:text-text-primary focus-visible:bg-bg-card focus-visible:text-text-primary',
                       sidebarCollapsed && 'justify-center px-0',
-                      {
-                        'bg-bg-card text-text-primary': isActive,
-                      },
-                    )
-                  }
-                  title={sidebarCollapsed ? it.name : undefined}
-                >
-                  {it.icon}
-                  {!sidebarCollapsed && (
-                    <span className="ml-3 whitespace-nowrap">{it.name}</span>
-                  )}
-                </NavLink>
-                {it.children && (
+                      it.children.some((child) =>
+                        location.pathname.startsWith(child.path),
+                      ) && 'bg-bg-card text-text-primary',
+                    )}
+                    title={sidebarCollapsed ? it.name : undefined}
+                    aria-label={it.name}
+                    aria-expanded={resourceMenuExpanded}
+                    onClick={toggleResourceMenu}
+                  >
+                    {it.icon}
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="ml-3 whitespace-nowrap">
+                          {it.name}
+                        </span>
+                        {resourceMenuExpanded ? (
+                          <LucideChevronDown className="ml-auto size-4" />
+                        ) : (
+                          <LucideChevronRight className="ml-auto size-4" />
+                        )}
+                      </>
+                    )}
+                    {sidebarCollapsed &&
+                      (resourceMenuExpanded ? (
+                        <LucideChevronDown className="absolute right-0 size-3" />
+                      ) : (
+                        <LucideChevronRight className="absolute right-0 size-3" />
+                      ))}
+                  </button>
+                ) : (
+                  <NavLink
+                    to={it.path}
+                    className={({ isActive }) =>
+                      cn(
+                        'px-4 py-3 rounded-lg',
+                        'text-base w-full flex items-center justify-start text-text-secondary',
+                        'hover:bg-bg-card focus:bg-bg-card focus-visible:bg-bg-card',
+                        'hover:text-text-primary focus:text-text-primary focus-visible:text-text-primary',
+                        'active:text-text-primary',
+                        'transition-colors',
+                        sidebarCollapsed && 'justify-center px-0',
+                        isActive && 'bg-bg-card text-text-primary',
+                      )
+                    }
+                    title={sidebarCollapsed ? it.name : undefined}
+                  >
+                    {it.icon}
+                    {!sidebarCollapsed && (
+                      <span className="ml-3 whitespace-nowrap">{it.name}</span>
+                    )}
+                  </NavLink>
+                )}
+                {it.children && resourceMenuExpanded && (
                   <ul
                     className={cn(
                       'mt-1 space-y-1',
