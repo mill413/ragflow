@@ -37,6 +37,25 @@ declare namespace AdminService {
 
   export type TeamMemberRole = 'owner' | 'admin' | 'normal' | 'invite';
 
+  export type ResourceQuota = {
+    file_count_limit: number | null;
+    storage_bytes_limit: number | null;
+    file_count_used: number;
+    storage_bytes_used: number;
+  };
+
+  export type ResourceQuotaScopeType = 'personal' | 'team' | 'dataset';
+
+  export type ResourceQuotaItem = ResourceQuota & {
+    scope_type: ResourceQuotaScopeType;
+    scope_id: string;
+    name: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type?: 'personal' | 'team';
+    email?: string;
+  };
+
   export type Team = {
     id: string;
     name: string;
@@ -48,6 +67,7 @@ declare namespace AdminService {
     dataset_count: number;
     document_count: number;
     storage_bytes: number;
+    quota: ResourceQuota;
     create_date: string;
     update_date: string;
   };
@@ -101,6 +121,7 @@ declare namespace AdminService {
     status: '0' | '1';
     update_date: string;
     role: string;
+    quota: ResourceQuota;
   };
 
   export type ListUserDatasetItem = {
@@ -128,10 +149,12 @@ declare namespace AdminService {
     | 'chat'
     | 'agent'
     | 'search'
-    | 'memory';
+    | 'memory'
+    | 'file';
 
   export type ManagedResourceItem = {
     id: string;
+    resource_type: ManagedResourceType;
     name: string;
     workspace_id: string;
     workspace_name: string;
@@ -147,10 +170,167 @@ declare namespace AdminService {
     storage_bytes?: number;
     failed_documents?: number;
     processing_documents?: number;
+    dataset_count?: number;
+    document_count?: number;
+    session_count?: number;
+    web_session_count?: number;
+    api_session_count?: number;
+    release?: boolean;
+    canvas_type?: string;
+    memory_type?: number;
+    storage_type?: string;
+    memory_size?: number;
+    size?: number;
+    parent_id?: string;
+    file_type?: string;
+    source_type?: string;
+    deletable: boolean;
+    quota?: ResourceQuota;
+  };
+
+  export type UserModelConfig = {
+    id: string;
+    name: string;
+    provider_name: string;
+    instance_name: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status: 'active' | 'inactive';
+    create_date: string;
+    update_date: string;
+  };
+
+  export type UserDefaultModelConfig = {
+    model_type: string;
+    model_name: string;
+    model_id: string;
+  };
+
+  export type UserModelConfiguration = {
+    defaults: UserDefaultModelConfig[];
+    models: UserModelConfig[];
+  };
+
+  export type WorkspaceResourceMap = Record<
+    ManagedResourceType,
+    ManagedResourceItem[]
+  > & {
+    model: UserModelConfiguration;
   };
 
   export type ManagedResourceList = {
     resources: ManagedResourceItem[];
+    total: number;
+  };
+
+  export type DatasetDocumentDetail = {
+    id: string;
+    name: string;
+    creator_id?: string;
+    creator_name?: string;
+    file_type?: string;
+    suffix?: string;
+    source_type?: string;
+    size: number;
+    parser_id?: string;
+    pipeline_id?: string;
+    parser_config?: Record<string, unknown>;
+    chunk_num: number;
+    token_num: number;
+    progress: number;
+    progress_msg?: string;
+    process_begin_at?: string;
+    process_duration?: number;
+    run?: string;
+    parse_status: 'pending' | 'processing' | 'completed' | 'failed';
+    create_date: string;
+    update_date: string;
+  };
+
+  export type DatasetResourceDetail = ManagedResourceItem & {
+    description?: string;
+    language?: string;
+    embd_id?: string;
+    parser_id?: string;
+    pipeline_id?: string;
+    parser_config?: Record<string, unknown>;
+    pagerank?: number;
+    similarity_threshold?: number;
+    vector_similarity_weight?: number;
+  };
+
+  export type DatasetResourceDetailResponse = {
+    dataset: DatasetResourceDetail;
+    documents: DatasetDocumentDetail[];
+    document_total: number;
+  };
+
+  export type StandardManagedResourceDetail = ManagedResourceItem & {
+    description?: string;
+    language?: string;
+    llm_id?: string;
+    rerank_id?: string;
+    prompt_type?: string;
+    similarity_threshold?: number;
+    vector_similarity_weight?: number;
+    top_n?: number;
+    top_k?: number;
+    do_refer?: string;
+    canvas_category?: string;
+    tags?: string;
+    embd_id?: string;
+    forgetting_policy?: string;
+    location?: string;
+  };
+
+  export type RelatedManagedResource = {
+    resource_type: ManagedResourceType;
+    id: string;
+    name: string;
+    detail?: string;
+  };
+
+  export type StandardManagedResourceDetailResponse = {
+    resource: StandardManagedResourceDetail;
+    configuration: Record<string, unknown>;
+    related_resources: RelatedManagedResource[];
+  };
+
+  export type ManagedChatSessionSource = 'web' | 'chatbot' | 'openai';
+
+  export type ManagedChatSession = {
+    id: string;
+    name?: string;
+    source: ManagedChatSessionSource;
+    user_id?: string;
+    external_user_id?: string;
+    actor_id?: string;
+    actor_name?: string;
+    message_count: number;
+    round?: number;
+    tokens?: number;
+    duration?: number;
+    errors?: string;
+    create_date?: string;
+    update_date?: string;
+  };
+
+  export type ManagedChatMessage = {
+    id?: string;
+    role: string;
+    content: string;
+    created_at?: number;
+  };
+
+  export type ManagedChatSessionDetail = ManagedChatSession & {
+    messages: ManagedChatMessage[];
+    references: unknown[];
+  };
+
+  export type ManagedChatSessionList = {
+    sessions: ManagedChatSession[];
     total: number;
   };
 
@@ -170,6 +350,49 @@ declare namespace AdminService {
   export type FailedDocumentList = {
     documents: FailedDocumentItem[];
     total: number;
+  };
+
+  export type ModelWorkspace = {
+    id: string;
+    name: string;
+    type: 'personal' | 'team';
+  };
+
+  export type ManagedModel = {
+    id: string;
+    name: string;
+    provider_name: string;
+    provider_id: string;
+    owner_workspace_id: string;
+    owner_workspace_name: string;
+    owner_workspace: ModelWorkspace;
+    instance_name: string;
+    instance_id: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status: 'active' | 'inactive';
+    source: 'shared' | 'private';
+    visibility: 'all' | 'selected' | 'private';
+    workspace_ids: string[];
+    workspaces: ModelWorkspace[];
+    created_by: string;
+    create_date: string;
+    update_date: string;
+  };
+
+  export type ManagedModelInput = {
+    provider_name: string;
+    instance_name: string;
+    model_name: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status?: 'active' | 'inactive';
+    visibility: 'all' | 'selected';
+    workspace_ids: string[];
   };
 
   export type TaskExecutorHeartbeatItem = {
@@ -213,8 +436,7 @@ declare namespace AdminService {
     workspace_id: string;
     workspace_name: string;
     workspace_type: 'personal' | 'team';
-    datasets_total: number;
-    documents_total: number;
+    files_total: number;
     storage_bytes: number;
   };
 
@@ -225,11 +447,15 @@ declare namespace AdminService {
     datasets_total: number;
     documents_total: number;
     storage_bytes: number;
+    files_total: number;
+    files_storage_bytes: number;
     failed_documents: number;
     processing_documents: number;
     pending_tasks: number;
     chats_total: number;
+    searches_total: number;
     agents_total: number;
+    memories_total: number;
     storage_distribution: MonitoringStorageItem[];
   };
 

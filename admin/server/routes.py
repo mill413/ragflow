@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 
+import asyncio
 import logging
 from typing import Any
 
@@ -24,9 +25,24 @@ from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
-from services import UserMgr, TeamMgr, OrganizationMgr, ServiceMgr, UserServiceMgr, ResourceMgr, MonitoringMgr, SettingsMgr, ConfigMgr, EnvironmentsMgr, SandboxMgr
+from services import (
+    AdminModelMgr,
+    ConfigMgr,
+    EnvironmentsMgr,
+    MonitoringMgr,
+    OrganizationMgr,
+    QuotaMgr,
+    ResourceMgr,
+    SandboxMgr,
+    ServiceMgr,
+    SettingsMgr,
+    TeamMgr,
+    UserMgr,
+    UserServiceMgr,
+)
 from roles import RoleMgr
 from api.common.exceptions import AdminException
+from common.exceptions import ResourceInUseException
 from common.versions import get_ragflow_version
 from api.utils.api_utils import generate_confirmation_token
 from common.log_utils import get_log_levels, set_log_level
@@ -191,6 +207,20 @@ def change_password(username):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/users/<username>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_user_quota(username):
+    try:
+        return success_response(UserMgr.update_user_quota(username, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/users/<username>/activate", methods=["PUT"])
 @login_required
 @check_admin_auth
@@ -284,6 +314,18 @@ def get_user_agents(username):
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/users/<username>/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_user_resources(username):
+    try:
+        return success_response(UserServiceMgr.get_user_resources(username))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/teams", methods=["GET"])
 @login_required
 @check_admin_auth
@@ -345,6 +387,33 @@ def list_team_members(team_id):
     except AdminException as e:
         return error_response(e.message, e.code)
     except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_team_quota(team_id):
+    try:
+        return success_response(TeamMgr.update_quota(team_id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/teams/<team_id>/resources", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_team_resources(team_id):
+    try:
+        return success_response(TeamMgr.get_resources(team_id))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to list team resources")
         return error_response(str(e), 500)
 
 
@@ -441,7 +510,20 @@ def list_resources():
         page = max(int(request.args.get("page", 1)), 1)
         page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
         keywords = request.args.get("keywords", "")
-        return success_response(ResourceMgr.list_resources(resource_type, page, page_size, keywords))
+        workspace_ids = [
+            value for value in request.args.get("workspace_ids", "").split(",") if value
+        ]
+        hierarchy = request.args.get("hierarchy", "").lower() in {"1", "true", "yes"}
+        return success_response(
+            ResourceMgr.list_resources(
+                resource_type,
+                page,
+                page_size,
+                keywords,
+                workspace_ids,
+                hierarchy,
+            )
+        )
     except AdminException as e:
         return error_response(e.message, e.code)
     except (TypeError, ValueError) as e:
@@ -459,11 +541,229 @@ def list_failed_documents():
         page = max(int(request.args.get("page", 1)), 1)
         page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
         keywords = request.args.get("keywords", "")
-        return success_response(ResourceMgr.list_failed_documents(page, page_size, keywords))
+        workspace_ids = [
+            value for value in request.args.get("workspace_ids", "").split(",") if value
+        ]
+        return success_response(
+            ResourceMgr.list_failed_documents(page, page_size, keywords, workspace_ids)
+        )
     except (TypeError, ValueError) as e:
         return error_response(str(e), 400)
     except Exception as e:
         logging.exception("Failed to list failed documents")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_resource_detail(resource_type, resource_id):
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        return success_response(
+            ResourceMgr.get_resource_detail(resource_type, resource_id, page, page_size)
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to get admin resource detail")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/chat/<resource_id>/sessions", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_chat_sessions(resource_id):
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        page_size = min(max(int(request.args.get("page_size", 20)), 1), 100)
+        sources = [value for value in request.args.get("sources", "").split(",") if value]
+        return success_response(
+            ResourceMgr.list_chat_sessions(
+                resource_id,
+                page,
+                page_size,
+                sources,
+                request.args.get("keywords", ""),
+            )
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to list admin chat sessions")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/chat/<resource_id>/sessions/<session_id>", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_chat_session_detail(resource_id, session_id):
+    try:
+        return success_response(
+            ResourceMgr.get_chat_session_detail(
+                resource_id,
+                session_id,
+                request.args.get("source", "web"),
+            )
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to get admin chat session detail")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/<resource_type>/<resource_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_resource(resource_type, resource_id):
+    try:
+        return success_response(
+            asyncio.run(
+                ResourceMgr.delete_resource(
+                    resource_type,
+                    resource_id,
+                    current_user.id,
+                    request.headers.get("Authorization", ""),
+                )
+            )
+        )
+    except ResourceInUseException as e:
+        reference_names = ", ".join(
+            f'{reference["resource_type"]}: {reference["resource_name"] or reference["resource_id"]}'
+            for reference in e.references
+        )
+        return error_response(
+            f"Resource is referenced and cannot be deleted. Referenced by: {reference_names}",
+            409,
+            {"reason": "resource_in_use", "targets": e.targets, "references": e.references},
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to delete admin resource")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/resources/dataset/<resource_id>/quota", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_dataset_quota(resource_id):
+    try:
+        return success_response(
+            ResourceMgr.update_dataset_quota(resource_id, request.get_json() or {})
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/quotas", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_quotas():
+    try:
+        return success_response(QuotaMgr.list_quotas())
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/quotas/<scope_type>/<scope_id>", methods=["PUT"])
+@login_required
+@check_admin_auth
+def update_quota(scope_type, scope_id):
+    try:
+        return success_response(
+            QuotaMgr.update_quota(scope_type, scope_id, request.get_json() or {})
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_managed_models():
+    try:
+        return success_response(AdminModelMgr.list_models())
+    except Exception as e:
+        logging.exception("Failed to list managed models")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/workspaces", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_model_workspaces():
+    try:
+        return success_response(AdminModelMgr.list_workspaces())
+    except Exception as e:
+        logging.exception("Failed to list model workspaces")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_managed_model():
+    try:
+        return success_response(AdminModelMgr.create_model(current_user.id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to create managed model")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/<model_id>", methods=["PATCH"])
+@login_required
+@check_admin_auth
+def update_managed_model(model_id):
+    try:
+        return success_response(AdminModelMgr.update_model(model_id, request.get_json() or {}))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to update managed model")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/<model_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_managed_model(model_id):
+    try:
+        return success_response(AdminModelMgr.delete_model(model_id))
+    except ResourceInUseException as e:
+        reference_names = ", ".join(
+            f'{reference["resource_type"]}: {reference["resource_name"] or reference["resource_id"]}'
+            for reference in e.references
+        )
+        return error_response(
+            f"Model is referenced and cannot be deleted. Referenced by: {reference_names}",
+            409,
+            {"reason": "resource_in_use", "targets": e.targets, "references": e.references},
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to delete managed model")
         return error_response(str(e), 500)
 
 

@@ -38,6 +38,8 @@ describe('locale completeness', () => {
     'common.mcp.namePlaceholder',
     'error_boundary.title',
     'fileManager.dropFilesHere',
+    'login.signInWith',
+    'login.title',
     'memory.taskLogDialog.title',
     'message.error',
     'setting.S3CompatibleEndpointUrlTip',

@@ -6,10 +6,13 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Network,
   Pencil,
   Plus,
   Search,
   Trash2,
+  UserCheck,
+  UserMinus,
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
@@ -55,10 +58,13 @@ import {
   createDepartment,
   deleteDepartment,
   listDepartments,
+  listUsers,
   updateDepartment,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import { matchesSelectedFilter } from './components/table-filter-utils';
 
 type DepartmentTreeNode = AdminService.Department & {
   children: DepartmentTreeNode[];
@@ -75,17 +81,35 @@ export default function AdminDepartments() {
   const [parentId, setParentId] = useState('none');
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
+  const [parentFilters, setParentFilters] = useState<string[]>([]);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<{
     key: DepartmentSortKey;
     direction: 'asc' | 'desc';
   }>({ key: 'path', direction: 'asc' });
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ['admin/departments', query],
-    queryFn: async () => (await listDepartments(query)).data.data,
+  const { data: allDepartments = [] } = useQuery({
+    queryKey: ['admin/departments'],
+    queryFn: async () => (await listDepartments()).data.data,
     retry: false,
   });
+  const { data: searchedDepartments = [] } = useQuery({
+    queryKey: ['admin/departments', 'search', query],
+    queryFn: async () => (await listDepartments(query)).data.data,
+    enabled: Boolean(query),
+    retry: false,
+  });
+  const { data: users = [] } = useQuery({
+    queryKey: ['admin/listUsers'],
+    queryFn: async () => (await listUsers()).data.data,
+    retry: false,
+  });
+  const departments = query ? searchedDepartments : allDepartments;
+  const rootDepartments = allDepartments.filter(
+    (department) => !department.parent_id,
+  ).length;
+  const assignedUsers = users.filter((user) => user.department_id).length;
+  const unassignedUsers = users.length - assignedUsers;
 
   const departmentRows = useMemo(() => {
     const nodes = new Map<string, DepartmentTreeNode>();
@@ -120,14 +144,16 @@ export default function AdminDepartments() {
     const visit = (items: DepartmentTreeNode[], depth: number) => {
       items.forEach((department) => {
         rows.push({ department, depth });
-        if (!collapsedIds.has(department.id)) {
+        if (parentFilters.length > 0 || !collapsedIds.has(department.id)) {
           visit(department.children, depth + 1);
         }
       });
     };
     visit(roots, 0);
-    return rows;
-  }, [collapsedIds, departments, sort]);
+    return rows.filter(({ department }) =>
+      matchesSelectedFilter(department.parent_id || 'root', parentFilters),
+    );
+  }, [collapsedIds, departments, parentFilters, sort]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -188,13 +214,68 @@ export default function AdminDepartments() {
       <Spotlight />
       <ScrollArea className="size-full">
         <CardHeader className="space-y-6">
-          <div>
-            <CardTitle>{t('admin.departmentManagement')}</CardTitle>
-            <div className="mt-2 text-sm text-text-secondary">
-              {t('admin.departmentDescription')}
+          <div className="flex items-center justify-between gap-6">
+            <div>
+              <CardTitle>{t('admin.departmentManagement')}</CardTitle>
+              <div className="mt-2 text-sm text-text-secondary">
+                {t('admin.departmentDescription')}
+              </div>
             </div>
+            <Button onClick={openCreate}>
+              <Plus /> {t('admin.newDepartment')}
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              [t('admin.departmentTotal'), allDepartments.length, Building2],
+              [t('admin.rootDepartments'), rootDepartments, Network],
+              [t('admin.assignedDepartmentUsers'), assignedUsers, UserCheck],
+              [
+                t('admin.unassignedDepartmentUsers'),
+                unassignedUsers,
+                UserMinus,
+              ],
+            ].map(([label, value, Icon]) => {
+              const MetricIcon = Icon as typeof Building2;
+              return (
+                <div
+                  key={String(label)}
+                  className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
+                >
+                  <div className="flex items-center justify-between text-xs text-text-secondary">
+                    <span>{String(label)}</span>
+                    <MetricIcon className="size-4" />
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold">
+                    {String(value)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <AdminTableMultiFilters
+              filters={[
+                {
+                  id: 'parent-department',
+                  label: t('admin.parentDepartment'),
+                  options: [
+                    {
+                      value: 'root',
+                      label: t('admin.noParentDepartment'),
+                    },
+                    ...departments.map((department) => ({
+                      value: department.id,
+                      label: department.path,
+                    })),
+                  ],
+                  value: parentFilters,
+                  onChange: setParentFilters,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => setParentFilters([])}
+            />
             <Input
               className="w-64 bg-bg-input border-border-button"
               value={searchInput}
@@ -207,13 +288,10 @@ export default function AdminDepartments() {
             <Button variant="outline" onClick={applySearch}>
               <Search /> {t('admin.query')}
             </Button>
-            <Button onClick={openCreate}>
-              <Plus /> {t('admin.newDepartment')}
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table rootClassName="max-w-full [contain:inline-size]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[25%]">
@@ -228,7 +306,7 @@ export default function AdminDepartments() {
                     {getSortIcon(sort.key === 'path' ? sort.direction : false)}
                   </Button>
                 </TableHead>
-                <TableHead className="w-[13%]">
+                <TableHead className="w-[13%] text-center">
                   <Button
                     variant="ghost"
                     onClick={() => toggleSort('user_count')}
@@ -282,7 +360,9 @@ export default function AdminDepartments() {
                         </div>
                       </TableCell>
                       <TableCell>{department.path}</TableCell>
-                      <TableCell>{department.user_count ?? 0}</TableCell>
+                      <TableCell className="text-center">
+                        {department.user_count ?? 0}
+                      </TableCell>
                       <TableCell>
                         {department.created_at
                           ? formatDate(department.created_at)

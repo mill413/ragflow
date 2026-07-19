@@ -26,6 +26,19 @@ export function formatBytes(
   }`;
 }
 
+export function formatDecimalBytes(
+  bytes: number,
+  opts: {
+    decimals?: number;
+  } = {},
+) {
+  const { decimals = 0 } = opts;
+  const sizes = ['Bytes', 'kB', 'MB', 'GB', 'TB', 'PB'];
+  if (bytes === 0) return '0 Byte';
+  const i = Math.floor(Math.log(bytes) / Math.log(1000));
+  return `${(bytes / Math.pow(1000, i)).toFixed(decimals)} ${sizes[i] ?? 'Bytes'}`;
+}
+
 export function combineRefs<T>(...refs: React.ForwardedRef<T>[]) {
   return (node: T) => {
     refs.forEach((ref) => {

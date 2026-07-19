@@ -1,25 +1,33 @@
-import { useContext, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router';
 
-import { LucideArrowLeft, LucidePencil } from 'lucide-react';
+import {
+  Activity,
+  Building2,
+  CalendarPlus,
+  Clock3,
+  EyeOff,
+  Gauge,
+  KeyRound,
+  Languages,
+  LogIn,
+  LucidePencil,
+  ShieldCheck,
+  StickyNote,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from '@tanstack/react-table';
-
-import { Routes } from '@/routes';
-
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
-import Spotlight from '@/components/spotlight';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +41,13 @@ import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
   Table,
   TableBody,
   TableCell,
@@ -40,7 +55,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -53,9 +68,9 @@ import {
 import {
   getUserDetails,
   listDepartments,
-  listUserAgents,
-  listUserDatasets,
+  listUserResources,
   updateUser,
+  updateUserQuota,
 } from '@/services/admin-service';
 import { rsaPsw } from '@/utils';
 import { formatDate } from '@/utils/date';
@@ -64,208 +79,440 @@ import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
 import DepartmentTreeSelect from './components/department-tree-select';
 import { UserStatusBadge, UserStatusText } from './components/user-status';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
+import { DetailInformationCard } from './components/detail-information-card';
+import { AdminDetailTabsTrigger } from './components/detail-tabs-trigger';
+import { StorageSize } from './components/storage-size';
+import {
+  AdminFileTreeName,
+  type AdminFileTreeRow,
+  buildAdminFileTreeRows,
+} from './components/file-tree';
+import { UserModelConfiguration } from './components/user-model-configuration';
+import {
+  ResourceQuotaCards,
+  ResourceQuotaDialog,
+} from './components/resource-quota';
 
-const ASSET_NAMES = ['dataset', 'flow'];
+export const WORKSPACE_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
+  'dataset',
+  'chat',
+  'search',
+  'agent',
+  'memory',
+  'file',
+];
+type ResourceColumn = {
+  key: keyof AdminService.ManagedResourceItem;
+  label: string;
+  numeric?: boolean;
+  render: (resource: AdminService.ManagedResourceItem) => ReactNode;
+};
 
-const datasetColumnHelper =
-  createColumnHelper<AdminService.ListUserDatasetItem>();
-const agentColumnHelper = createColumnHelper<AdminService.ListUserAgentItem>();
+type SortState = {
+  key: keyof AdminService.ManagedResourceItem;
+  direction: 'asc' | 'desc';
+};
 
-function UserDatasetTable(props: {
-  data?: AdminService.ListUserDatasetItem[];
+function workspaceLabel(
+  resource: AdminService.ManagedResourceItem,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  return `${t(
+    resource.workspace_type === 'team'
+      ? 'admin.teamWorkspace'
+      : 'admin.personalWorkspace',
+  )}-${resource.workspace_name}`;
+}
+
+export function WorkspaceResourceTable({
+  data,
+  resourceType,
+}: {
+  data: AdminService.ManagedResourceItem[];
+  resourceType: AdminService.ManagedResourceType;
 }) {
   const { t } = useTranslation();
-
-  const columnDefs = useMemo(
-    () => [
-      datasetColumnHelper.accessor('name', {
-        header: t('admin.name'),
-        cell: ({ row, cell }) => (
-          <div className="flex items-center gap-2">
-            <RAGFlowAvatar
-              avatar={row.original.avatar}
-              name={cell.getValue()}
-            />
-            <span>{cell.getValue()}</span>
-          </div>
-        ),
-      }),
-    ],
-    [t],
+  const [nameFilters, setNameFilters] = useState<string[]>([]);
+  const [workspaceFilters, setWorkspaceFilters] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [sort, setSort] = useState<SortState>({
+    key: 'update_date',
+    direction: 'desc',
+  });
+  const [expandedFileIds, setExpandedFileIds] = useState<Set<string>>(
+    () => new Set(),
   );
 
-  const table = useReactTable({
-    data: props.data ?? [],
-    columns: columnDefs,
+  useEffect(() => {
+    if (resourceType !== 'file') return;
+    const rootIds = data
+      .filter((resource) => resource.parent_id === resource.id)
+      .map((resource) => resource.id);
+    setExpandedFileIds((current) => {
+      if (rootIds.every((id) => current.has(id))) return current;
+      return new Set([...current, ...rootIds]);
+    });
+  }, [data, resourceType]);
 
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
+  const columns = useMemo<ResourceColumn[]>(() => {
+    const commonColumns: ResourceColumn[] = [
+      {
+        key: 'name',
+        label: t('admin.name'),
+        render: (resource) => resource.name,
+      },
+      {
+        key: 'workspace_name',
+        label: t('admin.workspaceOwner'),
+        render: (resource) => workspaceLabel(resource, t),
+      },
+    ];
+    const updatedAt: ResourceColumn = {
+      key: 'update_date',
+      label: t('admin.lastUpdateTime'),
+      render: (resource) => formatDate(resource.update_date) || '-',
+    };
+
+    switch (resourceType) {
+      case 'dataset':
+        return [
+          ...commonColumns,
+          {
+            key: 'doc_num',
+            label: t('admin.knowledgeMonitoring.documentCount'),
+            numeric: true,
+            render: (resource) => resource.doc_num ?? 0,
+          },
+          {
+            key: 'chunk_num',
+            label: t('admin.knowledgeMonitoring.chunkCount'),
+            numeric: true,
+            render: (resource) => resource.chunk_num ?? 0,
+          },
+          {
+            key: 'storage_bytes',
+            label: t('admin.knowledgeMonitoring.storage'),
+            numeric: true,
+            render: (resource) => (
+              <StorageSize bytes={resource.storage_bytes ?? 0} />
+            ),
+          },
+          updatedAt,
+        ];
+      case 'chat':
+        return [
+          ...commonColumns,
+          {
+            key: 'dataset_count',
+            label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
+            render: (resource) => resource.dataset_count ?? 0,
+          },
+          {
+            key: 'session_count',
+            label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
+            render: (resource) => resource.session_count ?? 0,
+          },
+          updatedAt,
+        ];
+      case 'search':
+        return [
+          ...commonColumns,
+          {
+            key: 'dataset_count',
+            label: t('admin.resourceManagementPage.referencedDatasets'),
+            numeric: true,
+            render: (resource) => resource.dataset_count ?? 0,
+          },
+          {
+            key: 'document_count',
+            label: t('admin.resourceManagementPage.referencedDocuments'),
+            numeric: true,
+            render: (resource) => resource.document_count ?? 0,
+          },
+          {
+            key: 'creator_name',
+            label: t('admin.creator'),
+            render: (resource) => resource.creator_name || '-',
+          },
+          updatedAt,
+        ];
+      case 'agent':
+        return [
+          ...commonColumns,
+          {
+            key: 'canvas_type',
+            label: t('admin.resourceManagementPage.canvasType'),
+            render: (resource) => resource.canvas_type || '-',
+          },
+          {
+            key: 'release',
+            label: t('admin.resourceManagementPage.releaseStatus'),
+            render: (resource) => (
+              <Badge variant={resource.release ? 'success' : 'secondary'}>
+                {t(
+                  resource.release
+                    ? 'admin.resourceManagementPage.released'
+                    : 'admin.resourceManagementPage.unreleased',
+                )}
+              </Badge>
+            ),
+          },
+          {
+            key: 'session_count',
+            label: t('admin.resourceManagementPage.sessions'),
+            numeric: true,
+            render: (resource) => resource.session_count ?? 0,
+          },
+          updatedAt,
+        ];
+      case 'memory':
+        return [
+          ...commonColumns,
+          {
+            key: 'memory_type',
+            label: t('admin.resourceManagementPage.memoryType'),
+            render: (resource) => resource.memory_type ?? '-',
+          },
+          {
+            key: 'storage_type',
+            label: t('admin.resourceManagementPage.storageType'),
+            render: (resource) => resource.storage_type || '-',
+          },
+          {
+            key: 'memory_size',
+            label: t('admin.resourceManagementPage.capacity'),
+            numeric: true,
+            render: (resource) => (
+              <StorageSize bytes={resource.memory_size ?? 0} />
+            ),
+          },
+          updatedAt,
+        ];
+      case 'file':
+        return [
+          ...commonColumns,
+          {
+            key: 'file_type',
+            label: t('admin.resourceManagementPage.fileType'),
+            render: (resource) => resource.file_type || '-',
+          },
+          {
+            key: 'size',
+            label: t('admin.knowledgeMonitoring.fileSize'),
+            numeric: true,
+            render: (resource) => <StorageSize bytes={resource.size ?? 0} />,
+          },
+          {
+            key: 'creator_name',
+            label: t('admin.creator'),
+            render: (resource) => resource.creator_name || '-',
+          },
+          updatedAt,
+        ];
+    }
+  }, [resourceType, t]);
+
+  const filteredData = useMemo(
+    () =>
+      data.filter(
+        (resource) =>
+          matchesSelectedFilter(resource.name, nameFilters) &&
+          matchesSelectedFilter(workspaceLabel(resource, t), workspaceFilters),
+      ),
+    [data, nameFilters, t, workspaceFilters],
+  );
+  const sortedData = useMemo(
+    () =>
+      [...filteredData].sort((left, right) => {
+        const leftValue = left[sort.key];
+        const rightValue = right[sort.key];
+        const result = String(leftValue ?? '').localeCompare(
+          String(rightValue ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return sort.direction === 'asc' ? result : -result;
+      }),
+    [filteredData, sort],
+  );
+  const filtersActive = nameFilters.length > 0 || workspaceFilters.length > 0;
+  const fileRows = useMemo(
+    () =>
+      resourceType === 'file'
+        ? buildAdminFileTreeRows(data, {
+            sort,
+            expandedIds: expandedFileIds,
+            matches: (resource) =>
+              matchesSelectedFilter(resource.name, nameFilters) &&
+              matchesSelectedFilter(
+                workspaceLabel(resource, t),
+                workspaceFilters,
+              ),
+            expandMatches: filtersActive,
+          })
+        : [],
+    [
+      data,
+      expandedFileIds,
+      filtersActive,
+      nameFilters,
+      resourceType,
+      sort,
+      t,
+      workspaceFilters,
+    ],
+  );
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const rows = useMemo<AdminFileTreeRow[]>(
+    () =>
+      resourceType === 'file'
+        ? fileRows
+        : sortedData
+            .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+            .map((resource) => ({
+              resource,
+              depth: 0,
+              hasChildren: false,
+              expanded: false,
+              workspaceRoot: false,
+            })),
+    [currentPage, fileRows, pageSize, resourceType, sortedData],
+  );
+  const toggleSort = (key: keyof AdminService.ManagedResourceItem) => {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+  const resetFilters = () => {
+    setNameFilters([]);
+    setWorkspaceFilters([]);
+    setPage(1);
+  };
+  const toggleFileExpanded = (resourceId: string) => {
+    setExpandedFileIds((current) => {
+      const next = new Set(current);
+      if (next.has(resourceId)) next.delete(resourceId);
+      else next.add(resourceId);
+      return next;
+    });
+  };
 
   return (
-    <section className="space-y-4">
-      <Table>
+    <section className="min-w-0 w-full space-y-4 overflow-hidden [contain:inline-size]">
+      <AdminTableMultiFilters
+        filters={[
+          {
+            id: `${resourceType}-name`,
+            label: t('admin.name'),
+            options: createFilterOptions(data, (resource) => resource.name),
+            value: nameFilters,
+            onChange: (value) => {
+              setNameFilters(value);
+              setPage(1);
+            },
+          },
+          {
+            id: `${resourceType}-workspace`,
+            label: t('admin.workspaceOwner'),
+            options: createFilterOptions(data, (resource) =>
+              workspaceLabel(resource, t),
+            ),
+            value: workspaceFilters,
+            onChange: (value) => {
+              setWorkspaceFilters(value);
+              setPage(1);
+            },
+          },
+        ]}
+        resetLabel={t('admin.reset')}
+        onReset={resetFilters}
+      />
+      <Table
+        rootClassName="max-w-full [contain:inline-size]"
+        className="min-w-[900px]"
+      >
         <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <Button
-                      variant="ghost"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {getSortIcon(header.column.getIsSorted())}
-                    </Button>
-                  ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
+          <TableRow>
+            {columns.map((column) => (
+              <TableHead
+                key={column.key}
+                className={column.numeric ? 'text-center' : undefined}
+              >
+                <Button variant="ghost" onClick={() => toggleSort(column.key)}>
+                  {column.label}
+                  {getSortIcon(
+                    sort.key === column.key ? sort.direction : false,
                   )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
+                </Button>
+              </TableHead>
+            ))}
+          </TableRow>
         </TableHeader>
-
         <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          {rows.length ? (
+            rows.map((row) => (
+              <TableRow key={row.resource.id}>
+                {columns.map((column) => (
+                  <TableCell
+                    key={column.key}
+                    className={column.numeric ? 'text-center' : undefined}
+                  >
+                    {resourceType === 'file' && column.key === 'name' ? (
+                      <AdminFileTreeName
+                        row={row}
+                        onToggle={toggleFileExpanded}
+                      />
+                    ) : (
+                      column.render(row.resource)
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
             ))
           ) : (
-            <TableEmpty columnsLength={columnDefs.length} />
+            <TableEmpty columnsLength={columns.length} />
           )}
         </TableBody>
       </Table>
-
-      <RAGFlowPagination
-        total={props.data?.length}
-        current={table.getState().pagination.pageIndex + 1}
-        pageSize={table.getState().pagination.pageSize}
-        onChange={(page, pageSize) => {
-          table.setPagination({
-            pageIndex: page - 1,
-            pageSize,
-          });
-        }}
-      />
+      {resourceType !== 'file' && (
+        <RAGFlowPagination
+          total={filteredData.length}
+          current={currentPage}
+          pageSize={pageSize}
+          onChange={(nextPage, nextPageSize) => {
+            setPage(nextPage);
+            setPageSize(nextPageSize);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
+type UserDetailSheetProps = {
+  email?: string;
+  onOpenChange: (open: boolean) => void;
+};
+
+function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
   const { t } = useTranslation();
-
-  const columnDefs = useMemo(
-    () => [
-      agentColumnHelper.accessor('title', {
-        header: t('admin.agentTitle'),
-        cell: ({ row, cell }) => (
-          <div className="flex items-center gap-2">
-            <RAGFlowAvatar
-              avatar={row.original.avatar}
-              name={cell.getValue()}
-            />
-            <span>{cell.getValue()}</span>
-          </div>
-        ),
-      }),
-    ],
-    [t],
-  );
-
-  const table = useReactTable({
-    data: props.data ?? [],
-    columns: columnDefs,
-
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
-  return (
-    <section className="space-y-4">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                    <Button
-                      variant="ghost"
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                      {getSortIcon(header.column.getIsSorted())}
-                    </Button>
-                  ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
-                  )}
-                </TableHead>
-              ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableEmpty columnsLength={columnDefs.length} />
-          )}
-        </TableBody>
-      </Table>
-
-      <RAGFlowPagination
-        total={props.data?.length}
-        current={table.getState().pagination.pageIndex + 1}
-        pageSize={table.getState().pagination.pageSize}
-        onChange={(page, pageSize) => {
-          table.setPagination({
-            pageIndex: page - 1,
-            pageSize,
-          });
-        }}
-      />
-    </section>
-  );
-}
-
-function AdminUserDetail() {
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const { id } = useParams();
   const queryClient = useQueryClient();
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
   const [editOpen, setEditOpen] = useState(false);
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     nickname: '',
     password: '',
@@ -275,22 +522,20 @@ function AdminUserDetail() {
     remark: '',
   });
 
-  const { data: { detail, datasets, agents } = {} } = useQuery({
-    queryKey: ['admin/userDetail', id],
+  const { data: { detail, resources } = {} } = useQuery({
+    queryKey: ['admin/userDetail', email],
     queryFn: async () => {
-      const [userDetails, userDatasets, userAgents] = await Promise.all([
-        getUserDetails(id!),
-        listUserDatasets(id!),
-        listUserAgents(id!),
+      const [userDetails, userResources] = await Promise.all([
+        getUserDetails(email!),
+        listUserResources(email!),
       ]);
 
       return {
         detail: userDetails.data.data[0],
-        datasets: userDatasets.data.data,
-        agents: userAgents.data.data,
+        resources: userResources.data.data,
       };
     },
-    enabled: !!id,
+    enabled: Boolean(email),
     retry: false,
   });
   const { data: departments = [] } = useQuery({
@@ -300,7 +545,7 @@ function AdminUserDetail() {
   });
   const updateMutation = useMutation({
     mutationFn: () =>
-      updateUser(id!, {
+      updateUser(email!, {
         nickname: editForm.nickname.trim(),
         password: editForm.password
           ? (rsaPsw(editForm.password) as string)
@@ -317,6 +562,19 @@ function AdminUserDetail() {
       setEditOpen(false);
     },
   });
+  const quotaMutation = useMutation({
+    mutationFn: (
+      quota: Pick<
+        AdminService.ResourceQuota,
+        'file_count_limit' | 'storage_bytes_limit'
+      >,
+    ) => updateUserQuota(email!, quota),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
+      message.success(t('admin.resourceQuota.updated'));
+      setQuotaOpen(false);
+    },
+  });
   const openEdit = () => {
     if (!detail) return;
     setEditForm({
@@ -330,125 +588,205 @@ function AdminUserDetail() {
     setEditOpen(true);
   };
   const isMe = detail?.email === userInfo?.email;
+  const informationItems: Array<{
+    label: string;
+    value: ReactNode;
+    icon: LucideIcon;
+  }> = [
+    {
+      label: t('admin.nickname'),
+      value: detail?.nickname || '-',
+      icon: UserRound,
+    },
+    {
+      label: t('admin.department'),
+      value: detail?.department_path || t('admin.noDepartment'),
+      icon: Building2,
+    },
+    {
+      label: t('admin.status'),
+      value: <UserStatusBadge active={detail?.is_active} />,
+      icon: Activity,
+    },
+    {
+      label: t('admin.userType'),
+      value: (
+        <Badge variant="secondary">
+          {t(detail?.is_superuser ? 'admin.superuser' : 'admin.normalUser')}
+        </Badge>
+      ),
+      icon: ShieldCheck,
+    },
+    {
+      label: t('admin.password'),
+      value: detail?.password_plain || '-',
+      icon: KeyRound,
+    },
+    {
+      label: t('admin.lastLoginTime'),
+      value: formatDate(detail?.last_login_time) || '-',
+      icon: LogIn,
+    },
+    {
+      label: t('admin.createTime'),
+      value: formatDate(detail?.create_date) || '-',
+      icon: CalendarPlus,
+    },
+    {
+      label: t('admin.lastUpdateTime'),
+      value: formatDate(detail?.update_date) || '-',
+      icon: Clock3,
+    },
+    {
+      label: t('admin.language'),
+      value: detail?.language || '-',
+      icon: Languages,
+    },
+    {
+      label: t('admin.isAnonymous'),
+      value: t(
+        parseBooleanish(detail?.is_anonymous) ? 'admin.yes' : 'admin.no',
+      ),
+      icon: EyeOff,
+    },
+  ];
 
   return (
-    <section className="px-10 py-5 size-full flex flex-col">
-      <nav className="mb-5">
-        <Button
-          variant="outline"
-          className="h-10 px-3 dark:bg-bg-input dark:border-border-button"
-          onClick={() => navigate(`${Routes.AdminUserManagement}`)}
-        >
-          <LucideArrowLeft />
-          <span>{t('admin.back')}</span>
-        </Button>
-      </nav>
-
-      <Card className="!shadow-none relative h-0 basis-0 grow flex flex-col bg-transparent border-0.5 border-border-button overflow-hidden">
-        <Spotlight />
-
-        <CardHeader className="pb-10 border-b-0.5 dark:border-border-button space-y-8">
-          <section className="flex items-center gap-4 text-base">
-            <RAGFlowAvatar
-              avatar={detail?.avatar}
-              name={detail?.email}
-              isPerson
-            />
-
-            <span>{detail?.email}</span>
-
-            <UserStatusBadge active={detail?.is_active} />
-
-            <EnterpriseFeature>
-              {() =>
-                detail?.role && (
-                  <Badge variant="secondary">{detail?.role}</Badge>
-                )
-              }
-            </EnterpriseFeature>
-
-            <Button className="ml-auto" variant="outline" onClick={openEdit}>
-              <LucidePencil />
-              {t('admin.editUser')}
-            </Button>
-          </section>
-
-          <section className="flex items-start px-14 space-x-14">
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.lastLoginTime')}
+    <>
+      <Sheet
+        open={Boolean(email)}
+        onOpenChange={(open) => {
+          if (!open) setEditOpen(false);
+          if (!open) setQuotaOpen(false);
+          onOpenChange(open);
+        }}
+      >
+        <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
+          <SheetHeader className="border-b border-border-button px-6 py-5">
+            <div className="flex items-center gap-3 pr-8">
+              <RAGFlowAvatar
+                avatar={detail?.avatar}
+                name={detail?.email || email}
+                isPerson
+              />
+              <div className="min-w-0">
+                <SheetTitle className="truncate">
+                  {detail?.nickname || detail?.email || email}
+                </SheetTitle>
+                <SheetDescription className="truncate">
+                  {detail?.email || email}
+                  {detail?.id ? ` · ${detail.id}` : ''}
+                </SheetDescription>
               </div>
-              <div>{formatDate(detail?.last_login_time) || '-'}</div>
+              <EnterpriseFeature>
+                {() =>
+                  detail?.role && (
+                    <Badge className="shrink-0" variant="secondary">
+                      {detail.role}
+                    </Badge>
+                  )
+                }
+              </EnterpriseFeature>
+              <Button
+                className="ml-auto shrink-0"
+                variant="outline"
+                disabled={!detail}
+                onClick={() => setQuotaOpen(true)}
+              >
+                <Gauge />
+                {t('admin.resourceQuota.configure')}
+              </Button>
+              <Button
+                className="shrink-0"
+                variant="outline"
+                disabled={!detail}
+                onClick={openEdit}
+              >
+                <LucidePencil />
+                {t('admin.editUser')}
+              </Button>
             </div>
+          </SheetHeader>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.createTime')}
+          <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.userInformation')}
               </div>
-              <div>{formatDate(detail?.create_date) || '-'}</div>
-            </div>
-
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.lastUpdateTime')}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {informationItems.map(({ label, value, icon }) => (
+                  <DetailInformationCard
+                    key={label}
+                    label={label}
+                    value={value}
+                    icon={icon}
+                  />
+                ))}
               </div>
-              <div>{formatDate(detail?.update_date) || '-'}</div>
-            </div>
+              {detail?.remark && (
+                <DetailInformationCard
+                  className="mt-3"
+                  icon={StickyNote}
+                  label={t('admin.remark')}
+                  value={detail.remark}
+                  valueClassName="whitespace-pre-wrap font-normal"
+                />
+              )}
+            </section>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.language')}
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceQuota.title')}
               </div>
-              <div>{detail?.language}</div>
-            </div>
+              <ResourceQuotaCards quota={detail?.quota} />
+            </section>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.isAnonymous')}
-              </div>
-              <div>{t(detail?.is_anonymous ? 'admin.yes' : 'admin.no')}</div>
-            </div>
+            <section className="min-w-0 py-5">
+              <Tabs
+                className="min-w-0 w-full [contain:inline-size]"
+                defaultValue="dataset"
+              >
+                <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+                  {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                    <AdminDetailTabsTrigger
+                      key={resourceType}
+                      value={resourceType}
+                    >
+                      {t(`admin.resourceType.${resourceType}`)}
+                      <Badge className="ml-1" variant="secondary">
+                        {resources?.[resourceType]?.length ?? 0}
+                      </Badge>
+                    </AdminDetailTabsTrigger>
+                  ))}
+                  <AdminDetailTabsTrigger value="model">
+                    {t('admin.userModelConfiguration')}
+                    <Badge className="ml-1" variant="secondary">
+                      {(resources?.model?.defaults.filter(
+                        (model) => model.model_name,
+                      ).length ?? 0) + (resources?.model?.models.length ?? 0)}
+                    </Badge>
+                  </AdminDetailTabsTrigger>
+                </TabsList>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.isSuperuser')}
-              </div>
-              <div>{t(detail?.is_superuser ? 'admin.yes' : 'admin.no')}</div>
-            </div>
-          </section>
-        </CardHeader>
-
-        <CardContent className="h-0 basis-0 grow pt-6">
-          <Tabs className="h-full flex flex-col" defaultValue="dataset">
-            <TabsList className="p-0 mb-2 gap-4 bg-transparent justify-start">
-              {ASSET_NAMES.map((name) => (
-                <TabsTrigger
-                  key={name}
-                  className="text-text-secondary border-0.5 border-border-button data-[state=active]:bg-bg-card"
-                  value={name}
-                >
-                  {t(`header.${name}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            <TabsContent value="dataset" className="h-0 basis-0 grow">
-              <ScrollArea className="h-full">
-                <UserDatasetTable data={datasets} />
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="flow" className="h-0 basis-0 grow">
-              <ScrollArea className="h-full">
-                <UserAgentTable data={agents} />
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                  <TabsContent key={resourceType} value={resourceType}>
+                    <WorkspaceResourceTable
+                      data={resources?.[resourceType] ?? []}
+                      resourceType={resourceType}
+                    />
+                  </TabsContent>
+                ))}
+                <TabsContent value="model">
+                  <UserModelConfiguration configuration={resources?.model} />
+                </TabsContent>
+              </Tabs>
+            </section>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{t('admin.editUser')}</DialogTitle>
           </DialogHeader>
@@ -564,8 +902,16 @@ function AdminUserDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+
+      <ResourceQuotaDialog
+        open={quotaOpen}
+        quota={detail?.quota}
+        saving={quotaMutation.isPending}
+        onOpenChange={setQuotaOpen}
+        onSave={(quota) => quotaMutation.mutate(quota)}
+      />
+    </>
   );
 }
 
-export default AdminUserDetail;
+export default UserDetailSheet;

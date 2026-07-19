@@ -21,6 +21,7 @@ from quart import Quart, g
 
 from api.apps.workspace_access import workspace_required
 from api.db import TenantPermission, UserTenantRole, WorkspaceType
+from api.db.services.user_service import get_personal_workspace_name
 from api.db.services.workspace_service import WorkspaceAccessService
 from common.constants import StatusEnum
 
@@ -28,12 +29,20 @@ from common.constants import StatusEnum
 @pytest.fixture
 def workspace_dependencies(monkeypatch):
     tenants = {
-        "user-1": SimpleNamespace(id="user-1", name="User 1's Kingdom", status=StatusEnum.VALID.value),
+        "user-1": SimpleNamespace(id="user-1", name="User 1", status=StatusEnum.VALID.value),
+        "empty-user": SimpleNamespace(id="empty-user", name="empty@example.com", status=StatusEnum.VALID.value),
         "team-1": SimpleNamespace(id="team-1", name="Team 1", status=StatusEnum.VALID.value),
     }
     users = {
-        "user-1": SimpleNamespace(id="user-1", nickname="User 1", status=StatusEnum.VALID.value),
-        "creator-1": SimpleNamespace(id="creator-1", nickname="Creator 1", status=StatusEnum.VALID.value),
+        "user-1": SimpleNamespace(
+            id="user-1", nickname="User 1", email="user-1@example.com", status=StatusEnum.VALID.value
+        ),
+        "empty-user": SimpleNamespace(
+            id="empty-user", nickname="", email="empty@example.com", status=StatusEnum.VALID.value
+        ),
+        "creator-1": SimpleNamespace(
+            id="creator-1", nickname="Creator 1", email="creator@example.com", status=StatusEnum.VALID.value
+        ),
     }
     memberships = {
         ("user-1", "user-1"): SimpleNamespace(user_id="user-1", tenant_id="user-1", role=UserTenantRole.OWNER, status=StatusEnum.VALID.value),
@@ -80,9 +89,21 @@ def test_resource_workspace_metadata_uses_personal_owner_as_missing_creator(work
 
     assert metadata == {
         "workspace_type": WorkspaceType.PERSONAL,
-        "workspace_name": "User 1's Kingdom",
+        "workspace_name": "User 1",
         "creator_name": "User 1",
     }
+
+
+def test_personal_workspace_name_falls_back_to_email():
+    assert get_personal_workspace_name(" User 1 ", "user-1@example.com") == "User 1"
+    assert get_personal_workspace_name("", " empty@example.com ") == "empty@example.com"
+
+
+def test_resource_workspace_metadata_falls_back_to_creator_email(workspace_dependencies):
+    metadata = WorkspaceAccessService.get_resource_workspace_metadata({"tenant_id": "empty-user"})
+
+    assert metadata["workspace_name"] == "empty@example.com"
+    assert metadata["creator_name"] == "empty@example.com"
 
 
 def test_resource_workspace_metadata_prefers_recorded_creator(workspace_dependencies):

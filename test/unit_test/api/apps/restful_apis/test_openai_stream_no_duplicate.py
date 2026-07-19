@@ -68,6 +68,7 @@ def _load_openai_api(monkeypatch):
         merge_generation_config=lambda *_a, **_k: None,
     )
     _stub(monkeypatch, "api.db.services.dialog_service", DialogService=SimpleNamespace(), async_chat=lambda *_a, **_k: None)
+    _stub(monkeypatch, "api.db.services.api_service", API4ConversationService=SimpleNamespace())
     _stub(monkeypatch, "api.db.services.doc_metadata_service", DocMetadataService=SimpleNamespace())
     _stub(
         monkeypatch,
@@ -85,6 +86,7 @@ def _load_openai_api(monkeypatch):
     )
     _stub(monkeypatch, "common.constants", RetCode=SimpleNamespace(ARGUMENT_ERROR=102), StatusEnum=SimpleNamespace(VALID=SimpleNamespace(value="1")))
     _stub(monkeypatch, "common.metadata_utils", convert_conditions=lambda *_a, **_k: None, meta_filter=lambda *_a, **_k: [])
+    _stub(monkeypatch, "common.misc_utils", get_uuid=lambda: "session-1")
     # Deterministic token counter so usage math is predictable.
     _stub(monkeypatch, "common.token_utils", num_tokens_from_string=lambda s: len(s or ""))
     # chunks_format just echoes the reference payload for the reference test.

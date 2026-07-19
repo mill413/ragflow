@@ -45,6 +45,10 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.resource_quota_service import (
+    ResourceQuotaExceededError,
+    ResourceQuotaService,
+)
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService, cancel_all_task_of
@@ -549,6 +553,17 @@ async def _upload_web_document(dataset_id, kb, tenant_id):
     if not blob:
         return server_error_response(ValueError("Download failure."))
 
+    try:
+        await thread_pool_exec(
+            ResourceQuotaService.ensure_upload_allowed,
+            kb.tenant_id,
+            kb.id,
+            1,
+            len(blob),
+        )
+    except ResourceQuotaExceededError as exc:
+        return get_error_data_result(message=str(exc), code=RetCode.DATA_ERROR)
+
     root_folder = FileService.get_root_folder(tenant_id)
     FileService.init_knowledgebase_docs(root_folder["id"], tenant_id)
     kb_root_folder = FileService.get_kb_folder(tenant_id)
@@ -610,6 +625,17 @@ async def _upload_empty_document(dataset_id, kb, tenant_id):
         return get_error_data_result(message="Duplicated document name in the same dataset.")
 
     try:
+        await thread_pool_exec(
+            ResourceQuotaService.ensure_upload_allowed,
+            kb.tenant_id,
+            kb.id,
+            1,
+            0,
+        )
+    except ResourceQuotaExceededError as exc:
+        return get_error_data_result(message=str(exc), code=RetCode.DATA_ERROR)
+
+    try:
         kb_root_folder = FileService.get_kb_folder(kb.tenant_id)
         if not kb_root_folder:
             return get_error_data_result(message="Cannot find the root folder.")
@@ -654,6 +680,18 @@ async def _upload_local_documents(kb, tenant_id):
             msg = f"File name must be {FILE_NAME_LEN_LIMIT} bytes or less."
             logging.error(msg)
             return get_error_data_result(message=msg, code=RetCode.ARGUMENT_ERROR)
+
+    try:
+        upload_size = ResourceQuotaService.get_uploads_size(file_objs)
+        await thread_pool_exec(
+            ResourceQuotaService.ensure_upload_allowed,
+            kb.tenant_id,
+            kb.id,
+            len(file_objs),
+            upload_size,
+        )
+    except (ResourceQuotaExceededError, ValueError) as exc:
+        return get_error_data_result(message=str(exc), code=RetCode.DATA_ERROR)
 
     # Parse optional parser_config overrides from form data
     parser_config_override = None

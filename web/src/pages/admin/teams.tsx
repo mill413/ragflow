@@ -3,8 +3,14 @@ import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CalendarPlus,
+  Clock3,
+  Crown,
+  FileText,
+  Gauge,
   HardDrive,
   Library,
+  MailQuestion,
   Pencil,
   Plus,
   Search,
@@ -60,21 +66,40 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatBytes } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs';
 import {
   addAdminTeamMember,
   createAdminTeam,
   deleteAdminTeam,
   deleteAdminTeamMember,
   listAdminTeamMembers,
+  listAdminTeamResources,
   listAdminTeams,
   listUsers,
   updateAdminTeam,
+  updateAdminTeamQuota,
   updateAdminTeamMember,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { getSortIcon } from './utils';
 import { UserStatusBadge } from './components/user-status';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
+import {
+  createFilterOptions,
+  matchesSelectedFilter,
+} from './components/table-filter-utils';
+import { DetailInformationCard } from './components/detail-information-card';
+import { AdminDetailTabsTrigger } from './components/detail-tabs-trigger';
+import { StorageSize } from './components/storage-size';
+import { UserModelConfiguration } from './components/user-model-configuration';
+import {
+  ResourceQuotaCards,
+  ResourceQuotaDialog,
+} from './components/resource-quota';
+import {
+  WORKSPACE_RESOURCE_TYPES,
+  WorkspaceResourceTable,
+} from './user-detail';
 
 type TeamSortKey =
   | 'name'
@@ -101,6 +126,10 @@ export default function AdminTeams() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [keywords, setKeywords] = useState('');
+  const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [ownerIds, setOwnerIds] = useState<string[]>([]);
+  const [memberRoles, setMemberRoles] = useState<string[]>([]);
+  const [memberStatuses, setMemberStatuses] = useState<string[]>([]);
   const [sort, setSort] = useState<{
     key: TeamSortKey;
     direction: 'asc' | 'desc';
@@ -115,6 +144,7 @@ export default function AdminTeams() {
   const [ownerId, setOwnerId] = useState('');
   const [deletingTeam, setDeletingTeam] = useState<AdminService.Team>();
   const [selectedTeam, setSelectedTeam] = useState<AdminService.Team>();
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [memberDialogOpen, setMemberDialogOpen] = useState(false);
   const [memberUserId, setMemberUserId] = useState('');
   const [memberRole, setMemberRole] =
@@ -137,6 +167,13 @@ export default function AdminTeams() {
     queryKey: ['admin/teams/members', selectedTeam?.id],
     queryFn: async () =>
       (await listAdminTeamMembers(selectedTeam!.id)).data.data,
+    enabled: Boolean(selectedTeam),
+    retry: false,
+  });
+  const { data: resources } = useQuery({
+    queryKey: ['admin/teams/resources', selectedTeam?.id],
+    queryFn: async () =>
+      (await listAdminTeamResources(selectedTeam!.id)).data.data,
     enabled: Boolean(selectedTeam),
     retry: false,
   });
@@ -202,6 +239,19 @@ export default function AdminTeams() {
       message.success(t('admin.teamManagement.memberDeleted'));
     },
   });
+  const quotaMutation = useMutation({
+    mutationFn: (
+      quota: Pick<
+        AdminService.ResourceQuota,
+        'file_count_limit' | 'storage_bytes_limit'
+      >,
+    ) => updateAdminTeamQuota(selectedTeam!.id, quota),
+    onSuccess: () => {
+      invalidateTeams();
+      setQuotaOpen(false);
+      message.success(t('admin.resourceQuota.updated'));
+    },
+  });
 
   const filteredTeams = useMemo(() => {
     const query = keywords.trim().toLocaleLowerCase();
@@ -213,6 +263,11 @@ export default function AdminTeams() {
             .includes(query),
         ),
       )
+      .filter(
+        (team) =>
+          matchesSelectedFilter(team.id, teamIds) &&
+          matchesSelectedFilter(team.owner_id, ownerIds),
+      )
       .sort((left, right) => {
         const result = String(left[sort.key] ?? '').localeCompare(
           String(right[sort.key] ?? ''),
@@ -221,7 +276,7 @@ export default function AdminTeams() {
         );
         return sort.direction === 'asc' ? result : -result;
       });
-  }, [keywords, sort, teams]);
+  }, [keywords, ownerIds, sort, teamIds, teams]);
 
   const availableUsers = users.filter(
     (user) =>
@@ -229,15 +284,21 @@ export default function AdminTeams() {
       !members.some((member) => member.user_id === user.id),
   );
   const sortedMembers = useMemo(() => {
-    return [...members].sort((left, right) => {
-      const result = String(left[memberSort.key] ?? '').localeCompare(
-        String(right[memberSort.key] ?? ''),
-        undefined,
-        { numeric: true },
-      );
-      return memberSort.direction === 'asc' ? result : -result;
-    });
-  }, [memberSort, members]);
+    return [...members]
+      .filter(
+        (member) =>
+          matchesSelectedFilter(member.role, memberRoles) &&
+          matchesSelectedFilter(member.is_active, memberStatuses),
+      )
+      .sort((left, right) => {
+        const result = String(left[memberSort.key] ?? '').localeCompare(
+          String(right[memberSort.key] ?? ''),
+          undefined,
+          { numeric: true },
+        );
+        return memberSort.direction === 'asc' ? result : -result;
+      });
+  }, [memberRoles, memberSort, memberStatuses, members]);
   const ownerOptions = editingTeam
     ? editingMembers.filter(
         (member) => member.is_active === '1' && member.role !== 'invite',
@@ -325,49 +386,91 @@ export default function AdminTeams() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              [t('admin.teamManagement.teams'), teams.length, UsersRound],
-              [
-                t('admin.teamManagement.activeMemberships'),
-                activeMemberCount,
-                UserRoundPlus,
-              ],
-              [t('admin.teamManagement.teamDatasets'), datasetCount, Library],
-              [
-                t('admin.teamManagement.storage'),
-                formatBytes(storageBytes, { decimals: 1 }),
-                HardDrive,
-              ],
-            ].map(([label, value, Icon]) => {
-              const MetricIcon = Icon as typeof UsersRound;
+              {
+                label: t('admin.teamManagement.teams'),
+                value: teams.length,
+                icon: UsersRound,
+              },
+              {
+                label: t('admin.teamManagement.activeMemberships'),
+                value: activeMemberCount,
+                icon: UserRoundPlus,
+              },
+              {
+                label: t('admin.teamManagement.teamDatasets'),
+                value: datasetCount,
+                icon: Library,
+              },
+              {
+                label: t('admin.teamManagement.storage'),
+                value: <StorageSize bytes={storageBytes} />,
+                icon: HardDrive,
+              },
+            ].map(({ label, value, icon: MetricIcon }) => {
               return (
                 <div
-                  key={String(label)}
+                  key={label}
                   className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
                 >
                   <div className="flex items-center justify-between text-xs text-text-secondary">
-                    <span>{String(label)}</span>
+                    <span>{label}</span>
                     <MetricIcon className="size-4" />
                   </div>
-                  <div className="mt-2 text-2xl font-semibold">
-                    {String(value)}
-                  </div>
+                  <div className="mt-2 text-2xl font-semibold">{value}</div>
                 </div>
               );
             })}
           </div>
 
-          <div className="relative w-80">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
-            <Input
-              className="pl-9"
-              value={keywords}
-              onChange={(event) => setKeywords(event.target.value)}
-              placeholder={t('admin.teamManagement.search')}
+          <div className="flex flex-wrap items-center gap-3">
+            <AdminTableMultiFilters
+              filters={[
+                {
+                  id: 'team',
+                  label: t('admin.teamManagement.team'),
+                  options: teams.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })),
+                  value: teamIds,
+                  onChange: setTeamIds,
+                },
+                {
+                  id: 'owner',
+                  label: t('admin.teamManagement.owner'),
+                  options: createFilterOptions(
+                    teams,
+                    (team) => team.owner_id,
+                    (ownerId) => {
+                      const team = teams.find(
+                        (candidate) => candidate.owner_id === ownerId,
+                      );
+                      return team?.owner_name || team?.owner_email || ownerId;
+                    },
+                  ),
+                  value: ownerIds,
+                  onChange: setOwnerIds,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => {
+                setTeamIds([]);
+                setOwnerIds([]);
+              }}
             />
+            <div className="relative w-80">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
+              <Input
+                className="pl-9"
+                value={keywords}
+                onChange={(event) => setKeywords(event.target.value)}
+                placeholder={t('admin.teamManagement.search')}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table rootClassName="max-w-full [contain:inline-size]">
             <TableHeader>
               <TableRow>
                 <TableHead>
@@ -376,25 +479,25 @@ export default function AdminTeams() {
                 <TableHead>
                   {sortButton(t('admin.teamManagement.owner'), 'owner_email')}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.members'),
                     'member_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.datasets'),
                     'dataset_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.documents'),
                     'document_count',
                   )}
                 </TableHead>
-                <TableHead>
+                <TableHead className="text-center">
                   {sortButton(
                     t('admin.teamManagement.storage'),
                     'storage_bytes',
@@ -428,7 +531,7 @@ export default function AdminTeams() {
                       {team.owner_email}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     {team.member_count}
                     {team.invite_count > 0 && (
                       <Badge className="ml-2" variant="outline">
@@ -438,9 +541,15 @@ export default function AdminTeams() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell>{team.dataset_count}</TableCell>
-                  <TableCell>{team.document_count}</TableCell>
-                  <TableCell>{formatBytes(team.storage_bytes)}</TableCell>
+                  <TableCell className="text-center">
+                    {team.dataset_count}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {team.document_count}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <StorageSize bytes={team.storage_bytes} />
+                  </TableCell>
                   <TableCell>{formatDate(team.update_date) || '-'}</TableCell>
                   <TableCell>
                     <div className="flex gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
@@ -544,71 +653,103 @@ export default function AdminTeams() {
 
       <Sheet
         open={Boolean(selectedTeam)}
-        onOpenChange={(open) => !open && setSelectedTeam(undefined)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTeam(undefined);
+          if (!open) setQuotaOpen(false);
+        }}
       >
-        <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+        <SheetContent className="w-[min(900px,80vw)] max-w-none overflow-hidden p-0">
           <SheetHeader className="border-b border-border-button px-6 py-5">
-            <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
-            <SheetDescription>
-              {selectedTeamDetails?.owner_name} /{' '}
-              {selectedTeamDetails?.owner_email}
-            </SheetDescription>
+            <div className="flex items-center gap-3 pr-8">
+              <div className="min-w-0">
+                <SheetTitle>{selectedTeamDetails?.name}</SheetTitle>
+                <SheetDescription className="truncate font-mono text-xs">
+                  {t('admin.teamManagement.teamId')}：
+                  {selectedTeamDetails?.id || '-'}
+                </SheetDescription>
+              </div>
+              <Button
+                className="ml-auto shrink-0"
+                variant="outline"
+                onClick={() => setQuotaOpen(true)}
+              >
+                <Gauge />
+                {t('admin.resourceQuota.configure')}
+              </Button>
+            </div>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100vh-97px)] px-6">
+          <ScrollArea className="h-[calc(100vh-97px)] min-w-0 px-6">
             <section className="border-b border-border-button py-5">
               <div className="mb-3 text-sm font-medium">
                 {t('admin.teamManagement.teamInformation')}
               </div>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  [t('admin.teamManagement.teamId'), selectedTeamDetails?.id],
-                  [
-                    t('admin.teamManagement.owner'),
-                    selectedTeamDetails?.owner_name || '-',
-                  ],
-                  [
-                    t('admin.teamManagement.members'),
-                    selectedTeamDetails?.member_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.pendingInvites'),
-                    selectedTeamDetails?.invite_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.datasets'),
-                    selectedTeamDetails?.dataset_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.documents'),
-                    selectedTeamDetails?.document_count ?? 0,
-                  ],
-                  [
-                    t('admin.teamManagement.storage'),
-                    formatBytes(selectedTeamDetails?.storage_bytes ?? 0),
-                  ],
-                  [
-                    t('admin.createTime'),
-                    formatDate(selectedTeamDetails?.create_date) || '-',
-                  ],
-                  [
-                    t('admin.lastUpdateTime'),
-                    formatDate(selectedTeamDetails?.update_date) || '-',
-                  ],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="min-w-0">
-                    <div className="text-xs text-text-secondary">{label}</div>
-                    <div
-                      className="mt-1 truncate text-sm text-text-primary"
-                      title={String(value || '')}
-                    >
-                      {value}
-                    </div>
-                  </div>
+                  {
+                    label: t('admin.teamManagement.owner'),
+                    value:
+                      [
+                        selectedTeamDetails?.owner_name,
+                        selectedTeamDetails?.owner_email,
+                      ]
+                        .filter(Boolean)
+                        .join(' / ') || '-',
+                    icon: Crown,
+                  },
+                  {
+                    label: t('admin.teamManagement.members'),
+                    value: selectedTeamDetails?.member_count ?? 0,
+                    icon: UsersRound,
+                  },
+                  {
+                    label: t('admin.teamManagement.pendingInvites'),
+                    value: selectedTeamDetails?.invite_count ?? 0,
+                    icon: MailQuestion,
+                  },
+                  {
+                    label: t('admin.teamManagement.datasets'),
+                    value: selectedTeamDetails?.dataset_count ?? 0,
+                    icon: Library,
+                  },
+                  {
+                    label: t('admin.teamManagement.documents'),
+                    value: selectedTeamDetails?.document_count ?? 0,
+                    icon: FileText,
+                  },
+                  {
+                    label: t('admin.teamManagement.storage'),
+                    value: (
+                      <StorageSize
+                        bytes={selectedTeamDetails?.storage_bytes ?? 0}
+                      />
+                    ),
+                    icon: HardDrive,
+                  },
+                  {
+                    label: t('admin.createTime'),
+                    value: formatDate(selectedTeamDetails?.create_date) || '-',
+                    icon: CalendarPlus,
+                  },
+                  {
+                    label: t('admin.lastUpdateTime'),
+                    value: formatDate(selectedTeamDetails?.update_date) || '-',
+                    icon: Clock3,
+                  },
+                ].map(({ label, value, icon }) => (
+                  <DetailInformationCard
+                    key={label}
+                    icon={icon}
+                    label={label}
+                    value={value}
+                  />
                 ))}
               </div>
-              <div className="mt-4 text-xs text-text-secondary">
-                {selectedTeamDetails?.owner_email}
+            </section>
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceQuota.title')}
               </div>
+              <ResourceQuotaCards quota={selectedTeamDetails?.quota} />
             </section>
             <div className="flex items-center justify-between py-4">
               <div className="text-sm font-medium">
@@ -618,7 +759,38 @@ export default function AdminTeams() {
                 <UserRoundPlus /> {t('admin.teamManagement.addMember')}
               </Button>
             </div>
-            <Table>
+            <AdminTableMultiFilters
+              className="pb-4"
+              filters={[
+                {
+                  id: 'member-role',
+                  label: t('admin.teamManagement.role'),
+                  options: createFilterOptions(
+                    members,
+                    (member) => member.role,
+                    (role) => roleLabel(role as AdminService.TeamMemberRole),
+                  ),
+                  value: memberRoles,
+                  onChange: setMemberRoles,
+                },
+                {
+                  id: 'member-status',
+                  label: t('admin.status'),
+                  options: [
+                    { value: '1', label: t('admin.active') },
+                    { value: '0', label: t('admin.inactive') },
+                  ],
+                  value: memberStatuses,
+                  onChange: setMemberStatuses,
+                },
+              ]}
+              resetLabel={t('admin.reset')}
+              onReset={() => {
+                setMemberRoles([]);
+                setMemberStatuses([]);
+              }}
+            />
+            <Table rootClassName="max-w-full [contain:inline-size]">
               <TableHeader>
                 <TableRow>
                   <TableHead>
@@ -687,7 +859,7 @@ export default function AdminTeams() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {!membersFetching && members.length === 0 && (
+                {!membersFetching && sortedMembers.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={5}
@@ -699,9 +871,63 @@ export default function AdminTeams() {
                 )}
               </TableBody>
             </Table>
+            <section className="min-w-0 border-t border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.resourceManagement')}
+              </div>
+              <Tabs
+                className="min-w-0 w-full [contain:inline-size]"
+                defaultValue="dataset"
+              >
+                <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+                  {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                    <AdminDetailTabsTrigger
+                      key={resourceType}
+                      value={resourceType}
+                    >
+                      {t(`admin.resourceType.${resourceType}`)}
+                      <Badge className="ml-1" variant="secondary">
+                        {resources?.[resourceType]?.length ?? 0}
+                      </Badge>
+                    </AdminDetailTabsTrigger>
+                  ))}
+                  <AdminDetailTabsTrigger value="model">
+                    {t('admin.userModelConfiguration')}
+                    <Badge className="ml-1" variant="secondary">
+                      {(resources?.model?.defaults.filter(
+                        (model) => model.model_name,
+                      ).length ?? 0) + (resources?.model?.models.length ?? 0)}
+                    </Badge>
+                  </AdminDetailTabsTrigger>
+                </TabsList>
+
+                {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
+                  <TabsContent key={resourceType} value={resourceType}>
+                    <WorkspaceResourceTable
+                      data={resources?.[resourceType] ?? []}
+                      resourceType={resourceType}
+                    />
+                  </TabsContent>
+                ))}
+                <TabsContent value="model">
+                  <UserModelConfiguration
+                    configuration={resources?.model}
+                    modelsLabel={t('admin.teamModels')}
+                  />
+                </TabsContent>
+              </Tabs>
+            </section>
           </ScrollArea>
         </SheetContent>
       </Sheet>
+
+      <ResourceQuotaDialog
+        open={quotaOpen}
+        quota={selectedTeamDetails?.quota}
+        saving={quotaMutation.isPending}
+        onOpenChange={setQuotaOpen}
+        onSave={(quota) => quotaMutation.mutate(quota)}
+      />
 
       <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
         <DialogContent>

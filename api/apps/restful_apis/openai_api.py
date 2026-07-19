@@ -16,11 +16,13 @@
 
 import json
 import time
+from copy import deepcopy
 
 from quart import Response, jsonify
 
 from api.apps import current_user, login_required
 from api.apps.restful_apis._generation_params import extract_generation_config, merge_generation_config
+from api.db.services.api_service import API4ConversationService
 from api.db.services.dialog_service import DialogService, async_chat
 from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.workspace_service import WorkspaceAccessService
@@ -28,6 +30,7 @@ from api.db.joint_services.tenant_model_service import resolve_model_config, get
 from api.utils.api_utils import get_error_data_result, get_request_json, validate_request
 from common.constants import RetCode, StatusEnum
 from common.metadata_utils import convert_conditions, meta_filter
+from common.misc_utils import get_uuid
 from common.token_utils import num_tokens_from_string
 from rag.prompts.generator import chunks_format
 
@@ -104,6 +107,8 @@ async def _stream_chat_completion_sse(
     need_reference,
     include_reference_metadata=False,
     metadata_fields=None,
+    on_complete=None,
+    session_id=None,
 ):
     """Translate RAGFlow's chat event stream into OpenAI-compatible SSE chunks.
 
@@ -118,6 +123,7 @@ async def _stream_chat_completion_sse(
     full_content = ""
     final_answer = None
     final_reference = None
+    stream_error = None
     in_think = False
     response = {
         "id": completion_id,
@@ -141,6 +147,8 @@ async def _stream_chat_completion_sse(
         "system_fingerprint": "",
         "usage": None,
     }
+    if session_id:
+        response["session_id"] = session_id
 
     try:
         async for ans in ans_iter:
@@ -174,6 +182,7 @@ async def _stream_chat_completion_sse(
                 response["choices"][0]["delta"]["reasoning_content"] = None
             yield f"data:{json.dumps(response, ensure_ascii=False)}\n\n"
     except Exception as e:
+        stream_error = str(e)
         response["choices"][0]["delta"]["content"] = "**ERROR**: " + str(e)
         yield f"data:{json.dumps(response, ensure_ascii=False)}\n\n"
 
@@ -186,6 +195,16 @@ async def _stream_chat_completion_sse(
         "completion_tokens": token_used,
         "total_tokens": prompt_tokens + token_used,
     }
+    if on_complete:
+        try:
+            await on_complete(
+                final_answer if final_answer is not None else full_content,
+                final_reference if final_reference is not None else last_ans.get("reference", {}),
+                response["usage"],
+                stream_error,
+            )
+        except Exception:
+            logging.exception("Failed to persist OpenAI-compatible chat session")
     if need_reference:
         reference_payload = final_reference if final_reference is not None else last_ans.get("reference", [])
         response["choices"][0]["delta"]["reference"] = _build_reference_chunks(
@@ -196,6 +215,83 @@ async def _stream_chat_completion_sse(
         response["choices"][0]["delta"]["final_content"] = final_answer if final_answer is not None else full_content
     yield f"data:{json.dumps(response, ensure_ascii=False)}\n\n"
     yield "data:[DONE]\n\n"
+
+
+def _openai_session_identity(req, extra_body):
+    session_id = extra_body.get("session_id") or req.get("session_id")
+    if session_id is not None and not isinstance(session_id, str):
+        return None, None, "session_id must be a string."
+    external_user_id = req.get("user") or extra_body.get("user_id") or current_user.id
+    return session_id or get_uuid(), str(external_user_id), None
+
+
+def _prepare_openai_session(chat_id, dialog, req, extra_body, messages):
+    session_id, external_user_id, error = _openai_session_identity(req, extra_body)
+    if error:
+        return None, None, None, error
+
+    requested_session_id = extra_body.get("session_id") or req.get("session_id")
+    current_round = 0
+    references = []
+    if requested_session_id:
+        exists, session = API4ConversationService.get_by_id(session_id)
+        if not exists:
+            return None, None, None, "OpenAI-compatible session not found."
+        if session.dialog_id != chat_id or session.user_id != dialog.tenant_id or session.source != "openai":
+            return None, None, None, "OpenAI-compatible session does not belong to this chat."
+        if session.exp_user_id and session.exp_user_id != external_user_id:
+            return None, None, None, "OpenAI-compatible session does not belong to this user."
+        current_round = int(session.round or 0)
+        references = list(session.reference or [])
+    else:
+        API4ConversationService.insert(
+            id=session_id,
+            name=(messages[-1].get("content") or "New OpenAI session")[:255],
+            dialog_id=chat_id,
+            user_id=dialog.tenant_id,
+            exp_user_id=external_user_id,
+            message=deepcopy(messages),
+            reference=[],
+            tokens=0,
+            source="openai",
+            duration=0,
+            round=0,
+            errors=None,
+        )
+    return session_id, current_round, references, None
+
+
+def _persist_openai_session(
+    session_id,
+    messages,
+    answer,
+    reference,
+    usage,
+    duration,
+    round_number,
+    previous_references,
+    error=None,
+):
+    persisted_messages = deepcopy(messages)
+    if answer or error:
+        persisted_messages.append(
+            {
+                "role": "assistant",
+                "content": answer or f"**ERROR**: {error}",
+                "created_at": time.time(),
+            }
+        )
+    API4ConversationService.update_by_id(
+        session_id,
+        {
+            "message": persisted_messages,
+            "reference": [*previous_references, reference or {}],
+            "tokens": int((usage or {}).get("total_tokens", 0) or 0),
+            "duration": max(float(duration), 0),
+            "round": round_number + 1,
+            "errors": error,
+        },
+    )
 
 
 def _normalize_message_content(content):
@@ -312,31 +408,102 @@ async def openai_chat_completions(chat_id):
     tools = None
     toolcall_session = None
     stream_mode = bool(req.get("stream", False))
+    session_id, session_round, session_references, session_error = _prepare_openai_session(
+        chat_id, dia, req, extra_body, messages
+    )
+    if session_error:
+        return get_error_data_result(session_error)
+    started_at = time.monotonic()
 
     if stream_mode:
         chat_kwargs = {"toolcall_session": toolcall_session, "tools": tools, "quote": need_reference}
         if doc_ids_str:
             chat_kwargs["doc_ids"] = doc_ids_str
         ans_iter = async_chat(dia, msg, True, **chat_kwargs)
-        return _build_sse_response(
-            _stream_chat_completion_sse(
-                ans_iter,
-                completion_id=completion_id,
-                requested_model=requested_model,
-                prompt=prompt,
-                need_reference=need_reference,
-                include_reference_metadata=include_reference_metadata,
-                metadata_fields=metadata_fields,
+
+        stream_persisted = False
+
+        async def persist_stream(answer, reference, usage, error):
+            nonlocal stream_persisted
+            stream_persisted = True
+            _persist_openai_session(
+                session_id,
+                messages,
+                answer,
+                reference,
+                usage,
+                time.monotonic() - started_at,
+                session_round,
+                session_references,
+                error,
             )
-        )
+
+        async def monitored_stream():
+            try:
+                async for chunk in _stream_chat_completion_sse(
+                    ans_iter,
+                    completion_id=completion_id,
+                    requested_model=requested_model,
+                    prompt=prompt,
+                    need_reference=need_reference,
+                    include_reference_metadata=include_reference_metadata,
+                    metadata_fields=metadata_fields,
+                    on_complete=persist_stream,
+                    session_id=session_id,
+                ):
+                    yield chunk
+            finally:
+                if not stream_persisted:
+                    _persist_openai_session(
+                        session_id,
+                        messages,
+                        "",
+                        {},
+                        {"total_tokens": context_token_used},
+                        time.monotonic() - started_at,
+                        session_round,
+                        session_references,
+                        "Client disconnected before the streaming response completed.",
+                    )
+
+        return _build_sse_response(monitored_stream())
 
     answer = None
     chat_kwargs = {"toolcall_session": toolcall_session, "tools": tools, "quote": need_reference}
     if doc_ids_str:
         chat_kwargs["doc_ids"] = doc_ids_str
-    async for ans in async_chat(dia, msg, False, **chat_kwargs):
-        answer = ans
-        break
+    try:
+        async for ans in async_chat(dia, msg, False, **chat_kwargs):
+            answer = ans
+            break
+    except Exception as exc:
+        _persist_openai_session(
+            session_id,
+            messages,
+            "",
+            {},
+            {"total_tokens": context_token_used},
+            time.monotonic() - started_at,
+            session_round,
+            session_references,
+            str(exc),
+        )
+        raise
+
+    if answer is None:
+        error = "The model returned no answer."
+        _persist_openai_session(
+            session_id,
+            messages,
+            "",
+            {},
+            {"total_tokens": context_token_used},
+            time.monotonic() - started_at,
+            session_round,
+            session_references,
+            error,
+        )
+        raise RuntimeError(error)
 
     content = answer["answer"]
     response = {
@@ -372,5 +539,17 @@ async def openai_chat_completions(chat_id):
             include_metadata=include_reference_metadata,
             metadata_fields=metadata_fields,
         )
+
+    _persist_openai_session(
+        session_id,
+        messages,
+        content,
+        answer.get("reference", {}),
+        response["usage"],
+        time.monotonic() - started_at,
+        session_round,
+        session_references,
+    )
+    response["session_id"] = session_id
 
     return jsonify(response)

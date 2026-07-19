@@ -35,6 +35,7 @@ from api.db.services.tenant_llm_service import TenantService
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
 from api.db.services.tenant_model_service import TenantModelService
+from api.db.services.shared_model_service import SharedModelService
 from api.utils.model_utils import calculate_model_type, get_model_type_human
 
 logger = logging.getLogger(__name__)
@@ -250,6 +251,28 @@ def _resolve_instance_for_model(provider_obj, instance_name: str, model_name: st
     raise LookupError(f"Instance {instance_name} not found for model {model_name}.")
 
 
+def _resolve_shared_model_by_name(tenant_id: str, model_name: str, model_type: str | enum.Enum | None = None):
+    pure_model_name, instance_name, provider_name = split_model_name(model_name)
+    model_type_val = model_type if isinstance(model_type, str) or model_type is None else model_type.value
+    model_type_bin = calculate_model_type(model_type_val) if model_type_val else None
+    matches = []
+    for model_obj in TenantModelService.get_models_by_ids(SharedModelService.list_accessible_model_ids(tenant_id)):
+        if model_obj.model_name != pure_model_name or model_obj.status != ActiveStatusEnum.ACTIVE.value:
+            continue
+        if model_type_bin and not (model_obj.model_type & model_type_bin):
+            continue
+        ok, provider_obj = TenantModelProviderService.get_by_id(model_obj.provider_id)
+        if not ok or provider_obj.provider_name != provider_name:
+            continue
+        ok, instance_obj = TenantModelInstanceService.get_by_id(model_obj.instance_id)
+        if not ok or instance_obj.instance_name != instance_name:
+            continue
+        matches.append(model_obj)
+    if len(matches) > 1:
+        raise LookupError(f"Multiple shared models match {model_name}; use the model id instead.")
+    return matches[0] if matches else None
+
+
 def resolve_model_config(tenant_id, model_type: str | enum.Enum, model_ref: str):
     try:
         return get_model_config_by_id(tenant_id, model_type, model_ref)
@@ -278,6 +301,9 @@ def get_model_config_from_provider_instance(tenant_id, model_type: str | enum.En
 
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
     if not provider_obj:
+        shared_model = _resolve_shared_model_by_name(tenant_id, model_name, model_type_val)
+        if shared_model:
+            return get_model_config_by_id(tenant_id, model_type_val, shared_model.id)
         raise LookupError(f"Provider {provider_name} not found for model {model_name}.")
     instance_obj = _resolve_instance_for_model(provider_obj, instance_name, model_name)
     model_obj = TenantModelService.get_by_provider_id_and_instance_id_and_model_type_and_model_name(provider_obj.id, instance_obj.id, model_type_val, pure_model_name)
@@ -337,11 +363,12 @@ def get_model_config_by_id(tenant_id: str, model_type: str | enum.Enum, model_id
     if not ok:
         raise LookupError(f"Provider id={model_obj.provider_id} not found for model id={model_id}.")
 
-    # Validate that tenant_id owns the provider or is a joined tenant of the provider's owner.
+    # Validate that the workspace owns the provider, belongs to its owner, or was
+    # explicitly granted access to an administrator-managed shared model.
     if tenant_id != provider_obj.tenant_id:
         joined_tenants = TenantService.list_accessible_by_user_id(tenant_id)
         joined_tenant_ids = [t["tenant_id"] for t in joined_tenants]
-        if provider_obj.tenant_id not in joined_tenant_ids:
+        if provider_obj.tenant_id not in joined_tenant_ids and not SharedModelService.can_use(tenant_id, model_id):
             raise LookupError(f"Tenant {tenant_id} has no access to provider owned by tenant {provider_obj.tenant_id}.")
 
     ok, instance_obj = TenantModelInstanceService.get_by_id(model_obj.instance_id)
@@ -389,6 +416,9 @@ def resolve_model_id(tenant_id: str, model_type: str | enum.Enum, model_name: st
 
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
     if not provider_obj:
+        shared_model = _resolve_shared_model_by_name(tenant_id, model_name, model_type_val)
+        if shared_model:
+            return shared_model.id
         raise LookupError(f"Provider {provider_name} not found for model {model_name}.")
 
     instance_obj = _resolve_instance_for_model(provider_obj, instance_name, model_name)
@@ -432,6 +462,17 @@ def ensure_tenant_model_ids_for_params(tenant_id: str, params: dict) -> dict:
     return params
 
 
+def validate_tenant_model_ids_for_params(tenant_id: str, params: dict) -> dict:
+    """Reject model references that the target workspace cannot use."""
+    for name_field, (model_type, id_field) in _MODEL_NAME_TO_ID_FIELD_MAP.items():
+        model_id = params.get(id_field)
+        if model_id:
+            get_model_config_by_id(tenant_id, model_type, model_id)
+        elif params.get(name_field):
+            resolve_model_config(tenant_id, model_type, params[name_field])
+    return params
+
+
 def get_api_key(tenant_id: str, model_name: str):
     _, instance_name, provider_name = split_model_name(model_name)
 
@@ -439,7 +480,13 @@ def get_api_key(tenant_id: str, model_name: str):
         raise LookupError("Provider name is required.")
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
     if not provider_obj:
-        raise LookupError(f"Provider {provider_name} not found.")
+        shared_model = _resolve_shared_model_by_name(tenant_id, model_name)
+        if not shared_model:
+            raise LookupError(f"Provider {provider_name} not found.")
+        ok, instance_obj = TenantModelInstanceService.get_by_id(shared_model.instance_id)
+        if not ok:
+            raise LookupError(f"Instance for shared model {model_name} not found.")
+        return instance_obj.api_key
     instance_obj = _resolve_instance_for_model(provider_obj, instance_name, model_name)
     return instance_obj.api_key
 
@@ -462,6 +509,9 @@ def get_model_type_by_name(tenant_id: str, model_name: str):
     pure_model_name, instance_name, provider_name = split_model_name(model_name)
     provider_obj = TenantModelProviderService.get_by_tenant_id_and_provider_name(tenant_id, provider_name)
     if not provider_obj:
+        shared_model = _resolve_shared_model_by_name(tenant_id, model_name)
+        if shared_model:
+            return get_model_type_human(shared_model.model_type)
         raise LookupError(f"Provider {provider_name} not found for model {model_name}.")
     instance_obj = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider_obj.id, instance_name)
     if not instance_obj:

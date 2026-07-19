@@ -221,6 +221,9 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
         if not KnowledgebaseService.delete_by_id(kb_id):
             errors.append(f"Delete dataset error for {kb_id}")
             continue
+        from api.db.services.resource_quota_service import ResourceQuotaService
+
+        ResourceQuotaService.remove_dataset_quota(kb_id)
         success_count += 1
 
     if not errors:
@@ -262,7 +265,7 @@ def get_dataset(dataset_id: str, tenant_id: str):
             "tenant_avatar": "",
             "workspace_name": workspace.name if workspace_exists else "",
             "workspace_type": WorkspaceAccessService.get_workspace_type(kb.tenant_id),
-            "creator_name": creator.nickname if creator_exists else "",
+            "creator_name": (creator.nickname or creator.email) if creator_exists else "",
             "creator_avatar": creator.avatar if creator_exists else "",
             "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
         }
@@ -517,7 +520,7 @@ def list_datasets(tenant_id: str, args: dict):
                 "tenant_avatar": "",
                 "workspace_name": workspace.get("name", ""),
                 "workspace_type": workspace_type,
-                "creator_name": creator.get("nickname", ""),
+                "creator_name": creator.get("nickname") or creator.get("email", ""),
                 "creator_avatar": creator.get("avatar", ""),
                 "capabilities": WorkspaceAccessService.get_knowledgebase_capabilities(tenant_id, kb),
             }

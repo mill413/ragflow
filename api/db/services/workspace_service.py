@@ -165,7 +165,11 @@ class WorkspaceAccessService:
         return {
             "workspace_type": workspace_type,
             "workspace_name": cls._value(workspace, "name", "") if workspace_exists else "",
-            "creator_name": cls._value(creator, "nickname", "") if creator_exists else "",
+            "creator_name": (
+                cls._value(creator, "nickname", "") or cls._value(creator, "email", "")
+                if creator_exists
+                else ""
+            ),
         }
 
     @classmethod
@@ -974,3 +978,6 @@ class TeamService:
                 CompilationTemplateGroup.delete().where(CompilationTemplateGroup.tenant_id == tenant_id).execute()
                 UserTenant.update(status=StatusEnum.INVALID.value).where(UserTenant.tenant_id == tenant_id).execute()
                 Tenant.update(status=StatusEnum.INVALID.value).where(Tenant.id == tenant_id).execute()
+            from api.db.services.resource_quota_service import ResourceQuotaService
+
+            ResourceQuotaService.remove_workspace_quota(tenant_id)

@@ -43,7 +43,7 @@ export function parseBooleanish(value: any): boolean {
 export function createFuzzySearchFn<TData extends RowData>(
   columns: (keyof TData)[] = [],
 ) {
-  return (row: Row<TData>, columnId: string, filterValue: string) => {
+  return (row: Row<TData>, _columnId: string, filterValue: string) => {
     const searchText = filterValue.trim().toLowerCase();
 
     return columns
@@ -67,6 +67,16 @@ export function createColumnFilterFn<TData extends RowData>(
   return Object.assign(filterFn, options) as FilterFn<TData>;
 }
 
+export function createMultiSelectFilterFn<TData extends RowData>(
+  normalize: (value: unknown) => string = (value) => String(value ?? ''),
+) {
+  return createColumnFilterFn<TData>(
+    (row, id, filterValue: string[]) =>
+      !filterValue.length || filterValue.includes(normalize(row.getValue(id))),
+    { autoRemove: (value) => !Array.isArray(value) || value.length === 0 },
+  );
+}
+
 export function getSortIcon(sorting: false | SortDirection) {
   return (
     {
@@ -74,6 +84,16 @@ export function getSortIcon(sorting: false | SortDirection) {
       desc: <LucideSortDesc />,
     }[sorting as string] ?? <LucideArrowUpDown className="opacity-50" />
   );
+}
+
+export function getMainAppUrlAsAdmin(path: string) {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set('admin_view', '1');
+  return url.toString();
+}
+
+export function openMainAppAsAdmin(path: string) {
+  window.open(getMainAppUrlAsAdmin(path), '_blank', 'noopener,noreferrer');
 }
 
 export const PERMISSION_TYPES = ['enable', 'read', 'write', 'share'] as const;

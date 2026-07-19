@@ -15,7 +15,7 @@ const Popover = ({
   onOpenChange,
   disableOutsideClick = false,
 }: PopoverProps) => {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(Boolean(openState));
   React.useEffect(() => {
     setOpen(!!openState);
   }, [openState]);

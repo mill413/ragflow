@@ -76,6 +76,14 @@ export enum Routes {
   AdminTeamManagement = `${Admin}/teams`,
   AdminDepartments = `${Admin}/departments`,
   AdminResourceManagement = `${Admin}/resources`,
+  AdminKnowledgeManagement = `${AdminResourceManagement}/datasets`,
+  AdminChatManagement = `${AdminResourceManagement}/chats`,
+  AdminSearchManagement = `${AdminResourceManagement}/searches`,
+  AdminAgentManagement = `${AdminResourceManagement}/agents`,
+  AdminMemoryManagement = `${AdminResourceManagement}/memories`,
+  AdminFileManagement = `${AdminResourceManagement}/files`,
+  AdminQuotaManagement = `${Admin}/quotas`,
+  AdminModelManagement = `${Admin}/models`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
   AdminRoles = `${Admin}/roles`,
@@ -158,6 +166,7 @@ const routeConfigOptions = [
       const url = new URL(request.url);
       const auth = url.searchParams.get('auth');
       if (auth) {
+        authorizationUtil.clearAdminViewSession();
         authorizationUtil.setAuthorization(auth);
         url.searchParams.delete('auth');
         return redirect(`${url.pathname}${url.search}`);
@@ -391,10 +400,6 @@ const routeConfigOptions = [
         Component: () => import('@/pages/admin/layouts/authorized-layout'),
         children: [
           {
-            path: `${Routes.AdminUserManagement}/:id`,
-            Component: () => import('@/pages/admin/user-detail'),
-          },
-          {
             Component: () => import('@/pages/admin/layouts/navigation-layout'),
             children: [
               {
@@ -415,7 +420,21 @@ const routeConfigOptions = [
               },
               {
                 path: Routes.AdminResourceManagement,
+                element: (
+                  <Navigate to={Routes.AdminKnowledgeManagement} replace />
+                ),
+              },
+              {
+                path: `${Routes.AdminResourceManagement}/:resourceView`,
                 Component: () => import('@/pages/admin/resources'),
+              },
+              {
+                path: Routes.AdminQuotaManagement,
+                Component: () => import('@/pages/admin/quotas'),
+              },
+              {
+                path: Routes.AdminModelManagement,
+                Component: () => import('@/pages/admin/models'),
               },
               {
                 path: Routes.AdminSandboxSettings,

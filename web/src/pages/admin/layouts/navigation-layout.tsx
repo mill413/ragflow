@@ -1,15 +1,25 @@
-import { useContext, useMemo, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import {
   LucideBoxes,
+  LucideBot,
+  LucideBrain,
   LucideBuilding2,
+  LucideChevronDown,
+  LucideChevronRight,
+  LucideFile,
+  LucideFileSearch,
   LucideLogOut,
+  LucideBrainCircuit,
+  LucideLibrary,
+  LucideMessageSquare,
   LucidePanelLeftClose,
   LucidePanelLeftOpen,
+  LucideGauge,
   LucideServerCrash,
   LucideSquareUserRound,
   LucideUserCog,
@@ -30,14 +40,29 @@ import { IS_ENTERPRISE } from '../utils';
 import { CurrentUserInfoContext } from './root-layout';
 
 const ADMIN_SIDEBAR_COLLAPSED_KEY = 'admin-sidebar-collapsed';
+const ADMIN_RESOURCE_MENU_EXPANDED_KEY = 'admin-resource-menu-expanded';
+
+type AdminNavigationItem = {
+  path: string;
+  name: string;
+  icon: ReactNode;
+  children?: AdminNavigationItem[];
+};
 
 const AdminNavigationLayout = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [, setCurrentUserInfo] = useContext(CurrentUserInfoContext);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_KEY) !== 'false';
+  });
+  const [resourceMenuExpanded, setResourceMenuExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return (
+      window.localStorage.getItem(ADMIN_RESOURCE_MENU_EXPANDED_KEY) !== 'false'
+    );
   });
 
   const { data: version } = useQuery({
@@ -45,7 +70,7 @@ const AdminNavigationLayout = () => {
     queryFn: async () => (await getSystemVersion())?.data?.data?.version,
   });
 
-  const navItems = useMemo(
+  const navItems = useMemo<AdminNavigationItem[]>(
     () => [
       {
         path: Routes.AdminServices,
@@ -71,6 +96,48 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminResourceManagement,
         name: t('admin.resourceManagement'),
         icon: <LucideBoxes className="size-[1em]" />,
+        children: [
+          {
+            path: Routes.AdminKnowledgeManagement,
+            name: t('admin.resourceManagementPage.knowledge'),
+            icon: <LucideLibrary className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminChatManagement,
+            name: t('admin.resourceManagementPage.chat'),
+            icon: <LucideMessageSquare className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminSearchManagement,
+            name: t('admin.resourceManagementPage.searchApp'),
+            icon: <LucideFileSearch className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminAgentManagement,
+            name: t('admin.resourceManagementPage.agent'),
+            icon: <LucideBot className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminMemoryManagement,
+            name: t('admin.resourceManagementPage.memory'),
+            icon: <LucideBrain className="size-[1em]" />,
+          },
+          {
+            path: Routes.AdminFileManagement,
+            name: t('admin.resourceManagementPage.file'),
+            icon: <LucideFile className="size-[1em]" />,
+          },
+        ],
+      },
+      {
+        path: Routes.AdminQuotaManagement,
+        name: t('admin.quotaManagement'),
+        icon: <LucideGauge className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminModelManagement,
+        name: t('admin.modelManagement'),
+        icon: <LucideBrainCircuit className="size-[1em]" />,
       },
       {
         path: Routes.AdminSandboxSettings,
@@ -116,18 +183,30 @@ const AdminNavigationLayout = () => {
       return next;
     });
   };
+  const toggleResourceMenu = () => {
+    setResourceMenuExpanded((expanded) => {
+      const next = !expanded;
+      window.localStorage.setItem(
+        ADMIN_RESOURCE_MENU_EXPANDED_KEY,
+        String(next),
+      );
+      return next;
+    });
+  };
 
   return (
-    <main className="w-screen h-screen flex flex-row gap-6 px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
+    <main className="relative w-screen h-screen flex flex-row gap-6 px-3 pt-12 pb-3 dark:*:focus-visible:ring-white">
+      <ThemeSwitch className="absolute right-3 top-1.5 z-10" />
+
       <aside
         className={cn(
           'shrink-0 flex flex-col gap-6 transition-[width] duration-200 ease-out',
-          sidebarCollapsed ? 'w-14' : 'w-[200px]',
+          sidebarCollapsed ? 'w-14' : 'w-[170px]',
         )}
       >
         <div
           className={cn(
-            'flex h-8 items-center mb-6',
+            'mb-0 flex h-8 items-center',
             sidebarCollapsed && 'justify-center',
           )}
         >
@@ -167,55 +246,115 @@ const AdminNavigationLayout = () => {
           </Button>
         </div>
 
-        <nav>
-          <ul className="space-y-4">
+        <nav className="min-h-0 flex-1 overflow-y-auto">
+          <ul className="space-y-2">
             {navItems.map((it) => (
               <li key={it.path}>
-                <NavLink
-                  to={it.path}
-                  className={({ isActive }) =>
-                    cn(
-                      'px-4 py-3 rounded-lg',
-                      'text-base w-full flex items-center justify-start text-text-secondary',
-                      'hover:bg-bg-card focus:bg-bg-card focus-visible:bg-bg-card',
-                      'hover:text-text-primary focus:text-text-primary focus-visible:text-text-primary',
-                      'active:text-text-primary',
-                      'transition-colors',
+                {it.children ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      'relative flex w-full items-center justify-start rounded-lg px-4 py-3 text-base text-text-secondary transition-colors',
+                      'hover:bg-bg-card hover:text-text-primary focus:bg-bg-card focus:text-text-primary focus-visible:bg-bg-card focus-visible:text-text-primary',
                       sidebarCollapsed && 'justify-center px-0',
-                      {
-                        'bg-bg-card text-text-primary': isActive,
-                      },
-                    )
-                  }
-                  title={sidebarCollapsed ? it.name : undefined}
-                >
-                  {it.icon}
-                  {!sidebarCollapsed && (
-                    <span className="ml-3 whitespace-nowrap">{it.name}</span>
-                  )}
-                </NavLink>
+                      it.children.some((child) =>
+                        location.pathname.startsWith(child.path),
+                      ) && 'bg-bg-card text-text-primary',
+                    )}
+                    title={sidebarCollapsed ? it.name : undefined}
+                    aria-label={it.name}
+                    aria-expanded={resourceMenuExpanded}
+                    onClick={toggleResourceMenu}
+                  >
+                    {it.icon}
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="ml-3 whitespace-nowrap">
+                          {it.name}
+                        </span>
+                        {resourceMenuExpanded ? (
+                          <LucideChevronDown className="ml-auto size-4" />
+                        ) : (
+                          <LucideChevronRight className="ml-auto size-4" />
+                        )}
+                      </>
+                    )}
+                    {sidebarCollapsed &&
+                      (resourceMenuExpanded ? (
+                        <LucideChevronDown className="absolute right-0 size-3" />
+                      ) : (
+                        <LucideChevronRight className="absolute right-0 size-3" />
+                      ))}
+                  </button>
+                ) : (
+                  <NavLink
+                    to={it.path}
+                    className={({ isActive }) =>
+                      cn(
+                        'px-4 py-3 rounded-lg',
+                        'text-base w-full flex items-center justify-start text-text-secondary',
+                        'hover:bg-bg-card focus:bg-bg-card focus-visible:bg-bg-card',
+                        'hover:text-text-primary focus:text-text-primary focus-visible:text-text-primary',
+                        'active:text-text-primary',
+                        'transition-colors',
+                        sidebarCollapsed && 'justify-center px-0',
+                        isActive && 'bg-bg-card text-text-primary',
+                      )
+                    }
+                    title={sidebarCollapsed ? it.name : undefined}
+                  >
+                    {it.icon}
+                    {!sidebarCollapsed && (
+                      <span className="ml-3 whitespace-nowrap">{it.name}</span>
+                    )}
+                  </NavLink>
+                )}
+                {it.children && resourceMenuExpanded && (
+                  <ul
+                    className={cn(
+                      'mt-1 space-y-1',
+                      sidebarCollapsed
+                        ? 'ml-2 border-l border-border-button pl-1'
+                        : 'ml-6 border-l border-border-button pl-3',
+                    )}
+                  >
+                    {it.children.map((child) => (
+                      <li key={child.path}>
+                        <NavLink
+                          to={child.path}
+                          title={sidebarCollapsed ? child.name : undefined}
+                          aria-label={child.name}
+                          className={({ isActive }) =>
+                            cn(
+                              'flex w-full items-center rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors',
+                              'hover:bg-bg-card hover:text-text-primary focus-visible:bg-bg-card focus-visible:text-text-primary',
+                              sidebarCollapsed && 'justify-center px-0',
+                              isActive && 'bg-bg-card text-text-primary',
+                            )
+                          }
+                        >
+                          {child.icon}
+                          {!sidebarCollapsed && (
+                            <span className="ml-3 whitespace-nowrap">
+                              {child.name}
+                            </span>
+                          )}
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
         </nav>
 
         <div className="mt-auto space-y-4">
-          <div
-            className={cn(
-              'flex items-center',
-              sidebarCollapsed
-                ? 'justify-center overflow-hidden'
-                : 'justify-between',
-            )}
-          >
-            {!sidebarCollapsed && (
-              <span className="leading-none text-xs text-accent-primary">
-                {version}
-              </span>
-            )}
-
-            <ThemeSwitch className={cn(sidebarCollapsed && 'scale-75')} />
-          </div>
+          {!sidebarCollapsed && (
+            <span className="block truncate leading-none text-xs text-accent-primary">
+              {version}
+            </span>
+          )}
 
           <Button
             size="lg"
@@ -230,7 +369,7 @@ const AdminNavigationLayout = () => {
         </div>
       </aside>
 
-      <section className="min-w-0 flex-1 h-full">
+      <section className="h-full min-w-0 flex-1 overflow-hidden">
         <Outlet />
       </section>
     </main>

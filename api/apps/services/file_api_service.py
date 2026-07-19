@@ -14,15 +14,14 @@
 #  limitations under the License.
 #
 import logging
-import os
 import pathlib
 
 from api.common.check_team_permission import check_file_read_permission, check_file_write_permission
 from api.db import FileType
 from api.db.services import duplicate_name
-from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.resource_quota_service import ResourceQuotaService
 from api.db.services.resource_reference_service import ResourceReferenceService
 from api.utils.file_utils import filename_type
 from common import settings
@@ -50,12 +49,22 @@ async def upload_file(workspace_id: str, actor_id: str, pf_id: str, file_objs: l
     if pf_folder.tenant_id != workspace_id:
         return False, "Parent folder does not belong to the selected workspace."
 
+    try:
+        upload_size = await thread_pool_exec(
+            ResourceQuotaService.get_uploads_size, file_objs
+        )
+        await thread_pool_exec(
+            ResourceQuotaService.ensure_upload_allowed,
+            workspace_id,
+            None,
+            len(file_objs),
+            upload_size,
+        )
+    except ValueError as exc:
+        return False, str(exc)
+
     file_res = []
     for file_obj in file_objs:
-        MAX_FILE_NUM_PER_USER = int(os.environ.get("MAX_FILE_NUM_PER_USER", 0))
-        if 0 < MAX_FILE_NUM_PER_USER <= await thread_pool_exec(DocumentService.get_doc_count, workspace_id):
-            return False, "Exceed the maximum file number of a free user!"
-
         if not file_obj.filename:
             file_obj_names = [pf_folder.name, file_obj.filename]
         else:

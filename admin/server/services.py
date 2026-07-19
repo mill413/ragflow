@@ -17,17 +17,26 @@
 import base64
 import binascii
 import json
-import os
 import logging
+import os
 import re
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
 from peewee import Case, fn
 
-from common.constants import ActiveEnum, StatusEnum
-from api.db import CanvasCategory, TenantPermission, UserTenantRole, WorkspaceType
+from common.constants import ActiveEnum, ActiveStatusEnum, StatusEnum
+from api.db import (
+    KNOWLEDGEBASE_FOLDER_NAME,
+    SKILLS_FOLDER_NAME,
+    CanvasCategory,
+    FileType,
+    TenantPermission,
+    UserTenantRole,
+    WorkspaceType,
+)
 from api.db.services import UserService, generate_access_token
 from api.db.joint_services.user_account_service import create_new_user, delete_user_data
 from api.db.services.canvas_service import UserCanvasService
@@ -36,9 +45,36 @@ from api.db.services.workspace_service import TeamService, WorkspaceAccessServic
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.services.api_service import APITokenService
-from api.db.db_models import APIToken, DB, Dialog, Document, Knowledgebase, Memory, Search, Task, Tenant, User, UserCanvas, UserTenant
+from api.db.db_models import (
+    API4Conversation,
+    APIToken,
+    Conversation,
+    DB,
+    Dialog,
+    Document,
+    File,
+    File2Document,
+    Knowledgebase,
+    Memory,
+    Search,
+    Task,
+    Tenant,
+    TenantModel,
+    TenantModelInstance,
+    TenantModelProvider,
+    User,
+    UserCanvas,
+    UserTenant,
+)
 from api.utils.crypt import check_password_hash, decrypt
+from api.utils.model_utils import calculate_model_type, get_model_type_human
 from api.utils import health_utils
+from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.resource_quota_service import ResourceQuotaService
+from api.db.services.shared_model_service import SharedModelService
+from api.db.services.tenant_model_instance_service import TenantModelInstanceService
+from api.db.services.tenant_model_provider_service import TenantModelProviderService
+from api.db.services.tenant_model_service import TenantModelService
 
 from api.common.exceptions import AdminException, UserAlreadyExistsError, UserNotFoundError
 from config import SERVICE_CONFIGS
@@ -302,9 +338,25 @@ class UserMgr:
                 Document.select(
                     Document.created_by.alias("user_id"),
                     fn.COUNT(Document.id).alias("uploaded_documents"),
-                    fn.COALESCE(fn.SUM(Document.size), 0).alias("uploaded_storage_bytes"),
+                    fn.COALESCE(
+                        fn.SUM(
+                            Case(
+                                None,
+                                [(Knowledgebase.tenant_id == Document.created_by, Document.size)],
+                                0,
+                            )
+                        ),
+                        0,
+                    ).alias("uploaded_storage_bytes"),
                 )
-                .where((Document.created_by.in_(user_ids)) & (Document.status == valid))
+                .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+                .where(
+                    (Document.created_by.in_(user_ids))
+                    & (Document.status == valid)
+                    & (Knowledgebase.status == valid)
+                    & (Tenant.status == valid)
+                )
                 .group_by(Document.created_by)
                 .dicts()
             )
@@ -345,9 +397,17 @@ class UserMgr:
                     "update_date": user.update_date,
                     **departments.get(user.id, {"department_id": None, "department_path": ""}),
                     "remark": OrganizationMgr.get_user_metadata(user.id).get("remark", ""),
+                    "quota": ResourceQuotaService.get_workspace_quota(user.id),
                 }
             )
         return result
+
+    @staticmethod
+    def update_user_quota(username, data):
+        users = UserService.query_user_by_email(username)
+        if not users:
+            raise UserNotFoundError(username)
+        return ResourceQuotaService.set_workspace_quota(users[0].id, data)
 
     @staticmethod
     def update_user_profile(username, data):
@@ -421,6 +481,7 @@ class UserMgr:
         result = delete_user_data(usr.id)
         if result.get("success"):
             OrganizationMgr.remove_user(usr.id)
+            ResourceQuotaService.remove_workspace_quota(usr.id)
         return result
 
     @staticmethod
@@ -543,6 +604,87 @@ class UserMgr:
         return "Revoke successfully!"
 
 
+def _get_workspace_model_configuration(workspace_id: str) -> dict[str, Any]:
+    tenant = Tenant.get_or_none(
+        (Tenant.id == workspace_id) & (Tenant.status == StatusEnum.VALID.value)
+    )
+    default_fields = [
+        ("chat", "llm_id", "tenant_llm_id"),
+        ("embedding", "embd_id", "tenant_embd_id"),
+        ("asr", "asr_id", "tenant_asr_id"),
+        ("vision", "img2txt_id", "tenant_img2txt_id"),
+        ("rerank", "rerank_id", "tenant_rerank_id"),
+        ("tts", "tts_id", "tenant_tts_id"),
+        ("ocr", "ocr_id", "tenant_ocr_id"),
+    ]
+    defaults = [
+        {
+            "model_type": model_type,
+            "model_name": getattr(tenant, name_field, "") or "",
+            "model_id": getattr(tenant, id_field, "") or "",
+        }
+        for model_type, name_field, id_field in default_fields
+    ]
+    if not tenant:
+        return {"defaults": defaults, "models": []}
+
+    providers = TenantModelProviderService.get_by_tenant_id(workspace_id)
+    if not providers:
+        return {"defaults": defaults, "models": []}
+    provider_by_id = {provider.id: provider for provider in providers}
+    instances = TenantModelInstanceService.get_by_provider_ids(list(provider_by_id))
+    instance_by_id = {instance.id: instance for instance in instances}
+    models = TenantModelService.get_models_by_provider_ids_and_instance_ids(
+        list(provider_by_id),
+        list(instance_by_id),
+    )
+    managed_model_ids = set(SharedModelService.list_entries())
+    rows = []
+    for model in models:
+        if model.id in managed_model_ids:
+            continue
+        provider = provider_by_id.get(model.provider_id)
+        instance = instance_by_id.get(model.instance_id)
+        if not provider or not instance:
+            continue
+        try:
+            instance_extra = json.loads(instance.extra or "{}")
+        except (TypeError, json.JSONDecodeError):
+            instance_extra = {}
+        try:
+            model_extra = json.loads(model.extra or "{}")
+        except (TypeError, json.JSONDecodeError):
+            model_extra = {}
+        rows.append(
+            {
+                "id": model.id,
+                "name": model.model_name or "",
+                "provider_name": provider.provider_name,
+                "instance_name": instance.instance_name,
+                "api_key": instance.api_key,
+                "base_url": instance_extra.get("base_url", "") if isinstance(instance_extra, dict) else "",
+                "model_types": get_model_type_human(model.model_type),
+                "max_tokens": int(model_extra.get("max_tokens") or 8192)
+                if isinstance(model_extra, dict)
+                else 8192,
+                "status": model.status,
+                "create_date": model.create_date,
+                "update_date": model.update_date,
+            }
+        )
+    return {
+        "defaults": defaults,
+        "models": sorted(
+            rows,
+            key=lambda row: (
+                row["provider_name"],
+                row["instance_name"],
+                row["name"],
+            ),
+        ),
+    }
+
+
 class TeamMgr:
     MEMBER_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
     EDITABLE_ROLES = {UserTenantRole.OWNER, UserTenantRole.ADMIN, UserTenantRole.NORMAL}
@@ -604,11 +746,17 @@ class TeamMgr:
                     "dataset_count": dataset_query.count(),
                     "document_count": int(document_stats.get("document_count", 0) or 0),
                     "storage_bytes": int(document_stats.get("storage_bytes", 0) or 0),
+                    "quota": ResourceQuotaService.get_workspace_quota(tenant.id),
                     "create_date": tenant.create_date,
                     "update_date": tenant.update_date,
                 }
             )
         return teams
+
+    @classmethod
+    def update_quota(cls, team_id, data):
+        cls._ensure_team(team_id)
+        return ResourceQuotaService.set_workspace_quota(team_id, data)
 
     @classmethod
     def create_team(cls, owner_id, name):
@@ -639,6 +787,7 @@ class TeamMgr:
         cls._ensure_team(team_id)
         try:
             TeamService.delete(cls._owner_id(team_id), team_id)
+            ResourceQuotaService.remove_workspace_quota(team_id)
             return True
         except (LookupError, PermissionError, ValueError) as exc:
             raise AdminException(str(exc), 409) from exc
@@ -646,6 +795,23 @@ class TeamMgr:
     @classmethod
     def list_members(cls, team_id):
         return cls._members(team_id)
+
+    @classmethod
+    def get_resources(cls, team_id):
+        cls._ensure_team(team_id)
+        resources = {
+            resource_type: ResourceMgr.list_resources(
+                resource_type,
+                page=1,
+                page_size=1,
+                workspace_ids=[team_id],
+                hierarchy=resource_type == "file",
+                paginate=False,
+            )["resources"]
+            for resource_type in ResourceMgr.RESOURCE_SPECS
+        }
+        resources["model"] = _get_workspace_model_configuration(team_id)
+        return resources
 
     @classmethod
     def add_member(cls, team_id, user_id, role):
@@ -738,6 +904,32 @@ class UserServiceMgr:
         return [{"title": r["title"], "permission": r["permission"], "canvas_category": r["canvas_category"].split("_")[0], "avatar": r["avatar"]} for r in res]
 
     @staticmethod
+    def get_user_resources(username):
+        user_list = UserService.query_user_by_email(username)
+        if not user_list:
+            raise UserNotFoundError(username)
+        if len(user_list) > 1:
+            raise AdminException(f"Exist more than 1 user: {username}!")
+
+        user = user_list[0]
+        workspace_ids = [
+            membership["tenant_id"]
+            for membership in TenantService.list_accessible_by_user_id(user.id)
+        ]
+        resources = {
+            resource_type: ResourceMgr.list_resources(
+                resource_type,
+                page=1,
+                page_size=1,
+                workspace_ids=workspace_ids,
+                paginate=False,
+            )["resources"]
+            for resource_type in ResourceMgr.RESOURCE_SPECS
+        }
+        resources["model"] = _get_workspace_model_configuration(user.id)
+        return resources
+
+    @staticmethod
     def get_user_tenants(email: str) -> list[dict[str, Any]]:
         users: list[Any] = UserService.query_user_by_email(email)
         if not users:
@@ -749,7 +941,7 @@ class UserServiceMgr:
 
 
 class ResourceMgr:
-    """Read-only global resource inventory for the admin console."""
+    """Global resource inventory and lifecycle operations for administrators."""
 
     RESOURCE_SPECS = {
         "dataset": {
@@ -783,10 +975,25 @@ class ResourceMgr:
             "workspace_field": Memory.tenant_id,
             "permission_field": Memory.permissions,
         },
+        "file": {
+            "model": File,
+            "name_field": File.name,
+            "workspace_field": File.tenant_id,
+            "creator_field": File.created_by,
+        },
     }
 
     @classmethod
-    def list_resources(cls, resource_type: str, page: int, page_size: int, keywords: str = "") -> dict[str, Any]:
+    def list_resources(
+        cls,
+        resource_type: str,
+        page: int,
+        page_size: int,
+        keywords: str = "",
+        workspace_ids: list[str] | None = None,
+        hierarchy: bool = False,
+        paginate: bool = True,
+    ) -> dict[str, Any]:
         spec = cls.RESOURCE_SPECS.get(resource_type)
         if not spec:
             raise AdminException(f"Unsupported resource type: {resource_type}")
@@ -810,28 +1017,102 @@ class ResourceMgr:
             fields.append(creator_field.alias("creator_id"))
         if resource_type == "dataset":
             fields.extend([Knowledgebase.doc_num, Knowledgebase.chunk_num, Knowledgebase.token_num])
+        elif resource_type == "chat":
+            fields.append(Dialog.kb_ids)
+        elif resource_type == "agent":
+            fields.extend([UserCanvas.release, UserCanvas.canvas_type])
+        elif resource_type == "search":
+            fields.append(Search.search_config)
+        elif resource_type == "memory":
+            fields.extend([Memory.memory_type, Memory.storage_type, Memory.memory_size])
+        elif resource_type == "file":
+            fields.extend([File.parent_id, File.size, File.type.alias("file_type"), File.source_type])
 
         query = model.select(*fields)
         if hasattr(model, "status"):
             query = query.where(model.status == StatusEnum.VALID.value)
         if spec.get("extra_filter") is not None:
             query = query.where(spec["extra_filter"])
+        if workspace_ids:
+            query = query.where(workspace_field.in_(workspace_ids))
         keywords = str(keywords or "").strip().lower()
         if keywords:
             query = query.where(fn.LOWER(name_field).contains(keywords))
 
         total = query.count()
-        rows = list(query.order_by(model.create_time.desc()).paginate(page, page_size).dicts())
+        ordered_query = query.order_by(model.create_time.desc())
+        if not paginate or (resource_type == "file" and hierarchy):
+            rows = list(ordered_query.dicts())
+        else:
+            rows = list(ordered_query.paginate(page, page_size).dicts())
         cls._attach_ownership(rows)
         if resource_type == "dataset":
             cls._attach_dataset_metrics(rows)
+        elif resource_type == "chat":
+            cls._attach_chat_metrics(rows)
+        elif resource_type == "agent":
+            cls._attach_agent_metrics(rows)
+        elif resource_type == "search":
+            for row in rows:
+                config = row.pop("search_config", {}) or {}
+                row["dataset_count"] = len(set(config.get("kb_ids") or config.get("dataset_ids") or []))
+                row["document_count"] = len(set(config.get("doc_ids") or config.get("document_ids") or []))
+        elif resource_type == "file":
+            cls._attach_file_metrics(rows)
         for row in rows:
+            row["resource_type"] = resource_type
             if not row.get("permission"):
                 row["permission"] = (
                     TenantPermission.ME.value if row["workspace_type"] == "personal" else TenantPermission.TEAM.value
                 )
+            row["deletable"] = not (
+                resource_type == "file"
+                and (
+                    row.get("parent_id") == row["id"]
+                    or row.get("name") in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                    or row.get("source_type") in {"knowledgebase", "skill_space"}
+                )
+            )
 
         return {"resources": rows, "total": total}
+
+    @staticmethod
+    def _attach_file_metrics(rows):
+        """Replace folder sizes with the sum of all descendant file sizes."""
+        if not rows:
+            return
+
+        rows_by_key = {(row["workspace_id"], row["id"]): row for row in rows}
+        children_by_parent = defaultdict(list)
+        for row in rows:
+            parent_id = row.get("parent_id")
+            key = (row["workspace_id"], row["id"])
+            parent_key = (row["workspace_id"], parent_id)
+            if parent_id and parent_key != key and parent_key in rows_by_key:
+                children_by_parent[parent_key].append(key)
+
+        totals = {}
+
+        def calculate_size(key, ancestors):
+            if key in totals:
+                return totals[key]
+            if key in ancestors:
+                return 0
+
+            row = rows_by_key[key]
+            if row.get("file_type") != FileType.FOLDER.value:
+                size = int(row.get("size", 0) or 0)
+            else:
+                size = sum(
+                    calculate_size(child_key, ancestors | {key})
+                    for child_key in children_by_parent.get(key, [])
+                )
+                row["size"] = size
+            totals[key] = size
+            return size
+
+        for key in rows_by_key:
+            calculate_size(key, set())
 
     @staticmethod
     def _attach_dataset_metrics(rows):
@@ -862,7 +1143,638 @@ class ResourceMgr:
             row["processing_documents"] = int(metric.get("processing_documents", 0) or 0)
 
     @staticmethod
-    def list_failed_documents(page, page_size, keywords=""):
+    def _attach_chat_metrics(rows):
+        if not rows:
+            return
+        web_counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                Conversation.select(
+                    Conversation.dialog_id,
+                    fn.COUNT(Conversation.id).alias("session_count"),
+                )
+                .where(Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(Conversation.dialog_id)
+                .dicts()
+            )
+        }
+        api_counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                API4Conversation.select(
+                    API4Conversation.dialog_id,
+                    fn.COUNT(API4Conversation.id).alias("session_count"),
+                )
+                .where(API4Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(API4Conversation.dialog_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            row["web_session_count"] = web_counts.get(row["id"], 0)
+            row["api_session_count"] = api_counts.get(row["id"], 0)
+            row["session_count"] = row["web_session_count"] + row["api_session_count"]
+            row["dataset_count"] = len(set(row.pop("kb_ids", []) or []))
+
+    @staticmethod
+    def _attach_agent_metrics(rows):
+        if not rows:
+            return
+        counts = {
+            row["dialog_id"]: int(row["session_count"] or 0)
+            for row in (
+                API4Conversation.select(
+                    API4Conversation.dialog_id,
+                    fn.COUNT(API4Conversation.id).alias("session_count"),
+                )
+                .where(API4Conversation.dialog_id.in_([item["id"] for item in rows]))
+                .group_by(API4Conversation.dialog_id)
+                .dicts()
+            )
+        }
+        for row in rows:
+            row["session_count"] = counts.get(row["id"], 0)
+
+    @classmethod
+    def get_resource_detail(
+        cls,
+        resource_type: str,
+        resource_id: str,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        if resource_type != "dataset":
+            return cls._get_standard_resource_detail(resource_type, resource_id)
+
+        valid = StatusEnum.VALID.value
+        dataset = (
+            Knowledgebase.select(
+                Knowledgebase.id,
+                Knowledgebase.name,
+                Knowledgebase.tenant_id.alias("workspace_id"),
+                Knowledgebase.created_by.alias("creator_id"),
+                Knowledgebase.permission,
+                Knowledgebase.description,
+                Knowledgebase.language,
+                Knowledgebase.embd_id,
+                Knowledgebase.parser_id,
+                Knowledgebase.pipeline_id,
+                Knowledgebase.parser_config,
+                Knowledgebase.pagerank,
+                Knowledgebase.similarity_threshold,
+                Knowledgebase.vector_similarity_weight,
+                Knowledgebase.doc_num,
+                Knowledgebase.chunk_num,
+                Knowledgebase.token_num,
+                Knowledgebase.create_date,
+                Knowledgebase.update_date,
+            )
+            .where(
+                (Knowledgebase.id == resource_id)
+                & (Knowledgebase.status == valid)
+            )
+            .dicts()
+            .first()
+        )
+        if not dataset:
+            raise AdminException("Resource not found", 404)
+
+        cls._attach_ownership([dataset])
+        cls._attach_dataset_metrics([dataset])
+        dataset["quota"] = ResourceQuotaService.get_dataset_quota(resource_id)
+        dataset["resource_type"] = resource_type
+        dataset["deletable"] = True
+
+        documents_query = Document.select(
+            Document.id,
+            Document.name,
+            Document.created_by.alias("creator_id"),
+            Document.type.alias("file_type"),
+            Document.suffix,
+            Document.source_type,
+            Document.size,
+            Document.parser_id,
+            Document.pipeline_id,
+            Document.parser_config,
+            Document.chunk_num,
+            Document.token_num,
+            Document.progress,
+            Document.progress_msg,
+            Document.process_begin_at,
+            Document.process_duration,
+            Document.run,
+            Document.create_date,
+            Document.update_date,
+        ).where((Document.kb_id == resource_id) & (Document.status == valid))
+        document_total = documents_query.count()
+        documents = list(
+            documents_query.order_by(Document.create_time.desc())
+            .paginate(page, page_size)
+            .dicts()
+        )
+
+        creator_ids = {row.get("creator_id") for row in documents if row.get("creator_id")}
+        creators = {
+            user.id: user.nickname or user.email
+            for user in User.select(User.id, User.nickname, User.email).where(
+                (User.id.in_(creator_ids)) & (User.status == valid)
+            )
+        }
+        for document in documents:
+            document["creator_name"] = creators.get(document.get("creator_id"), "")
+            progress = float(document.get("progress") or 0)
+            if progress < 0:
+                document["parse_status"] = "failed"
+            elif progress >= 1:
+                document["parse_status"] = "completed"
+            elif document.get("run") == "0" and progress == 0:
+                document["parse_status"] = "pending"
+            else:
+                document["parse_status"] = "processing"
+
+        return {
+            "dataset": dataset,
+            "documents": documents,
+            "document_total": document_total,
+        }
+
+    @staticmethod
+    def update_dataset_quota(resource_id: str, data: dict) -> dict:
+        exists = Knowledgebase.select(Knowledgebase.id).where(
+            (Knowledgebase.id == resource_id)
+            & (Knowledgebase.status == StatusEnum.VALID.value)
+        ).exists()
+        if not exists:
+            raise AdminException("Resource not found", 404)
+        return ResourceQuotaService.set_dataset_quota(resource_id, data)
+
+    @classmethod
+    def _get_standard_resource_detail(
+        cls, resource_type: str, resource_id: str
+    ) -> dict[str, Any]:
+        valid = StatusEnum.VALID.value
+        configuration: dict[str, Any] = {}
+        related_resources: list[dict[str, Any]] = []
+
+        if resource_type == "chat":
+            resource = (
+                Dialog.select(
+                    Dialog.id,
+                    Dialog.name,
+                    Dialog.tenant_id.alias("workspace_id"),
+                    Dialog.description,
+                    Dialog.language,
+                    Dialog.llm_id,
+                    Dialog.prompt_type,
+                    Dialog.similarity_threshold,
+                    Dialog.vector_similarity_weight,
+                    Dialog.top_n,
+                    Dialog.top_k,
+                    Dialog.do_refer,
+                    Dialog.rerank_id,
+                    Dialog.kb_ids,
+                    Dialog.llm_setting,
+                    Dialog.prompt_config,
+                    Dialog.meta_data_filter,
+                    Dialog.create_date,
+                    Dialog.update_date,
+                )
+                .where((Dialog.id == resource_id) & (Dialog.status == valid))
+                .dicts()
+                .first()
+            )
+            if resource:
+                resource["web_session_count"] = Conversation.select().where(
+                    Conversation.dialog_id == resource_id
+                ).count()
+                resource["api_session_count"] = API4Conversation.select().where(
+                    API4Conversation.dialog_id == resource_id
+                ).count()
+                resource["session_count"] = resource["web_session_count"] + resource["api_session_count"]
+                resource["dataset_count"] = len(set(resource.get("kb_ids") or []))
+                configuration = {
+                    "model_settings": resource.pop("llm_setting", {}) or {},
+                    "prompt": resource.pop("prompt_config", {}) or {},
+                    "retrieval": {
+                        "similarity_threshold": resource.get("similarity_threshold"),
+                        "vector_similarity_weight": resource.get("vector_similarity_weight"),
+                        "top_n": resource.get("top_n"),
+                        "top_k": resource.get("top_k"),
+                        "rerank_id": resource.get("rerank_id"),
+                        "do_refer": resource.get("do_refer") == "1",
+                    },
+                    "metadata_filter": resource.pop("meta_data_filter", {}) or {},
+                }
+                related_resources = cls._dataset_references(resource.pop("kb_ids", []) or [])
+        elif resource_type == "search":
+            resource = (
+                Search.select(
+                    Search.id,
+                    Search.name,
+                    Search.tenant_id.alias("workspace_id"),
+                    Search.created_by.alias("creator_id"),
+                    Search.description,
+                    Search.search_config,
+                    Search.create_date,
+                    Search.update_date,
+                )
+                .where((Search.id == resource_id) & (Search.status == valid))
+                .dicts()
+                .first()
+            )
+            if resource:
+                search_config = resource.pop("search_config", {}) or {}
+                dataset_ids = search_config.get("kb_ids") or search_config.get("dataset_ids") or []
+                document_ids = search_config.get("doc_ids") or search_config.get("document_ids") or []
+                resource["dataset_count"] = len(set(dataset_ids))
+                resource["document_count"] = len(set(document_ids))
+                configuration = {"search": search_config}
+                related_resources = cls._dataset_references(dataset_ids)
+                related_resources.extend(cls._document_references(document_ids))
+        elif resource_type == "agent":
+            resource = (
+                UserCanvas.select(
+                    UserCanvas.id,
+                    UserCanvas.title.alias("name"),
+                    UserCanvas.user_id.alias("workspace_id"),
+                    UserCanvas.permission,
+                    UserCanvas.release,
+                    UserCanvas.description,
+                    UserCanvas.canvas_type,
+                    UserCanvas.canvas_category,
+                    UserCanvas.tags,
+                    UserCanvas.dsl,
+                    UserCanvas.create_date,
+                    UserCanvas.update_date,
+                )
+                .where(
+                    (UserCanvas.id == resource_id)
+                    & (UserCanvas.canvas_category == CanvasCategory.Agent.value)
+                )
+                .dicts()
+                .first()
+            )
+            if resource:
+                resource["session_count"] = API4Conversation.select().where(
+                    API4Conversation.dialog_id == resource_id
+                ).count()
+                configuration = {"canvas": resource.pop("dsl", {}) or {}}
+        elif resource_type == "memory":
+            resource = (
+                Memory.select(
+                    Memory.id,
+                    Memory.name,
+                    Memory.tenant_id.alias("workspace_id"),
+                    Memory.permissions.alias("permission"),
+                    Memory.description,
+                    Memory.memory_type,
+                    Memory.storage_type,
+                    Memory.memory_size,
+                    Memory.embd_id,
+                    Memory.llm_id,
+                    Memory.forgetting_policy,
+                    Memory.temperature,
+                    Memory.system_prompt,
+                    Memory.user_prompt,
+                    Memory.create_date,
+                    Memory.update_date,
+                )
+                .where(Memory.id == resource_id)
+                .dicts()
+                .first()
+            )
+            if resource:
+                configuration = {
+                    "extraction": {
+                        "temperature": resource.pop("temperature", None),
+                        "system_prompt": resource.pop("system_prompt", "") or "",
+                        "user_prompt": resource.pop("user_prompt", "") or "",
+                    }
+                }
+        elif resource_type == "file":
+            resource = (
+                File.select(
+                    File.id,
+                    File.name,
+                    File.tenant_id.alias("workspace_id"),
+                    File.created_by.alias("creator_id"),
+                    File.parent_id,
+                    File.location,
+                    File.size,
+                    File.type.alias("file_type"),
+                    File.source_type,
+                    File.create_date,
+                    File.update_date,
+                )
+                .where(File.id == resource_id)
+                .dicts()
+                .first()
+            )
+            if resource:
+                relations = list(
+                    File2Document.select(
+                        Document.id,
+                        Document.name,
+                        Document.kb_id,
+                        Knowledgebase.name.alias("dataset_name"),
+                    )
+                    .join(Document, on=(File2Document.document_id == Document.id))
+                    .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+                    .where(File2Document.file_id == resource_id)
+                    .dicts()
+                )
+                related_resources = [
+                    {
+                        "resource_type": "file",
+                        "id": row["id"],
+                        "name": row["name"],
+                        "detail": row["dataset_name"],
+                    }
+                    for row in relations
+                ]
+                configuration = {
+                    "storage": {
+                        "location": resource.pop("location", "") or "",
+                        "parent_id": resource.get("parent_id") or "",
+                    }
+                }
+        else:
+            raise AdminException(f"Unsupported resource detail type: {resource_type}", 400)
+
+        if not resource:
+            raise AdminException("Resource not found", 404)
+
+        cls._attach_ownership([resource])
+        if not resource.get("permission"):
+            resource["permission"] = (
+                TenantPermission.ME.value
+                if resource["workspace_type"] == "personal"
+                else TenantPermission.TEAM.value
+            )
+        resource["resource_type"] = resource_type
+        resource["deletable"] = not (
+            resource_type == "file"
+            and (
+                resource.get("parent_id") == resource["id"]
+                or resource.get("name") in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                or resource.get("source_type") in {"knowledgebase", "skill_space"}
+            )
+        )
+        return {
+            "resource": resource,
+            "configuration": configuration,
+            "related_resources": related_resources,
+        }
+
+    @classmethod
+    def list_chat_sessions(
+        cls,
+        resource_id: str,
+        page: int = 1,
+        page_size: int = 20,
+        sources: list[str] | None = None,
+        keywords: str = "",
+    ) -> dict[str, Any]:
+        valid = StatusEnum.VALID.value
+        if not Dialog.select(Dialog.id).where((Dialog.id == resource_id) & (Dialog.status == valid)).exists():
+            raise AdminException("Resource not found", 404)
+
+        selected_sources = set(sources or [])
+        include_web = not selected_sources or "web" in selected_sources
+        include_api = not selected_sources or bool(selected_sources & {"chatbot", "openai", "api"})
+        fetch_limit = page * page_size
+        rows: list[dict[str, Any]] = []
+
+        if include_web:
+            query = Conversation.select(
+                Conversation.id,
+                Conversation.name,
+                Conversation.user_id,
+                Conversation.message,
+                Conversation.create_date,
+                Conversation.update_date,
+            ).where(Conversation.dialog_id == resource_id)
+            if keywords:
+                query = query.where(fn.LOWER(Conversation.message).contains(keywords.lower()))
+            for item in query.order_by(Conversation.update_time.desc()).limit(fetch_limit).dicts():
+                messages = item.pop("message", []) or []
+                item.update(
+                    source="web",
+                    external_user_id=None,
+                    message_count=len(messages),
+                    round=sum(1 for message in messages if message.get("role") == "user"),
+                    tokens=None,
+                    duration=None,
+                    errors=None,
+                )
+                rows.append(item)
+
+        if include_api:
+            query = API4Conversation.select(
+                API4Conversation.id,
+                API4Conversation.name,
+                API4Conversation.user_id,
+                API4Conversation.exp_user_id,
+                API4Conversation.message,
+                API4Conversation.tokens,
+                API4Conversation.duration,
+                API4Conversation.round,
+                API4Conversation.errors,
+                API4Conversation.source,
+                API4Conversation.create_date,
+                API4Conversation.update_date,
+            ).where(API4Conversation.dialog_id == resource_id)
+            if selected_sources:
+                api_sources = selected_sources & {"chatbot", "openai", "api"}
+                conditions = []
+                if "openai" in api_sources:
+                    conditions.append(API4Conversation.source == "openai")
+                if api_sources & {"chatbot", "api"}:
+                    conditions.append(
+                        API4Conversation.source.is_null(True)
+                        | (API4Conversation.source != "openai")
+                    )
+                if conditions:
+                    source_condition = conditions[0]
+                    for condition in conditions[1:]:
+                        source_condition |= condition
+                    query = query.where(source_condition)
+            if keywords:
+                query = query.where(fn.LOWER(API4Conversation.message).contains(keywords.lower()))
+            for item in query.order_by(API4Conversation.update_time.desc()).limit(fetch_limit).dicts():
+                messages = item.pop("message", []) or []
+                item["external_user_id"] = item.pop("exp_user_id", None)
+                item["source"] = "openai" if item.get("source") == "openai" else "chatbot"
+                item["message_count"] = len(messages)
+                rows.append(item)
+
+        rows.sort(key=lambda item: str(item.get("update_date") or item.get("create_date") or ""), reverse=True)
+        offset = (page - 1) * page_size
+
+        web_total = 0
+        api_total = 0
+        if include_web:
+            count_query = Conversation.select().where(Conversation.dialog_id == resource_id)
+            if keywords:
+                count_query = count_query.where(fn.LOWER(Conversation.message).contains(keywords.lower()))
+            web_total = count_query.count()
+        if include_api:
+            count_query = API4Conversation.select().where(API4Conversation.dialog_id == resource_id)
+            selected_api_sources = selected_sources & {"chatbot", "openai", "api"}
+            if "openai" in selected_api_sources and not (selected_api_sources & {"chatbot", "api"}):
+                count_query = count_query.where(API4Conversation.source == "openai")
+            elif selected_api_sources and "openai" not in selected_api_sources:
+                count_query = count_query.where(
+                    API4Conversation.source.is_null(True) | (API4Conversation.source != "openai")
+                )
+            if keywords:
+                count_query = count_query.where(fn.LOWER(API4Conversation.message).contains(keywords.lower()))
+            api_total = count_query.count()
+
+        actor_ids = {
+            row.get("external_user_id") or row.get("user_id")
+            for row in rows
+            if row.get("external_user_id") or row.get("user_id")
+        }
+        actor_names = {
+            user.id: user.nickname or user.email
+            for user in User.select(User.id, User.nickname, User.email).where(User.id.in_(actor_ids))
+        } if actor_ids else {}
+        for row in rows:
+            actor_id = row.get("external_user_id") or row.get("user_id")
+            row["actor_id"] = actor_id
+            row["actor_name"] = actor_names.get(actor_id, actor_id or "")
+
+        return {"sessions": rows[offset : offset + page_size], "total": web_total + api_total}
+
+    @classmethod
+    def get_chat_session_detail(cls, resource_id: str, session_id: str, source: str) -> dict[str, Any]:
+        if source == "web":
+            session = Conversation.select().where(
+                (Conversation.id == session_id) & (Conversation.dialog_id == resource_id)
+            ).dicts().first()
+            normalized_source = "web"
+        else:
+            session = API4Conversation.select().where(
+                (API4Conversation.id == session_id) & (API4Conversation.dialog_id == resource_id)
+            ).dicts().first()
+            normalized_source = "openai" if session and session.get("source") == "openai" else "chatbot"
+        if not session:
+            raise AdminException("Session not found", 404)
+        session["source"] = normalized_source
+        session["messages"] = session.pop("message", []) or []
+        session["references"] = session.pop("reference", []) or []
+        session["message_count"] = len(session["messages"])
+        actor_id = session.get("exp_user_id") or session.get("user_id")
+        actor = User.select(User.nickname, User.email).where(User.id == actor_id).first() if actor_id else None
+        session["actor_id"] = actor_id
+        session["actor_name"] = (actor.nickname or actor.email) if actor else (actor_id or "")
+        return session
+
+    @staticmethod
+    def _dataset_references(dataset_ids: list[str]) -> list[dict[str, Any]]:
+        if not dataset_ids:
+            return []
+        return [
+            {
+                "resource_type": "dataset",
+                "id": row["id"],
+                "name": row["name"],
+            }
+            for row in Knowledgebase.select(Knowledgebase.id, Knowledgebase.name)
+            .where(Knowledgebase.id.in_(set(dataset_ids)))
+            .dicts()
+        ]
+
+    @staticmethod
+    def _document_references(document_ids: list[str]) -> list[dict[str, Any]]:
+        if not document_ids:
+            return []
+        return [
+            {
+                "resource_type": "file",
+                "id": row["id"],
+                "name": row["name"],
+            }
+            for row in Document.select(Document.id, Document.name)
+            .where(Document.id.in_(set(document_ids)))
+            .dicts()
+        ]
+
+    @classmethod
+    async def delete_resource(
+        cls,
+        resource_type: str,
+        resource_id: str,
+        actor_id: str,
+        authorization: str = "",
+    ) -> dict[str, Any]:
+        spec = cls.RESOURCE_SPECS.get(resource_type)
+        if not spec:
+            raise AdminException(f"Unsupported resource type: {resource_type}")
+
+        model = spec["model"]
+        query = model.select().where(model.id == resource_id)
+        if hasattr(model, "status"):
+            query = query.where(model.status == StatusEnum.VALID.value)
+        if spec.get("extra_filter") is not None:
+            query = query.where(spec["extra_filter"])
+        resource = query.first()
+        if not resource:
+            raise AdminException("Resource not found", 404)
+
+        if resource_type == "dataset":
+            from api.apps.services import dataset_api_service
+
+            success, result = await dataset_api_service.delete_datasets(actor_id, [resource_id])
+        elif resource_type == "chat":
+            success = bool(Dialog.update(status=StatusEnum.INVALID.value).where(Dialog.id == resource_id).execute())
+            result = True if success else "Failed to delete chat"
+        elif resource_type == "search":
+            from api.db.services.search_service import SearchService
+
+            success = bool(SearchService.delete_by_id(resource_id))
+            result = True if success else "Failed to delete search"
+        elif resource_type == "agent":
+            success = bool(UserCanvasService.delete_with_dependencies(resource_id))
+            result = True if success else "Failed to delete agent"
+        elif resource_type == "memory":
+            from api.apps.services import memory_api_service
+
+            success = bool(await memory_api_service.delete_memory_as_admin(resource_id))
+            result = True if success else "Failed to delete memory"
+        else:
+            if (
+                resource.parent_id == resource.id
+                or resource.name in {KNOWLEDGEBASE_FOLDER_NAME, SKILLS_FOLDER_NAME}
+                or resource.source_type in {"knowledgebase", "skill_space"}
+            ):
+                raise AdminException(
+                    "This file is managed by its source resource and cannot be deleted separately.",
+                    409,
+                )
+            from api.apps.services import file_api_service
+
+            success, result = await file_api_service.delete_files(
+                actor_id,
+                [resource_id],
+                authorization,
+                resource.tenant_id,
+            )
+
+        if not success:
+            raise AdminException(str(result), 409)
+        if resource_type == "dataset":
+            ResourceQuotaService.remove_dataset_quota(resource_id)
+        return {"resource_type": resource_type, "resource_id": resource_id, "result": result}
+
+    @staticmethod
+    def list_failed_documents(
+        page,
+        page_size,
+        keywords="",
+        workspace_ids: list[str] | None = None,
+    ):
         valid = StatusEnum.VALID.value
         query = (
             Document.select(
@@ -878,6 +1790,8 @@ class ResourceMgr:
             .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
             .where((Document.status == valid) & (Knowledgebase.status == valid) & (Document.progress < 0))
         )
+        if workspace_ids:
+            query = query.where(Knowledgebase.tenant_id.in_(workspace_ids))
         keywords = str(keywords or "").strip().lower()
         if keywords:
             query = query.where(
@@ -924,6 +1838,364 @@ class ResourceMgr:
 
             creator = users.get(row.get("creator_id"))
             row["creator_name"] = (creator.nickname or creator.email) if creator else ""
+
+
+class QuotaMgr:
+    SCOPE_TYPES = {"personal", "team", "dataset"}
+
+    @staticmethod
+    def list_quotas() -> list[dict[str, Any]]:
+        valid = StatusEnum.VALID.value
+        users = list(
+            User.select(User.id, User.email, User.nickname).where(User.status == valid)
+        )
+        user_ids = [user.id for user in users]
+
+        tenants = list(
+            Tenant.select(Tenant.id, Tenant.name).where(Tenant.status == valid)
+        )
+        teams = [
+            tenant
+            for tenant in tenants
+            if WorkspaceAccessService.get_workspace_type(tenant.id) == WorkspaceType.TEAM
+        ]
+        team_ids = [team.id for team in teams]
+
+        datasets = list(
+            Knowledgebase.select(
+                Knowledgebase.id,
+                Knowledgebase.name,
+                Knowledgebase.tenant_id,
+            ).where(Knowledgebase.status == valid)
+        )
+        dataset_ids = [dataset.id for dataset in datasets]
+        workspace_quotas = ResourceQuotaService.get_workspace_quotas(user_ids + team_ids)
+        dataset_quotas = ResourceQuotaService.get_dataset_quotas(dataset_ids)
+
+        user_names = {
+            user.id: user.nickname or user.email
+            for user in users
+        }
+        team_names = {team.id: team.name for team in teams}
+
+        rows = [
+            {
+                "scope_type": "personal",
+                "scope_id": user.id,
+                "name": user.nickname or user.email,
+                "workspace_id": user.id,
+                "workspace_name": user.nickname or user.email,
+                "email": user.email,
+                **workspace_quotas[user.id],
+            }
+            for user in users
+        ]
+        rows.extend(
+            {
+                "scope_type": "team",
+                "scope_id": team.id,
+                "name": team.name,
+                "workspace_id": team.id,
+                "workspace_name": team.name,
+                **workspace_quotas[team.id],
+            }
+            for team in teams
+        )
+        rows.extend(
+            {
+                "scope_type": "dataset",
+                "scope_id": dataset.id,
+                "name": dataset.name,
+                "workspace_id": dataset.tenant_id,
+                "workspace_name": user_names.get(dataset.tenant_id)
+                or team_names.get(dataset.tenant_id)
+                or dataset.tenant_id,
+                "workspace_type": (
+                    "personal" if dataset.tenant_id in user_names else "team"
+                ),
+                **dataset_quotas[dataset.id],
+            }
+            for dataset in datasets
+        )
+        return rows
+
+    @classmethod
+    def update_quota(cls, scope_type: str, scope_id: str, data: dict) -> dict:
+        if scope_type not in cls.SCOPE_TYPES:
+            raise AdminException("Unsupported quota scope", 400)
+        if scope_type == "personal":
+            exists = User.select(User.id).where(
+                User.id == scope_id,
+                User.status == StatusEnum.VALID.value,
+            ).exists()
+            if not exists:
+                raise AdminException("User not found", 404)
+            return ResourceQuotaService.set_workspace_quota(scope_id, data)
+        if scope_type == "team":
+            TeamMgr._ensure_team(scope_id)
+            return ResourceQuotaService.set_workspace_quota(scope_id, data)
+
+        exists = Knowledgebase.select(Knowledgebase.id).where(
+            Knowledgebase.id == scope_id,
+            Knowledgebase.status == StatusEnum.VALID.value,
+        ).exists()
+        if not exists:
+            raise AdminException("Resource not found", 404)
+        return ResourceQuotaService.set_dataset_quota(scope_id, data)
+
+
+class AdminModelMgr:
+    PROVIDERS = {"MinerU", "OpenAI-API-Compatible", "Xinference"}
+    MODEL_TYPES = {"chat", "embedding", "asr", "vision", "rerank", "tts", "ocr"}
+
+    @staticmethod
+    def _parse_extra(raw: str) -> dict:
+        try:
+            value = json.loads(raw or "{}")
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    @classmethod
+    def _validate_access(cls, visibility: str, workspace_ids: list[str]) -> tuple[str, list[str]]:
+        visibility = str(visibility or "all")
+        if visibility not in {"all", "selected"}:
+            raise AdminException("visibility must be 'all' or 'selected'", 400)
+        workspace_ids = sorted({str(workspace_id) for workspace_id in workspace_ids or [] if workspace_id})
+        if visibility == "selected":
+            existing_ids = {
+                tenant.id
+                for tenant in Tenant.select(Tenant.id).where(
+                    Tenant.id.in_(workspace_ids),
+                    Tenant.status == StatusEnum.VALID.value,
+                )
+            }
+            missing = sorted(set(workspace_ids) - existing_ids)
+            if missing:
+                raise AdminException(f"Workspaces not found: {', '.join(missing)}", 404)
+        return visibility, workspace_ids
+
+    @classmethod
+    def _validate_model_type(cls, model_types: list[str]) -> str:
+        model_types = list(dict.fromkeys(model_types or []))
+        if len(model_types) != 1 or model_types[0] not in cls.MODEL_TYPES:
+            raise AdminException("Exactly one valid model type is required", 400)
+        return model_types[0]
+
+    @classmethod
+    def list_workspaces(cls) -> list[dict[str, Any]]:
+        users = {
+            user.id: user
+            for user in User.select(User.id, User.nickname, User.email).where(User.status == StatusEnum.VALID.value)
+        }
+        rows = []
+        for tenant in Tenant.select(Tenant.id, Tenant.name).where(Tenant.status == StatusEnum.VALID.value):
+            owner = users.get(tenant.id)
+            rows.append(
+                {
+                    "id": tenant.id,
+                    "name": (owner.nickname or owner.email) if owner else (tenant.name or tenant.id),
+                    "type": "personal" if owner else "team",
+                }
+            )
+        return sorted(rows, key=lambda row: (row["type"], row["name"].casefold(), row["id"]))
+
+    @classmethod
+    def list_models(cls) -> list[dict[str, Any]]:
+        entries = SharedModelService.list_entries()
+        models = {model.id: model for model in TenantModel.select()}
+        if not models:
+            return []
+        provider_ids = {model.provider_id for model in models.values()}
+        instance_ids = {model.instance_id for model in models.values()}
+        providers = {
+            provider.id: provider
+            for provider in TenantModelProvider.select().where(TenantModelProvider.id.in_(provider_ids))
+        }
+        instances = {
+            instance.id: instance
+            for instance in TenantModelInstance.select().where(TenantModelInstance.id.in_(instance_ids))
+        }
+        workspaces = {workspace["id"]: workspace for workspace in cls.list_workspaces()}
+        rows = []
+        for model in models.values():
+            provider = providers.get(model.provider_id)
+            instance = instances.get(model.instance_id)
+            if not provider or not instance:
+                continue
+            entry = entries.get(model.id)
+            owner_workspace = workspaces.get(
+                provider.tenant_id,
+                {"id": provider.tenant_id, "name": provider.tenant_id, "type": "team"},
+            )
+            instance_extra = cls._parse_extra(instance.extra)
+            model_extra = cls._parse_extra(model.extra)
+            target_ids = (entry.get("workspace_ids") or []) if entry else [provider.tenant_id]
+            rows.append(
+                {
+                    "id": model.id,
+                    "name": model.model_name,
+                    "provider_name": provider.provider_name,
+                    "provider_id": provider.id,
+                    "owner_workspace_id": provider.tenant_id,
+                    "owner_workspace_name": owner_workspace["name"],
+                    "owner_workspace": owner_workspace,
+                    "instance_name": instance.instance_name,
+                    "instance_id": instance.id,
+                    "api_key": instance.api_key,
+                    "base_url": instance_extra.get("base_url", ""),
+                    "model_types": get_model_type_human(model.model_type),
+                    "max_tokens": int(model_extra.get("max_tokens") or 8192),
+                    "status": model.status,
+                    "source": "shared" if entry else "private",
+                    "visibility": entry.get("visibility", "all") if entry else "private",
+                    "workspace_ids": target_ids,
+                    "workspaces": [workspaces[workspace_id] for workspace_id in target_ids if workspace_id in workspaces],
+                    "created_by": entry.get("created_by", "") if entry else provider.tenant_id,
+                    "create_date": model.create_date,
+                    "update_date": model.update_date,
+                }
+            )
+        return sorted(rows, key=lambda row: (row["provider_name"], row["instance_name"], row["name"]))
+
+    @classmethod
+    def create_model(cls, actor_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        provider_name = str(data.get("provider_name") or "").strip()
+        instance_name = str(data.get("instance_name") or "").strip()
+        model_name = str(data.get("model_name") or "").strip()
+        model_type = cls._validate_model_type(data.get("model_types") or [])
+        if provider_name not in cls.PROVIDERS:
+            raise AdminException("Unsupported model provider", 400)
+        if not instance_name or not model_name:
+            raise AdminException("instance_name and model_name are required", 400)
+        visibility, workspace_ids = cls._validate_access(
+            data.get("visibility", "all"),
+            data.get("workspace_ids") or [],
+        )
+
+        provider = TenantModelProviderService.get_by_tenant_id_and_provider_name(actor_id, provider_name)
+        if not provider:
+            TenantModelProviderService.insert(tenant_id=actor_id, provider_name=provider_name)
+            provider = TenantModelProviderService.get_by_tenant_id_and_provider_name(actor_id, provider_name)
+
+        instance = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider.id, instance_name)
+        api_key = str(data.get("api_key") or "")
+        base_url = str(data.get("base_url") or "").strip()
+        if instance and TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
+            provider.id,
+            instance.id,
+            model_name,
+        ):
+            raise AdminException("Model already exists in this instance", 409)
+        if not instance:
+            TenantModelInstanceService.create_instance(
+                provider_id=provider.id,
+                instance_name=instance_name,
+                api_key=api_key,
+                extra=json.dumps({"base_url": base_url}),
+            )
+            instance = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider.id, instance_name)
+        else:
+            instance_extra = cls._parse_extra(instance.extra)
+            instance_extra["base_url"] = base_url
+            TenantModelInstanceService.update_by_id(
+                instance.id,
+                {"api_key": api_key, "extra": json.dumps(instance_extra)},
+            )
+
+        TenantModelService.insert(
+            model_name=model_name,
+            provider_id=provider.id,
+            instance_id=instance.id,
+            model_type=calculate_model_type([model_type]),
+            status=ActiveStatusEnum.ACTIVE.value,
+            extra=json.dumps({"max_tokens": max(int(data.get("max_tokens") or 8192), 1)}),
+        )
+        model = TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
+            provider.id,
+            instance.id,
+            model_name,
+        )
+        SharedModelService.set_access(
+            model.id,
+            visibility=visibility,
+            workspace_ids=workspace_ids,
+            created_by=actor_id,
+        )
+        return next(row for row in cls.list_models() if row["id"] == model.id)
+
+    @classmethod
+    def update_model(cls, model_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        entry = SharedModelService.get_entry(model_id)
+        ok, model = TenantModelService.get_by_id(model_id)
+        if not entry or not ok:
+            raise AdminException("Managed model not found", 404)
+
+        updates = {}
+        if "model_types" in data:
+            model_type = cls._validate_model_type(data.get("model_types") or [])
+            updates["model_type"] = calculate_model_type([model_type])
+        if "status" in data:
+            if data["status"] not in {ActiveStatusEnum.ACTIVE.value, ActiveStatusEnum.INACTIVE.value}:
+                raise AdminException("Invalid model status", 400)
+            updates["status"] = data["status"]
+        model_extra = cls._parse_extra(model.extra)
+        if "max_tokens" in data:
+            model_extra["max_tokens"] = max(int(data.get("max_tokens") or 8192), 1)
+            updates["extra"] = json.dumps(model_extra)
+        if updates:
+            TenantModelService.update_model(model_id, updates)
+
+        ok, instance = TenantModelInstanceService.get_by_id(model.instance_id)
+        if not ok:
+            raise AdminException("Model instance not found", 404)
+        instance_updates = {}
+        if "api_key" in data:
+            instance_updates["api_key"] = str(data.get("api_key") or "")
+        if "base_url" in data:
+            instance_extra = cls._parse_extra(instance.extra)
+            instance_extra["base_url"] = str(data.get("base_url") or "").strip()
+            instance_updates["extra"] = json.dumps(instance_extra)
+        if instance_updates:
+            TenantModelInstanceService.update_by_id(instance.id, instance_updates)
+
+        visibility, workspace_ids = cls._validate_access(
+            data.get("visibility", entry.get("visibility", "all")),
+            data.get("workspace_ids", entry.get("workspace_ids") or []),
+        )
+        SharedModelService.set_access(
+            model_id,
+            visibility=visibility,
+            workspace_ids=workspace_ids,
+            created_by=entry.get("created_by", ""),
+        )
+        return next(row for row in cls.list_models() if row["id"] == model_id)
+
+    @classmethod
+    def delete_model(cls, model_id: str) -> bool:
+        if not SharedModelService.is_managed(model_id):
+            raise AdminException("Managed model not found", 404)
+        ok, model = TenantModelService.get_by_id(model_id)
+        if not ok:
+            SharedModelService.remove(model_id)
+            raise AdminException("Managed model not found", 404)
+        ok, provider = TenantModelProviderService.get_by_id(model.provider_id)
+        if not ok:
+            raise AdminException("Model provider not found", 404)
+
+        base_target = ResourceReferenceService.build_model_targets(provider.tenant_id, [model])[0]
+        targets = []
+        for tenant in Tenant.select(Tenant.id).where(Tenant.status == StatusEnum.VALID.value):
+            targets.append({**base_target, "tenant_id": tenant.id})
+        ResourceReferenceService.ensure_not_referenced("model", targets)
+
+        TenantModelService.delete_by_id(model_id)
+        SharedModelService.remove(model_id)
+        if not TenantModelService.get_models_by_instance_id(model.instance_id):
+            TenantModelInstanceService.delete_by_id(model.instance_id)
+        if not TenantModelInstanceService.get_all_by_provider_id(model.provider_id):
+            TenantModelProviderService.delete_by_id(model.provider_id)
+        return True
 
 
 class ServiceMgr:
@@ -1002,14 +2274,35 @@ class MonitoringMgr:
             .count()
         )
         datasets_total = Knowledgebase.select().where(Knowledgebase.status == valid).count()
-        documents = Document.select().where(Document.status == valid)
+        documents = (
+            Document.select()
+            .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
+            .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+            .where(
+                (Document.status == valid)
+                & (Knowledgebase.status == valid)
+                & (Tenant.status == valid)
+            )
+        )
         documents_total = documents.count()
         storage_bytes = documents.select(fn.COALESCE(fn.SUM(Document.size), 0)).scalar() or 0
+        files = (
+            File.select()
+            .join(Tenant, on=(File.tenant_id == Tenant.id))
+            .where(
+                (File.type != FileType.FOLDER.value)
+                & (Tenant.status == valid)
+            )
+        )
+        files_total = files.count()
+        files_storage_bytes = files.select(fn.COALESCE(fn.SUM(File.size), 0)).scalar() or 0
         failed_documents = documents.where(Document.progress < 0).count()
         processing_documents = documents.where((Document.progress >= 0) & (Document.progress < 1)).count()
         pending_tasks = Task.select().where((Task.progress >= 0) & (Task.progress < 1)).count()
         chats_total = Dialog.select().where(Dialog.status == valid).count()
+        searches_total = Search.select().where(Search.status == valid).count()
         agents_total = UserCanvas.select().where(UserCanvas.canvas_category == CanvasCategory.Agent.value).count()
+        memories_total = Memory.select().count()
 
         return {
             "users_total": users_total,
@@ -1018,45 +2311,42 @@ class MonitoringMgr:
             "datasets_total": datasets_total,
             "documents_total": documents_total,
             "storage_bytes": int(storage_bytes),
+            "files_total": files_total,
+            "files_storage_bytes": int(files_storage_bytes),
             "failed_documents": failed_documents,
             "processing_documents": processing_documents,
             "pending_tasks": pending_tasks,
             "chats_total": chats_total,
+            "searches_total": searches_total,
             "agents_total": agents_total,
+            "memories_total": memories_total,
             "storage_distribution": MonitoringMgr.get_storage_distribution(),
         }
 
     @staticmethod
-    def get_storage_distribution(limit=8):
+    def get_storage_distribution():
         valid = StatusEnum.VALID.value
-        dataset_counts = {
-            row["workspace_id"]: row["datasets_total"]
-            for row in (
-                Knowledgebase.select(
-                    Knowledgebase.tenant_id.alias("workspace_id"),
-                    fn.COUNT(Knowledgebase.id).alias("datasets_total"),
-                )
-                .where(Knowledgebase.status == valid)
-                .group_by(Knowledgebase.tenant_id)
-                .dicts()
-            )
-        }
         rows = list(
             Document.select(
                 Knowledgebase.tenant_id.alias("workspace_id"),
-                fn.COUNT(Document.id).alias("documents_total"),
+                fn.COUNT(Document.id).alias("files_total"),
                 fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
             )
             .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
-            .where((Document.status == valid) & (Knowledgebase.status == valid))
+            .join(Tenant, on=(Knowledgebase.tenant_id == Tenant.id))
+            .where(
+                (Document.status == valid)
+                & (Knowledgebase.status == valid)
+                & (Tenant.status == valid)
+            )
             .group_by(Knowledgebase.tenant_id)
-            .order_by(fn.SUM(Document.size).desc())
-            .limit(limit)
+            .order_by(fn.SUM(Document.size).desc(), Knowledgebase.tenant_id.asc())
             .dicts()
         )
         ResourceMgr._attach_ownership(rows)
         for row in rows:
-            row["datasets_total"] = dataset_counts.get(row["workspace_id"], 0)
+            row["files_total"] = int(row.get("files_total", 0) or 0)
+            row["storage_bytes"] = int(row.get("storage_bytes", 0) or 0)
         return rows
 
 

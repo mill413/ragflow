@@ -11,12 +11,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 
-import {
-  LucideClipboardList,
-  LucideDot,
-  LucideFilter,
-  LucideSettings2,
-} from 'lucide-react';
+import { LucideClipboardList, LucideDot, LucideSettings2 } from 'lucide-react';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -40,13 +35,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { SearchInput } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -62,8 +50,8 @@ import { listServices, showServiceDetails } from '@/services/admin-service';
 
 import {
   EMPTY_DATA,
-  createColumnFilterFn,
   createFuzzySearchFn,
+  createMultiSelectFilterFn,
   getSortIcon,
 } from './utils';
 
@@ -73,6 +61,7 @@ import 'react18-json-view/src/style.css';
 import ServiceDetail from './service-detail';
 import TaskExecutorDetail from './task-executor-detail';
 import MonitoringPanel from './components/monitoring-panel';
+import { AdminTableMultiFilters } from './components/table-multi-filters';
 
 const columnHelper = createColumnHelper<AdminService.ListServicesItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListServicesItem>([
@@ -87,6 +76,7 @@ const SERVICE_TYPE_FILTER_OPTIONS = [
   { value: 'retrieval', label: 'retrieval' },
   { value: 'message_queue', label: 'message_queue' },
 ];
+const NUMERIC_SERVICE_COLUMNS = new Set(['id', 'port']);
 
 function AdminServiceStatus() {
   const { t } = useTranslation();
@@ -121,13 +111,7 @@ function AdminServiceStatus() {
       }),
       columnHelper.accessor('service_type', {
         header: t('admin.serviceType'),
-        filterFn: createColumnFilterFn(
-          (row, id, filterValue) => row.getValue(id) === filterValue,
-          {
-            autoRemove: (v) => !v,
-            resolveFilterValue: (v) => v || null,
-          },
-        ),
+        filterFn: createMultiSelectFilterFn(),
       }),
       columnHelper.accessor('host', {
         header: t('admin.host'),
@@ -147,6 +131,7 @@ function AdminServiceStatus() {
       }),
       columnHelper.accessor('status', {
         header: t('admin.status'),
+        filterFn: createMultiSelectFilterFn(),
         cell: ({ cell }) => (
           <Badge
             variant={
@@ -226,66 +211,38 @@ function AdminServiceStatus() {
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
             <CardTitle>{t('admin.serviceStatus')}</CardTitle>
 
-            <div className="flex items-center gap-4">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button size="icon-lg" variant="outline">
-                    <LucideFilter className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-
-                <PopoverContent align="end">
-                  <div className="p-2 space-y-6">
-                    <section>
-                      <div className="font-bold mb-3">
-                        {t('admin.serviceType')}
-                      </div>
-
-                      <RadioGroup
-                        value={
-                          (table
-                            .getColumn('service_type')
-                            ?.getFilterValue() as string) ?? ''
-                        }
-                        onValueChange={
-                          table.getColumn('service_type')?.setFilterValue
-                        }
-                      >
-                        <Label className="flex items-center space-x-2">
-                          <RadioGroupItem
-                            className="bg-bg-input border-border-button"
-                            value=""
-                          />
-                          <span>{t('admin.all')}</span>
-                        </Label>
-
-                        {SERVICE_TYPE_FILTER_OPTIONS.map(({ label, value }) => (
-                          <Label
-                            key={value}
-                            className="flex items-center space-x-2"
-                          >
-                            <RadioGroupItem
-                              className="bg-bg-input border-border-button"
-                              value={value}
-                            />
-                            <span>{label}</span>
-                          </Label>
-                        ))}
-                      </RadioGroup>
-                    </section>
-                  </div>
-
-                  <div className="pt-4 flex justify-end">
-                    <Button
-                      variant="outline"
-                      className="dark:bg-bg-input dark:border-border-button text-text-secondary"
-                      onClick={() => table.resetColumnFilters()}
-                    >
-                      {t('admin.reset')}
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+            <div className="flex flex-wrap items-center justify-end gap-4">
+              <AdminTableMultiFilters
+                filters={[
+                  {
+                    id: 'service_type',
+                    label: t('admin.serviceType'),
+                    options: SERVICE_TYPE_FILTER_OPTIONS,
+                    value:
+                      (table
+                        .getColumn('service_type')
+                        ?.getFilterValue() as string[]) ?? [],
+                    onChange: (value) =>
+                      table.getColumn('service_type')?.setFilterValue(value),
+                  },
+                  {
+                    id: 'status',
+                    label: t('admin.status'),
+                    options: ['alive', 'timeout', 'fail'].map((value) => ({
+                      value,
+                      label: t(`admin.${value}`),
+                    })),
+                    value:
+                      (table
+                        .getColumn('status')
+                        ?.getFilterValue() as string[]) ?? [],
+                    onChange: (value) =>
+                      table.getColumn('status')?.setFilterValue(value),
+                  },
+                ]}
+                resetLabel={t('admin.reset')}
+                onReset={() => table.resetColumnFilters()}
+              />
 
               <SearchInput
                 className="w-56 h-10 bg-bg-input border-border-button"
@@ -297,7 +254,7 @@ function AdminServiceStatus() {
           </CardHeader>
 
           <CardContent>
-            <Table>
+            <Table rootClassName="max-w-full [contain:inline-size]">
               <colgroup>
                 <col className="w-[6%]" />
                 <col />
@@ -312,7 +269,14 @@ function AdminServiceStatus() {
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead
+                        key={header.id}
+                        className={
+                          NUMERIC_SERVICE_COLUMNS.has(header.column.id)
+                            ? 'text-center'
+                            : undefined
+                        }
+                      >
                         {header.isPlaceholder ? null : header.column.getCanSort() ? (
                           <Button
                             variant="ghost"
@@ -340,7 +304,14 @@ function AdminServiceStatus() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id} className="group/row">
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell
+                          key={cell.id}
+                          className={
+                            NUMERIC_SERVICE_COLUMNS.has(cell.column.id)
+                              ? 'text-center'
+                              : undefined
+                          }
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),
@@ -358,7 +329,7 @@ function AdminServiceStatus() {
 
           <CardFooter className="flex items-center justify-end">
             <RAGFlowPagination
-              total={servicesList?.length}
+              total={table.getFilteredRowModel().rows.length}
               current={table.getState().pagination.pageIndex + 1}
               pageSize={table.getState().pagination.pageSize}
               onChange={(page, pageSize) => {

@@ -110,12 +110,21 @@ const {
   adminDeleteUser,
   adminListUserDatasets,
   adminListUserAgents,
+  adminListUserResources,
   adminUpdateUserDepartment,
   adminGetUserLoginUrl,
   adminDepartments,
   adminDepartment,
   adminListManagedResources,
+  adminManagedResource,
+  adminChatSessions,
+  adminChatSession,
   adminListFailedDocuments,
+  adminQuotas,
+  adminQuota,
+  adminManagedModels,
+  adminManagedModel,
+  adminModelWorkspaces,
 
   adminListServices,
   adminShowServiceDetails,
@@ -198,6 +207,17 @@ export const updateUser = (
     adminGetUserDetails(email),
     data,
   );
+export const updateUserQuota = (
+  email: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${adminGetUserDetails(email)}/quota`,
+    quota,
+  );
 export const listUserDatasets = (email: string) =>
   request.get<ResponseData<AdminService.ListUserDatasetItem[]>>(
     adminListUserDatasets(email),
@@ -205,6 +225,10 @@ export const listUserDatasets = (email: string) =>
 export const listUserAgents = (email: string) =>
   request.get<ResponseData<AdminService.ListUserAgentItem[]>>(
     adminListUserAgents(email),
+  );
+export const listUserResources = (email: string) =>
+  request.get<ResponseData<AdminService.WorkspaceResourceMap>>(
+    adminListUserResources(email),
   );
 export const updateUserDepartment = (email: string, departmentId?: string) =>
   request.put<ResponseData<boolean>>(adminUpdateUserDepartment(email), {
@@ -252,9 +276,24 @@ export const updateAdminTeam = (
   });
 export const deleteAdminTeam = (teamId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeam(teamId));
+export const updateAdminTeamQuota = (
+  teamId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${api.adminTeam(teamId)}/quota`,
+    quota,
+  );
 export const listAdminTeamMembers = (teamId: string) =>
   request.get<ResponseData<AdminService.TeamMember[]>>(
     api.adminTeamMembers(teamId),
+  );
+export const listAdminTeamResources = (teamId: string) =>
+  request.get<ResponseData<AdminService.WorkspaceResourceMap>>(
+    api.adminTeamResources(teamId),
   );
 export const addAdminTeamMember = (
   teamId: string,
@@ -275,25 +314,145 @@ export const updateAdminTeamMember = (
   });
 export const deleteAdminTeamMember = (teamId: string, userId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeamMember(teamId, userId));
-export const listManagedResources = (params: {
+export const listManagedResources = ({
+  workspaceIds,
+  ...params
+}: {
   type: AdminService.ManagedResourceType;
   page: number;
   pageSize: number;
   keywords?: string;
+  workspaceIds?: string[];
+  hierarchy?: boolean;
 }) =>
   request.get<ResponseData<AdminService.ManagedResourceList>>(
     adminListManagedResources,
-    { params },
+    {
+      params: {
+        ...params,
+        workspace_ids: workspaceIds?.join(',') || undefined,
+      },
+    },
   );
-export const listFailedDocuments = (params: {
+export const listFailedDocuments = ({
+  workspaceIds,
+  ...params
+}: {
   page: number;
   pageSize: number;
   keywords?: string;
+  workspaceIds?: string[];
 }) =>
   request.get<ResponseData<AdminService.FailedDocumentList>>(
     adminListFailedDocuments,
-    { params },
+    {
+      params: {
+        ...params,
+        workspace_ids: workspaceIds?.join(',') || undefined,
+      },
+    },
   );
+export const deleteManagedResource = (
+  resourceType: AdminService.ManagedResourceType,
+  resourceId: string,
+) =>
+  request.delete<ResponseData<{ resource_type: string; resource_id: string }>>(
+    adminManagedResource(resourceType, resourceId),
+  );
+export const getDatasetResourceDetail = (
+  resourceId: string,
+  page: number,
+  pageSize: number,
+) =>
+  request.get<ResponseData<AdminService.DatasetResourceDetailResponse>>(
+    adminManagedResource('dataset', resourceId),
+    { params: { page, page_size: pageSize } },
+  );
+export const updateDatasetQuota = (
+  resourceId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    `${adminManagedResource('dataset', resourceId)}/quota`,
+    quota,
+  );
+export const listResourceQuotas = () =>
+  request.get<ResponseData<AdminService.ResourceQuotaItem[]>>(adminQuotas);
+export const updateResourceQuota = (
+  scopeType: AdminService.ResourceQuotaScopeType,
+  scopeId: string,
+  quota: Pick<
+    AdminService.ResourceQuota,
+    'file_count_limit' | 'storage_bytes_limit'
+  >,
+) =>
+  request.put<ResponseData<AdminService.ResourceQuota>>(
+    adminQuota(scopeType, scopeId),
+    quota,
+  );
+export const getManagedResourceDetail = (
+  resourceType: Exclude<AdminService.ManagedResourceType, 'dataset'>,
+  resourceId: string,
+) =>
+  request.get<ResponseData<AdminService.StandardManagedResourceDetailResponse>>(
+    adminManagedResource(resourceType, resourceId),
+  );
+export const listManagedChatSessions = (
+  resourceId: string,
+  params: {
+    page: number;
+    pageSize: number;
+    sources?: string[];
+    keywords?: string;
+  },
+) =>
+  request.get<ResponseData<AdminService.ManagedChatSessionList>>(
+    adminChatSessions(resourceId),
+    {
+      params: {
+        ...params,
+        sources: params.sources?.join(','),
+      },
+    },
+  );
+export const getManagedChatSession = (
+  resourceId: string,
+  sessionId: string,
+  source: AdminService.ManagedChatSessionSource,
+) =>
+  request.get<ResponseData<AdminService.ManagedChatSessionDetail>>(
+    adminChatSession(resourceId, sessionId),
+    { params: { source } },
+  );
+export const downloadManagedFile = (resourceId: string, workspaceId: string) =>
+  request.get<Blob>(`${api.getFile}/${resourceId}`, {
+    params: { workspace_id: workspaceId },
+    responseType: 'blob',
+  });
+export const listManagedModels = () =>
+  request.get<ResponseData<AdminService.ManagedModel[]>>(adminManagedModels);
+export const listModelWorkspaces = () =>
+  request.get<ResponseData<AdminService.ModelWorkspace[]>>(
+    adminModelWorkspaces,
+  );
+export const createManagedModel = (data: AdminService.ManagedModelInput) =>
+  request.post<ResponseData<AdminService.ManagedModel>>(
+    adminManagedModels,
+    data,
+  );
+export const updateManagedModel = (
+  modelId: string,
+  data: Partial<AdminService.ManagedModelInput>,
+) =>
+  request.patch<ResponseData<AdminService.ManagedModel>>(
+    adminManagedModel(modelId),
+    data,
+  );
+export const deleteManagedModel = (modelId: string) =>
+  request.delete<ResponseData<boolean>>(adminManagedModel(modelId));
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });
 export const updateUserPassword = (email: string, password: string) =>

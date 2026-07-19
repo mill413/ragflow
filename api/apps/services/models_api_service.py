@@ -17,10 +17,11 @@ import logging
 import os
 
 from api.constants import SUPPORTED_MODEL_PROVIDERS
-from api.db.joint_services.tenant_model_service import ensure_mineru_from_env, resolve_model_id
+from api.db.joint_services.tenant_model_service import ensure_mineru_from_env, get_model_config_by_id, resolve_model_id
 from api.db.services.tenant_model_instance_service import TenantModelInstanceService
 from api.db.services.tenant_model_provider_service import TenantModelProviderService
 from api.db.services.tenant_model_service import TenantModelService
+from api.db.services.shared_model_service import SharedModelService
 from api.db.services.user_service import TenantService
 from api.utils.model_utils import get_model_type_human, calculate_model_type
 from common.constants import ActiveStatusEnum, LLMType
@@ -81,6 +82,25 @@ def _get_model_info(tenant_id: str, default_model: str, model_type: str, model_i
     """
     if not default_model:
         return None
+
+    if model_id:
+        try:
+            get_model_config_by_id(tenant_id, model_type, model_id)
+            model_ok, model_obj = TenantModelService.get_by_id(model_id)
+            provider_ok, provider_obj = TenantModelProviderService.get_by_id(model_obj.provider_id) if model_ok else (False, None)
+            instance_ok, instance_obj = TenantModelInstanceService.get_by_id(model_obj.instance_id) if model_ok else (False, None)
+            if model_ok and provider_ok and instance_ok:
+                return {
+                    "model_id": model_id,
+                    "model_provider": provider_obj.provider_name,
+                    "model_instance": instance_obj.instance_name,
+                    "model_name": model_obj.model_name,
+                    "model_type": model_type,
+                    "enable": True,
+                    "source": "admin" if SharedModelService.is_managed(model_id) else "workspace",
+                }
+        except LookupError:
+            pass
 
     # The composite key is right-anchored: provider_name is always the *last*
     # '@'-separated field. Use rsplit so a model_name that itself contains '@'
@@ -260,7 +280,7 @@ def set_tenant_default_models(tenant_id: str, model_provider: str, model_instanc
         provider_ok, provider_obj = TenantModelProviderService.get_by_id(model_obj.provider_id)
         if not provider_ok:
             return False, f"Provider id '{model_obj.provider_id}' not found for model_id '{model_id}'"
-        if provider_obj.tenant_id != tenant_id:
+        if provider_obj.tenant_id != tenant_id and not SharedModelService.can_use(tenant_id, model_id):
             return False, "Permission denied"
         if provider_obj.provider_name not in SUPPORTED_MODEL_PROVIDERS:
             return False, f"Provider '{provider_obj.provider_name}' is not supported"
@@ -315,24 +335,11 @@ def list_tenant_added_models(tenant_id: str, model_type_filter: str = None):
     model_type_filter_bin = calculate_model_type(model_type_filter.lower()) if model_type_filter else None
 
     providers = [provider for provider in TenantModelProviderService.get_by_tenant_id(tenant_id) if provider.provider_name in SUPPORTED_MODEL_PROVIDERS]
-    if not providers:
-        return True, []
-
     provider_ids = [provider.id for provider in providers]
-    instances = TenantModelInstanceService.get_by_provider_ids(provider_ids)
-    if not instances:
-        return True, []
-    provider_instance_map: dict = {}
+    instances = TenantModelInstanceService.get_by_provider_ids(provider_ids) if provider_ids else []
     provider_info_map = {provider.id: provider for provider in providers}
     instance_info_map = {instance.id: instance for instance in instances}
-    for provider_instance_record in instances:
-        provider_name = provider_info_map[provider_instance_record.provider_id].provider_name if provider_info_map.get(provider_instance_record.provider_id) else ""
-        if provider_instance_map.get(provider_name):
-            provider_instance_map[provider_name].append(provider_instance_record)
-        else:
-            provider_instance_map[provider_name] = [provider_instance_record]
-
-    model_records = TenantModelService.get_models_by_provider_ids_and_instance_ids(provider_ids, list({instance.id for instance in instances}))
+    model_records = TenantModelService.get_models_by_provider_ids_and_instance_ids(provider_ids, list(instance_info_map)) if instances else []
     target_type_records = [record for record in model_records if record.model_type & model_type_filter_bin] if model_type_filter_bin else model_records
 
     model_rank_map: dict = {}
@@ -353,9 +360,39 @@ def list_tenant_added_models(tenant_id: str, model_type_filter: str = None):
             "instance_id": model_record.instance_id,
             "instance_name": instance_info_map[model_record.instance_id].instance_name,
             "rank": model_rank_map.get((provider_info_map[model_record.provider_id].provider_name, model_record.model_name), 500),
+            "source": "admin" if SharedModelService.is_managed(model_record.id) else "workspace",
         }
         for model_record in target_type_records
     ]
+
+    own_model_ids = {model["model_id"] for model in added_models}
+    for model_record in TenantModelService.get_models_by_ids(
+        SharedModelService.list_accessible_model_ids(tenant_id) - own_model_ids
+    ):
+        if model_type_filter_bin and not (model_record.model_type & model_type_filter_bin):
+            continue
+        if model_record.status != ActiveStatusEnum.ACTIVE.value:
+            continue
+        provider_ok, provider = TenantModelProviderService.get_by_id(model_record.provider_id)
+        instance_ok, instance = TenantModelInstanceService.get_by_id(model_record.instance_id)
+        if not provider_ok or not instance_ok or provider.provider_name not in SUPPORTED_MODEL_PROVIDERS:
+            continue
+        owner_ok, owner = TenantService.get_by_id(provider.tenant_id)
+        added_models.append(
+            {
+                "model_id": model_record.id,
+                "tenant_id": provider.tenant_id,
+                "tenant_name": owner.name if owner_ok else provider.tenant_id,
+                "model_type": get_model_type_human(model_record.model_type),
+                "name": model_record.model_name,
+                "provider_id": provider.id,
+                "provider_name": provider.provider_name,
+                "instance_id": instance.id,
+                "instance_name": instance.instance_name,
+                "rank": model_rank_map.get((provider.provider_name, model_record.model_name), 500),
+                "source": "admin",
+            }
+        )
 
     # Add TEI Builtin embedding model if configured
     compose_profiles = os.getenv("COMPOSE_PROFILES", "")
@@ -376,6 +413,7 @@ def list_tenant_added_models(tenant_id: str, model_type_filter: str = None):
                         "instance_id": "",
                         "instance_name": "default",
                         "rank": model_rank_map.get(("Builtin", tei_model), 500),
+                        "source": "builtin",
                     }
                 )
 

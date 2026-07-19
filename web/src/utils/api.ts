@@ -418,6 +418,8 @@ export default {
     `${restAPIv1}/admin/users/${username}/datasets`,
   adminListUserAgents: (username: string) =>
     `${restAPIv1}/admin/users/${username}/agents`,
+  adminListUserResources: (username: string) =>
+    `${restAPIv1}/admin/users/${username}/resources`,
   adminUpdateUserDepartment: (username: string) =>
     `${restAPIv1}/admin/users/${username}/department`,
   adminGetUserLoginUrl: (username: string) =>
@@ -429,10 +431,25 @@ export default {
   adminTeam: (teamId: string) => `${restAPIv1}/admin/teams/${teamId}`,
   adminTeamMembers: (teamId: string) =>
     `${restAPIv1}/admin/teams/${teamId}/members`,
+  adminTeamResources: (teamId: string) =>
+    `${restAPIv1}/admin/teams/${teamId}/resources`,
   adminTeamMember: (teamId: string, userId: string) =>
     `${restAPIv1}/admin/teams/${teamId}/members/${userId}`,
   adminListManagedResources: `${restAPIv1}/admin/resources`,
+  adminManagedResource: (resourceType: string, resourceId: string) =>
+    `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,
+  adminChatSessions: (resourceId: string) =>
+    `${restAPIv1}/admin/resources/chat/${resourceId}/sessions`,
+  adminChatSession: (resourceId: string, sessionId: string) =>
+    `${restAPIv1}/admin/resources/chat/${resourceId}/sessions/${sessionId}`,
   adminListFailedDocuments: `${restAPIv1}/admin/resources/failures`,
+  adminQuotas: `${restAPIv1}/admin/quotas`,
+  adminQuota: (scopeType: string, scopeId: string) =>
+    `${restAPIv1}/admin/quotas/${scopeType}/${scopeId}`,
+  adminManagedModels: `${restAPIv1}/admin/models`,
+  adminManagedModel: (modelId: string) =>
+    `${restAPIv1}/admin/models/${modelId}`,
+  adminModelWorkspaces: `${restAPIv1}/admin/models/workspaces`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>

@@ -36,6 +36,7 @@ from config import load_configurations, SERVICE_CONFIGS
 from auth import init_default_admin, setup_auth
 from flask_session import Session
 from common.versions import get_ragflow_version
+from api.db.db_models import DB
 
 stop_event = threading.Event()
 
@@ -64,6 +65,15 @@ if __name__ == "__main__":
     login_manager = LoginManager()
     login_manager.init_app(app)
     setup_auth(login_manager)
+
+    @app.teardown_request
+    def close_database_connection(_exception):
+        try:
+            if not DB.is_closed():
+                DB.close()
+        except Exception:
+            logging.exception("Failed to release the admin request database connection")
+
     init_default_admin()
     SERVICE_CONFIGS.configs = load_configurations(SERVICE_CONF)
 
