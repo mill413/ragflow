@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDecimalBytes } from '@/lib/utils';
+import { Routes } from '@/routes';
 import { getMonitoringSummary } from '@/services/admin-service';
 
 import { StorageSize } from './storage-size';
@@ -56,6 +58,7 @@ type MonitoringMetric = {
   value?: ReactNode;
   detail?: string;
   icon: typeof Library;
+  route: Routes;
   breakdown?: Array<{
     label: string;
     value: number;
@@ -99,26 +102,31 @@ export default function MonitoringPanel() {
         label: t('admin.monitoringPage.datasets'),
         value: data?.datasets_total,
         icon: Library,
+        route: Routes.AdminKnowledgeManagement,
       },
       {
         label: t('admin.monitoringPage.chats'),
         value: data?.chats_total,
         icon: MessageSquare,
+        route: Routes.AdminChatManagement,
       },
       {
         label: t('admin.monitoringPage.searches'),
         value: data?.searches_total,
         icon: FileSearch,
+        route: Routes.AdminSearchManagement,
       },
       {
         label: t('admin.monitoringPage.agents'),
         value: data?.agents_total,
         icon: Bot,
+        route: Routes.AdminAgentManagement,
       },
       {
         label: t('admin.monitoringPage.memories'),
         value: data?.memories_total,
         icon: Brain,
+        route: Routes.AdminMemoryManagement,
       },
       {
         label: t('admin.monitoringPage.users'),
@@ -127,25 +135,30 @@ export default function MonitoringPanel() {
           count: data?.active_users ?? 0,
         }),
         icon: Users,
+        route: Routes.AdminUserManagement,
       },
       {
         label: t('admin.monitoringPage.teams'),
         value: data?.teams_total,
         icon: Building2,
+        route: Routes.AdminTeamManagement,
       },
       {
         label: t('admin.monitoringPage.files'),
         value: data?.files_total,
         icon: File,
+        route: Routes.AdminFileManagement,
       },
       {
         label: t('admin.monitoringPage.storage'),
         value: data ? <StorageSize bytes={data.storage_bytes} /> : undefined,
         icon: HardDrive,
+        route: Routes.AdminFileManagement,
       },
       {
         label: t('admin.monitoringPage.processing'),
         icon: Activity,
+        route: Routes.AdminKnowledgeManagement,
         breakdown: [
           {
             label: t('admin.monitoringPage.processingDocuments'),
@@ -208,109 +221,121 @@ export default function MonitoringPanel() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {metrics.map(({ label, value, detail, icon: Icon, breakdown }) => (
-          <Card key={label} className="bg-bg-input/70">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center justify-between text-text-secondary">
-                <span className="text-sm">{label}</span>
-                <Icon className="size-5" />
-              </div>
-              {isLoading ? (
-                <Skeleton className="h-9 w-24" />
-              ) : breakdown ? (
-                <div className="grid grid-cols-3 gap-2">
-                  {breakdown.map((item) => (
-                    <div key={item.label} className="min-w-0">
-                      <div
-                        className={`text-xl font-semibold ${
-                          item.error ? 'text-state-error' : ''
-                        }`}
-                      >
-                        {item.value}
-                      </div>
-                      <div
-                        className="mt-1 truncate text-xs text-text-secondary"
-                        title={item.label}
-                      >
-                        {item.label}
-                      </div>
+        {metrics.map(
+          ({ label, value, detail, icon: Icon, route, breakdown }) => (
+            <Link key={label} to={route} aria-label={label} className="group">
+              <Card className="h-full cursor-pointer bg-bg-input/70 transition-colors group-hover:border-text-secondary group-focus-visible:border-text-primary group-focus-visible:ring-2 group-focus-visible:ring-ring">
+                <CardContent className="p-5">
+                  <div className="mb-4 flex items-center justify-between text-text-secondary transition-colors group-hover:text-text-primary">
+                    <span className="text-sm">{label}</span>
+                    <Icon className="size-5" />
+                  </div>
+                  {isLoading ? (
+                    <Skeleton className="h-9 w-24" />
+                  ) : breakdown ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {breakdown.map((item) => (
+                        <div key={item.label} className="min-w-0">
+                          <div
+                            className={`text-xl font-semibold ${
+                              item.error ? 'text-state-error' : ''
+                            }`}
+                          >
+                            {item.value}
+                          </div>
+                          <div
+                            className="mt-1 truncate text-xs text-text-secondary"
+                            title={item.label}
+                          >
+                            {item.label}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-3xl font-semibold">{value ?? 0}</div>
-              )}
-              {detail && (
-                <div className="mt-2 text-xs text-text-secondary">{detail}</div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                  ) : (
+                    <div className="text-3xl font-semibold">{value ?? 0}</div>
+                  )}
+                  {detail && (
+                    <div className="mt-2 text-xs text-text-secondary">
+                      {detail}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          ),
+        )}
       </div>
 
       <div>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              {t('admin.monitoringPage.storageDistribution')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {storageData.length ? (
-              <div className="h-80 min-w-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart
-                    margin={{ top: 24, right: 100, bottom: 36, left: 100 }}
-                  >
-                    <Pie
-                      data={storageData}
-                      dataKey="storage_bytes"
-                      nameKey="label"
-                      innerRadius="48%"
-                      outerRadius="72%"
-                      cy="42%"
-                      labelLine
-                      label={renderStorageLabel}
+        <Link
+          to={Routes.AdminFileManagement}
+          aria-label={t('admin.monitoringPage.storageDistribution')}
+          className="group block"
+        >
+          <Card className="cursor-pointer transition-colors group-hover:border-text-secondary group-focus-visible:border-text-primary group-focus-visible:ring-2 group-focus-visible:ring-ring">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {t('admin.monitoringPage.storageDistribution')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {storageData.length ? (
+                <div className="h-80 min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart
+                      margin={{ top: 24, right: 100, bottom: 36, left: 100 }}
                     >
-                      {storageData.map((item) => (
-                        <Cell key={item.workspace_id} fill={item.color} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip
-                      formatter={(value, _name, item) => [
-                        `${formatDecimalBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
-                        item.payload.label,
-                      ]}
-                      contentStyle={{
-                        background: 'var(--bg-card)',
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 8,
-                      }}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      align="center"
-                      layout="horizontal"
-                      iconType="circle"
-                      wrapperStyle={{
-                        maxHeight: 36,
-                        overflowY: 'auto',
-                        color: 'var(--text-primary)',
-                      }}
-                      formatter={(value) => (
-                        <span className="text-text-primary">{value}</span>
-                      )}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="text-sm text-text-secondary">
-                {t('admin.monitoringPage.noStorage')}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                      <Pie
+                        data={storageData}
+                        dataKey="storage_bytes"
+                        nameKey="label"
+                        innerRadius="48%"
+                        outerRadius="72%"
+                        cy="42%"
+                        labelLine
+                        label={renderStorageLabel}
+                      >
+                        {storageData.map((item) => (
+                          <Cell key={item.workspace_id} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip
+                        formatter={(value, _name, item) => [
+                          `${formatDecimalBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
+                          item.payload.label,
+                        ]}
+                        contentStyle={{
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border-default)',
+                          borderRadius: 8,
+                        }}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        align="center"
+                        layout="horizontal"
+                        iconType="circle"
+                        wrapperStyle={{
+                          maxHeight: 36,
+                          overflowY: 'auto',
+                          color: 'var(--text-primary)',
+                        }}
+                        formatter={(value) => (
+                          <span className="text-text-primary">{value}</span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-sm text-text-secondary">
+                  {t('admin.monitoringPage.noStorage')}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </section>
   );
