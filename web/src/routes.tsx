@@ -398,10 +398,6 @@ const routeConfigOptions = [
         Component: () => import('@/pages/admin/layouts/authorized-layout'),
         children: [
           {
-            path: `${Routes.AdminUserManagement}/:id`,
-            Component: () => import('@/pages/admin/user-detail'),
-          },
-          {
             Component: () => import('@/pages/admin/layouts/navigation-layout'),
             children: [
               {

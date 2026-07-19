@@ -1,8 +1,7 @@
-import { useContext, useMemo, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router';
 
-import { LucideArrowLeft, LucidePencil } from 'lucide-react';
+import { LucidePencil } from 'lucide-react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,13 +13,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 
-import { Routes } from '@/routes';
-
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
-import Spotlight from '@/components/spotlight';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +28,13 @@ import { Label } from '@/components/ui/label';
 import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Table,
   TableBody,
@@ -307,10 +309,13 @@ function UserAgentTable(props: { data?: AdminService.ListUserAgentItem[] }) {
   );
 }
 
-function AdminUserDetail() {
-  const navigate = useNavigate();
+type UserDetailSheetProps = {
+  email?: string;
+  onOpenChange: (open: boolean) => void;
+};
+
+function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
   const { t } = useTranslation();
-  const { id } = useParams();
   const queryClient = useQueryClient();
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
   const [editOpen, setEditOpen] = useState(false);
@@ -324,12 +329,12 @@ function AdminUserDetail() {
   });
 
   const { data: { detail, datasets, agents } = {} } = useQuery({
-    queryKey: ['admin/userDetail', id],
+    queryKey: ['admin/userDetail', email],
     queryFn: async () => {
       const [userDetails, userDatasets, userAgents] = await Promise.all([
-        getUserDetails(id!),
-        listUserDatasets(id!),
-        listUserAgents(id!),
+        getUserDetails(email!),
+        listUserDatasets(email!),
+        listUserAgents(email!),
       ]);
 
       return {
@@ -338,7 +343,7 @@ function AdminUserDetail() {
         agents: userAgents.data.data,
       };
     },
-    enabled: !!id,
+    enabled: Boolean(email),
     retry: false,
   });
   const { data: departments = [] } = useQuery({
@@ -348,7 +353,7 @@ function AdminUserDetail() {
   });
   const updateMutation = useMutation({
     mutationFn: () =>
-      updateUser(id!, {
+      updateUser(email!, {
         nickname: editForm.nickname.trim(),
         password: editForm.password
           ? (rsaPsw(editForm.password) as string)
@@ -378,122 +383,158 @@ function AdminUserDetail() {
     setEditOpen(true);
   };
   const isMe = detail?.email === userInfo?.email;
+  const informationItems: Array<{ label: string; value: ReactNode }> = [
+    {
+      label: t('admin.nickname'),
+      value: detail?.nickname || '-',
+    },
+    {
+      label: t('admin.department'),
+      value: detail?.department_path || t('admin.noDepartment'),
+    },
+    {
+      label: t('admin.status'),
+      value: <UserStatusBadge active={detail?.is_active} />,
+    },
+    {
+      label: t('admin.userType'),
+      value: (
+        <Badge variant="secondary">
+          {t(detail?.is_superuser ? 'admin.superuser' : 'admin.normalUser')}
+        </Badge>
+      ),
+    },
+    {
+      label: t('admin.password'),
+      value: detail?.password_plain || '-',
+    },
+    {
+      label: t('admin.lastLoginTime'),
+      value: formatDate(detail?.last_login_time) || '-',
+    },
+    {
+      label: t('admin.createTime'),
+      value: formatDate(detail?.create_date) || '-',
+    },
+    {
+      label: t('admin.lastUpdateTime'),
+      value: formatDate(detail?.update_date) || '-',
+    },
+    {
+      label: t('admin.language'),
+      value: detail?.language || '-',
+    },
+    {
+      label: t('admin.isAnonymous'),
+      value: t(
+        parseBooleanish(detail?.is_anonymous) ? 'admin.yes' : 'admin.no',
+      ),
+    },
+  ];
 
   return (
-    <section className="px-10 py-5 size-full flex flex-col">
-      <nav className="mb-5">
-        <Button
-          variant="outline"
-          className="h-10 px-3 dark:bg-bg-input dark:border-border-button"
-          onClick={() => navigate(`${Routes.AdminUserManagement}`)}
-        >
-          <LucideArrowLeft />
-          <span>{t('admin.back')}</span>
-        </Button>
-      </nav>
-
-      <Card className="!shadow-none relative h-0 basis-0 grow flex flex-col bg-transparent border-0.5 border-border-button overflow-hidden">
-        <Spotlight />
-
-        <CardHeader className="pb-10 border-b-0.5 dark:border-border-button space-y-8">
-          <section className="flex items-center gap-4 text-base">
-            <RAGFlowAvatar
-              avatar={detail?.avatar}
-              name={detail?.email}
-              isPerson
-            />
-
-            <span>{detail?.email}</span>
-
-            <UserStatusBadge active={detail?.is_active} />
-
-            <EnterpriseFeature>
-              {() =>
-                detail?.role && (
-                  <Badge variant="secondary">{detail?.role}</Badge>
-                )
-              }
-            </EnterpriseFeature>
-
-            <Button className="ml-auto" variant="outline" onClick={openEdit}>
-              <LucidePencil />
-              {t('admin.editUser')}
-            </Button>
-          </section>
-
-          <section className="flex items-start px-14 space-x-14">
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.lastLoginTime')}
+    <>
+      <Sheet
+        open={Boolean(email)}
+        onOpenChange={(open) => {
+          if (!open) setEditOpen(false);
+          onOpenChange(open);
+        }}
+      >
+        <SheetContent className="w-[min(900px,80vw)] max-w-none p-0">
+          <SheetHeader className="border-b border-border-button px-6 py-5">
+            <div className="flex items-center gap-3 pr-8">
+              <RAGFlowAvatar
+                avatar={detail?.avatar}
+                name={detail?.email || email}
+                isPerson
+              />
+              <div className="min-w-0">
+                <SheetTitle className="truncate">
+                  {detail?.nickname || detail?.email || email}
+                </SheetTitle>
+                <SheetDescription className="truncate">
+                  {detail?.email || email}
+                  {detail?.id ? ` · ${detail.id}` : ''}
+                </SheetDescription>
               </div>
-              <div>{formatDate(detail?.last_login_time) || '-'}</div>
+              <EnterpriseFeature>
+                {() =>
+                  detail?.role && (
+                    <Badge className="shrink-0" variant="secondary">
+                      {detail.role}
+                    </Badge>
+                  )
+                }
+              </EnterpriseFeature>
+              <Button
+                className="ml-auto shrink-0"
+                variant="outline"
+                disabled={!detail}
+                onClick={openEdit}
+              >
+                <LucidePencil />
+                {t('admin.editUser')}
+              </Button>
             </div>
+          </SheetHeader>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.createTime')}
+          <ScrollArea className="h-[calc(100vh-97px)] px-6">
+            <section className="border-b border-border-button py-5">
+              <div className="mb-3 text-sm font-medium">
+                {t('admin.userInformation')}
               </div>
-              <div>{formatDate(detail?.create_date) || '-'}</div>
-            </div>
-
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.lastUpdateTime')}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {informationItems.map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="min-w-0 rounded-lg border-0.5 border-border-button bg-bg-input p-3"
+                  >
+                    <div className="text-xs text-text-secondary">{label}</div>
+                    <div className="mt-2 truncate text-sm font-medium text-text-primary">
+                      {value}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>{formatDate(detail?.update_date) || '-'}</div>
-            </div>
+              {detail?.remark && (
+                <div className="mt-3 rounded-lg border-0.5 border-border-button bg-bg-input p-3">
+                  <div className="text-xs text-text-secondary">
+                    {t('admin.remark')}
+                  </div>
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-text-primary">
+                    {detail.remark}
+                  </div>
+                </div>
+              )}
+            </section>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.language')}
-              </div>
-              <div>{detail?.language}</div>
-            </div>
+            <section className="py-5">
+              <Tabs defaultValue="dataset">
+                <TabsList className="mb-4 justify-start gap-4 bg-transparent p-0">
+                  {ASSET_NAMES.map((name) => (
+                    <TabsTrigger
+                      key={name}
+                      className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
+                      value={name}
+                    >
+                      {t(`header.${name}`)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.isAnonymous')}
-              </div>
-              <div>{t(detail?.is_anonymous ? 'admin.yes' : 'admin.no')}</div>
-            </div>
+                <TabsContent value="dataset">
+                  <UserDatasetTable data={datasets} />
+                </TabsContent>
 
-            <div>
-              <div className="text-sm text-text-secondary mb-2">
-                {t('admin.isSuperuser')}
-              </div>
-              <div>{t(detail?.is_superuser ? 'admin.yes' : 'admin.no')}</div>
-            </div>
-          </section>
-        </CardHeader>
-
-        <CardContent className="h-0 basis-0 grow pt-6">
-          <Tabs className="h-full flex flex-col" defaultValue="dataset">
-            <TabsList className="p-0 mb-2 gap-4 bg-transparent justify-start">
-              {ASSET_NAMES.map((name) => (
-                <TabsTrigger
-                  key={name}
-                  className="text-text-secondary border-0.5 border-border-button data-[state=active]:bg-bg-card"
-                  value={name}
-                >
-                  {t(`header.${name}`)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            <TabsContent value="dataset" className="h-0 basis-0 grow">
-              <ScrollArea className="h-full">
-                <UserDatasetTable data={datasets} />
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="flow" className="h-0 basis-0 grow">
-              <ScrollArea className="h-full">
-                <UserAgentTable data={agents} />
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                <TabsContent value="flow">
+                  <UserAgentTable data={agents} />
+                </TabsContent>
+              </Tabs>
+            </section>
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-xl">
@@ -612,8 +653,8 @@ function AdminUserDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </>
   );
 }
 
-export default AdminUserDetail;
+export default UserDetailSheet;

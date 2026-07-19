@@ -8,7 +8,6 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
 
 import {
   createColumnHelper,
@@ -78,7 +77,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Routes } from '@/routes';
 import { LucideSearch } from 'lucide-react';
 
 import useChangePasswordForm from './forms/change-password-form';
@@ -120,6 +118,7 @@ import DepartmentTreeSelect from './components/department-tree-select';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { createFilterOptions } from './components/table-filter-utils';
 import { CurrentUserInfoContext } from './layouts/root-layout';
+import UserDetailSheet from './user-detail';
 
 const columnHelper = createColumnHelper<AdminService.ListUsersItem>();
 const globalFilterFn = createFuzzySearchFn<AdminService.ListUsersItem>([
@@ -163,12 +162,12 @@ function AdminUserManagement() {
   const [{ userInfo }] = useContext(CurrentUserInfoContext);
 
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
+  const [selectedUserEmail, setSelectedUserEmail] = useState<string>();
   const [userToMakeAction, setUserToMakeAction] =
     useState<AdminService.ListUsersItem | null>(null);
 
@@ -300,9 +299,8 @@ function AdminUserManagement() {
   }, []);
 
   const openUserDetail = useCallback(
-    (email: string) =>
-      navigate(`${Routes.AdminUserManagement}/${encodeURIComponent(email)}`),
-    [navigate],
+    (email: string) => setSelectedUserEmail(email),
+    [],
   );
 
   // Update user status mutation
@@ -987,6 +985,13 @@ function AdminUserManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UserDetailSheet
+        email={selectedUserEmail}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUserEmail(undefined);
+        }}
+      />
     </>
   );
 }

@@ -3514,6 +3514,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
 
       deleteUser: '删除用户',
       userDetails: '查看用户详情',
+      userInformation: '用户信息',
       editUser: '编辑用户',
       userUpdated: '用户信息已更新',
       remark: '管理员备注',

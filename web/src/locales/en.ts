@@ -3746,6 +3746,7 @@ Important structured information may include: names, dates, locations, events, k
 
       deleteUser: 'Delete user',
       userDetails: 'View user details',
+      userInformation: 'User information',
       editUser: 'Edit user',
       userUpdated: 'User information updated',
       remark: 'Administrator remark',
