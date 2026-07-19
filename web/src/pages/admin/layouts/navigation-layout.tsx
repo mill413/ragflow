@@ -169,11 +169,13 @@ const AdminNavigationLayout = () => {
   };
 
   return (
-    <main className="w-screen h-screen flex flex-row gap-6 px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
+    <main className="relative w-screen h-screen flex flex-row gap-6 px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
+      <ThemeSwitch className="absolute right-6 top-3 z-10" />
+
       <aside
         className={cn(
           'shrink-0 flex flex-col gap-6 transition-[width] duration-200 ease-out',
-          sidebarCollapsed ? 'w-14' : 'w-[200px]',
+          sidebarCollapsed ? 'w-14' : 'w-[170px]',
         )}
       >
         <div
@@ -287,22 +289,11 @@ const AdminNavigationLayout = () => {
         </nav>
 
         <div className="mt-auto space-y-4">
-          <div
-            className={cn(
-              'flex items-center',
-              sidebarCollapsed
-                ? 'justify-center overflow-hidden'
-                : 'justify-between',
-            )}
-          >
-            {!sidebarCollapsed && (
-              <span className="leading-none text-xs text-accent-primary">
-                {version}
-              </span>
-            )}
-
-            <ThemeSwitch className={cn(sidebarCollapsed && 'scale-75')} />
-          </div>
+          {!sidebarCollapsed && (
+            <span className="block truncate leading-none text-xs text-accent-primary">
+              {version}
+            </span>
+          )}
 
           <Button
             size="lg"
