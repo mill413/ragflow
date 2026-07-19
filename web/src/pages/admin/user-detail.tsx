@@ -91,6 +91,7 @@ import {
   type AdminFileTreeRow,
   buildAdminFileTreeRows,
 } from './components/file-tree';
+import { UserModelConfiguration } from './components/user-model-configuration';
 
 const USER_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
@@ -714,6 +715,17 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                       </Badge>
                     </TabsTrigger>
                   ))}
+                  <TabsTrigger
+                    className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
+                    value="model"
+                  >
+                    {t('admin.userModelConfiguration')}
+                    <Badge className="ml-1" variant="secondary">
+                      {(resources?.model?.defaults.filter(
+                        (model) => model.model_name,
+                      ).length ?? 0) + (resources?.model?.models.length ?? 0)}
+                    </Badge>
+                  </TabsTrigger>
                 </TabsList>
 
                 {USER_RESOURCE_TYPES.map((resourceType) => (
@@ -724,6 +736,9 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
                     />
                   </TabsContent>
                 ))}
+                <TabsContent value="model">
+                  <UserModelConfiguration configuration={resources?.model} />
+                </TabsContent>
               </Tabs>
             </section>
           </ScrollArea>

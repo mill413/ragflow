@@ -164,10 +164,37 @@ declare namespace AdminService {
     deletable: boolean;
   };
 
+  export type UserModelConfig = {
+    id: string;
+    name: string;
+    provider_name: string;
+    instance_name: string;
+    api_key: string;
+    base_url: string;
+    model_types: string[];
+    max_tokens: number;
+    status: 'active' | 'inactive';
+    create_date: string;
+    update_date: string;
+  };
+
+  export type UserDefaultModelConfig = {
+    model_type: string;
+    model_name: string;
+    model_id: string;
+  };
+
+  export type UserModelConfiguration = {
+    defaults: UserDefaultModelConfig[];
+    models: UserModelConfig[];
+  };
+
   export type UserResourceMap = Record<
     ManagedResourceType,
     ManagedResourceItem[]
-  >;
+  > & {
+    model: UserModelConfiguration;
+  };
 
   export type ManagedResourceList = {
     resources: ManagedResourceItem[];

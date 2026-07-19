@@ -755,6 +755,87 @@ class TeamMgr:
 
 class UserServiceMgr:
     @staticmethod
+    def get_user_model_configuration(user_id: str) -> dict[str, Any]:
+        tenant = Tenant.get_or_none(
+            (Tenant.id == user_id) & (Tenant.status == StatusEnum.VALID.value)
+        )
+        default_fields = [
+            ("chat", "llm_id", "tenant_llm_id"),
+            ("embedding", "embd_id", "tenant_embd_id"),
+            ("asr", "asr_id", "tenant_asr_id"),
+            ("vision", "img2txt_id", "tenant_img2txt_id"),
+            ("rerank", "rerank_id", "tenant_rerank_id"),
+            ("tts", "tts_id", "tenant_tts_id"),
+            ("ocr", "ocr_id", "tenant_ocr_id"),
+        ]
+        defaults = [
+            {
+                "model_type": model_type,
+                "model_name": getattr(tenant, name_field, "") or "",
+                "model_id": getattr(tenant, id_field, "") or "",
+            }
+            for model_type, name_field, id_field in default_fields
+        ]
+        if not tenant:
+            return {"defaults": defaults, "models": []}
+
+        providers = TenantModelProviderService.get_by_tenant_id(user_id)
+        if not providers:
+            return {"defaults": defaults, "models": []}
+        provider_by_id = {provider.id: provider for provider in providers}
+        instances = TenantModelInstanceService.get_by_provider_ids(list(provider_by_id))
+        instance_by_id = {instance.id: instance for instance in instances}
+        models = TenantModelService.get_models_by_provider_ids_and_instance_ids(
+            list(provider_by_id),
+            list(instance_by_id),
+        )
+        managed_model_ids = set(SharedModelService.list_entries())
+        rows = []
+        for model in models:
+            if model.id in managed_model_ids:
+                continue
+            provider = provider_by_id.get(model.provider_id)
+            instance = instance_by_id.get(model.instance_id)
+            if not provider or not instance:
+                continue
+            try:
+                instance_extra = json.loads(instance.extra or "{}")
+            except (TypeError, json.JSONDecodeError):
+                instance_extra = {}
+            try:
+                model_extra = json.loads(model.extra or "{}")
+            except (TypeError, json.JSONDecodeError):
+                model_extra = {}
+            rows.append(
+                {
+                    "id": model.id,
+                    "name": model.model_name or "",
+                    "provider_name": provider.provider_name,
+                    "instance_name": instance.instance_name,
+                    "api_key": instance.api_key,
+                    "base_url": instance_extra.get("base_url", "") if isinstance(instance_extra, dict) else "",
+                    "model_types": get_model_type_human(model.model_type),
+                    "max_tokens": int(model_extra.get("max_tokens") or 8192)
+                    if isinstance(model_extra, dict)
+                    else 8192,
+                    "status": model.status,
+                    "create_date": model.create_date,
+                    "update_date": model.update_date,
+                }
+            )
+        return {
+            "defaults": defaults,
+            "models": sorted(
+                rows,
+                key=lambda row: (
+                    row["provider_name"],
+                    row["instance_name"],
+                    row["name"],
+                ),
+            ),
+        }
+
+    @staticmethod
     def get_user_datasets(username):
         # use email to find user.
         user_list = UserService.query_user_by_email(username)
@@ -798,7 +879,7 @@ class UserServiceMgr:
             membership["tenant_id"]
             for membership in TenantService.list_accessible_by_user_id(user.id)
         ]
-        return {
+        resources = {
             resource_type: ResourceMgr.list_resources(
                 resource_type,
                 page=1,
@@ -808,6 +889,8 @@ class UserServiceMgr:
             )["resources"]
             for resource_type in ResourceMgr.RESOURCE_SPECS
         }
+        resources["model"] = UserServiceMgr.get_user_model_configuration(user.id)
+        return resources
 
     @staticmethod
     def get_user_tenants(email: str) -> list[dict[str, Any]]:
