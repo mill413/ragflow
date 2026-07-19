@@ -1976,6 +1976,13 @@ class AdminModelMgr:
         return visibility, workspace_ids
 
     @classmethod
+    def _validate_model_type(cls, model_types: list[str]) -> str:
+        model_types = list(dict.fromkeys(model_types or []))
+        if len(model_types) != 1 or model_types[0] not in cls.MODEL_TYPES:
+            raise AdminException("Exactly one valid model type is required", 400)
+        return model_types[0]
+
+    @classmethod
     def list_workspaces(cls) -> list[dict[str, Any]]:
         users = {
             user.id: user
@@ -2056,13 +2063,11 @@ class AdminModelMgr:
         provider_name = str(data.get("provider_name") or "").strip()
         instance_name = str(data.get("instance_name") or "").strip()
         model_name = str(data.get("model_name") or "").strip()
-        model_types = sorted(set(data.get("model_types") or []))
+        model_type = cls._validate_model_type(data.get("model_types") or [])
         if provider_name not in cls.PROVIDERS:
             raise AdminException("Unsupported model provider", 400)
         if not instance_name or not model_name:
             raise AdminException("instance_name and model_name are required", 400)
-        if not model_types or not set(model_types) <= cls.MODEL_TYPES:
-            raise AdminException("At least one valid model type is required", 400)
         visibility, workspace_ids = cls._validate_access(
             data.get("visibility", "all"),
             data.get("workspace_ids") or [],
@@ -2102,7 +2107,7 @@ class AdminModelMgr:
             model_name=model_name,
             provider_id=provider.id,
             instance_id=instance.id,
-            model_type=calculate_model_type(model_types),
+            model_type=calculate_model_type([model_type]),
             status=ActiveStatusEnum.ACTIVE.value,
             extra=json.dumps({"max_tokens": max(int(data.get("max_tokens") or 8192), 1)}),
         )
@@ -2128,10 +2133,8 @@ class AdminModelMgr:
 
         updates = {}
         if "model_types" in data:
-            model_types = sorted(set(data.get("model_types") or []))
-            if not model_types or not set(model_types) <= cls.MODEL_TYPES:
-                raise AdminException("At least one valid model type is required", 400)
-            updates["model_type"] = calculate_model_type(model_types)
+            model_type = cls._validate_model_type(data.get("model_types") or [])
+            updates["model_type"] = calculate_model_type([model_type])
         if "status" in data:
             if data["status"] not in {ActiveStatusEnum.ACTIVE.value, ActiveStatusEnum.INACTIVE.value}:
                 raise AdminException("Invalid model status", 400)

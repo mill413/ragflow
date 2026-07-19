@@ -26,7 +26,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -237,21 +236,13 @@ export default function AdminModels() {
       model_name: model.name,
       api_key: model.api_key,
       base_url: model.base_url,
-      model_types: [...model.model_types],
+      model_types: model.model_types.slice(0, 1),
       max_tokens: model.max_tokens,
       status: model.status,
       visibility: model.visibility === 'private' ? 'all' : model.visibility,
       workspace_ids: [...model.workspace_ids],
     });
     setDialogOpen(true);
-  };
-  const toggleModelType = (modelType: string, checked: boolean) => {
-    setForm((current) => ({
-      ...current,
-      model_types: checked
-        ? [...new Set([...current.model_types, modelType])]
-        : current.model_types.filter((item) => item !== modelType),
-    }));
   };
   const canSave =
     form.model_name.trim() &&
@@ -786,24 +777,28 @@ export default function AdminModels() {
                     </Select>
                   </div>
                 )}
-                <div className="space-y-3 md:col-span-2">
+                <div className="space-y-2 md:col-span-2">
                   <Label>{t('admin.modelManagementPage.modelTypes')}</Label>
-                  <div className="flex flex-wrap gap-x-6 gap-y-3">
-                    {MODEL_TYPES.map((modelType) => (
-                      <label
-                        key={modelType}
-                        className="flex cursor-pointer items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={form.model_types.includes(modelType)}
-                          onCheckedChange={(checked) =>
-                            toggleModelType(modelType, checked === true)
-                          }
-                        />
-                        {t(`admin.modelManagementPage.types.${modelType}`)}
-                      </label>
-                    ))}
-                  </div>
+                  <Select
+                    value={form.model_types[0] ?? ''}
+                    onValueChange={(modelType) =>
+                      setForm((current) => ({
+                        ...current,
+                        model_types: [modelType],
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODEL_TYPES.map((modelType) => (
+                        <SelectItem key={modelType} value={modelType}>
+                          {t(`admin.modelManagementPage.types.${modelType}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>{t('admin.modelManagementPage.visibility')}</Label>

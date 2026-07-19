@@ -3819,7 +3819,7 @@ Important structured information may include: names, dates, locations, events, k
         editAction: 'Edit {{name}}',
         deleteAction: 'Delete {{name}}',
         required:
-          'Enter the model and instance names and select at least one model type',
+          'Enter the model and instance names and select one model type',
         types: {
           chat: 'Chat',
           embedding: 'Embedding',
