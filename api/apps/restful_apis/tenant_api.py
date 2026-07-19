@@ -20,6 +20,7 @@ from typing import Set
 
 from api.apps import current_user, login_required
 from api.db.services.workspace_service import TeamService, WorkspaceAccessService
+from api.db.services.resource_quota_service import ResourceQuotaService
 from api.utils.api_utils import get_json_result, get_request_json, server_error_response, validate_request
 from api.utils.web_utils import send_invite_email
 from common import settings
@@ -73,7 +74,13 @@ def list_teams():
 @login_required
 def list_workspaces():
     try:
-        return get_json_result(data=WorkspaceAccessService.list_visible_workspaces(current_user.id))
+        workspaces = WorkspaceAccessService.list_visible_workspaces(current_user.id)
+        quotas = ResourceQuotaService.get_workspace_quotas(
+            [workspace["tenant_id"] for workspace in workspaces]
+        )
+        for workspace in workspaces:
+            workspace["quota"] = quotas[workspace["tenant_id"]]
+        return get_json_result(data=workspaces)
     except Exception as exc:
         return _team_error(exc)
 

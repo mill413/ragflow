@@ -7,6 +7,7 @@ import {
   Eye,
   Gauge,
   HardDrive,
+  ChevronDown,
   Pencil,
   Search,
   ShieldAlert,
@@ -23,6 +24,11 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -255,14 +261,24 @@ function QuotaTableSection({
   );
 
   return (
-    <section className="overflow-hidden rounded-lg border-0.5 border-border-button bg-bg-input">
-      <div className="flex items-center justify-between border-b border-border-button px-4 py-3">
-        <div className="font-medium">
-          {t(`admin.quotaManagementPage.tableTitles.${scopeType}`)}
-        </div>
-        <Badge variant="secondary">{quotas.length}</Badge>
-      </div>
-      <div className="overflow-x-auto">
+    <Collapsible asChild>
+      <section className="overflow-hidden rounded-lg border-0.5 border-border-button bg-bg-input">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-card"
+          >
+            <ChevronDown className="size-4 -rotate-90 transition-transform group-data-[state=open]:rotate-0" />
+            <span className="font-medium">
+              {t(`admin.quotaManagementPage.tableTitles.${scopeType}`)}
+            </span>
+            <Badge className="ml-auto" variant="secondary">
+              {quotas.length}
+            </Badge>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="overflow-x-auto border-t border-border-button">
         <Table
           rootClassName="max-w-full [contain:inline-size]"
           className={showWorkspace ? 'min-w-[1080px]' : 'min-w-[960px]'}
@@ -377,19 +393,21 @@ function QuotaTableSection({
             )}
           </TableBody>
         </Table>
-      </div>
-      <div className="flex justify-end border-t border-border-button px-4 py-3">
-        <RAGFlowPagination
-          total={sorted.length}
-          current={page}
-          pageSize={pageSize}
-          onChange={(nextPage, nextPageSize) => {
-            setPage(nextPage);
-            setPageSize(nextPageSize);
-          }}
-        />
-      </div>
-    </section>
+          </div>
+          <div className="flex justify-end border-t border-border-button px-4 py-3">
+            <RAGFlowPagination
+              total={sorted.length}
+              current={page}
+              pageSize={pageSize}
+              onChange={(nextPage, nextPageSize) => {
+                setPage(nextPage);
+                setPageSize(nextPageSize);
+              }}
+            />
+          </div>
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   );
 }
 

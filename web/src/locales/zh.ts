@@ -150,6 +150,19 @@ export default {
       memories: '记忆',
       help: '帮助',
     },
+    homePage: {
+      workspaceQuota: {
+        title: '工作空间配额',
+        description: '查看你所在个人空间和团队空间的文件及存储配额使用情况。',
+        adminDescription: '超级管理员可查看所有个人空间和团队空间的配额使用情况。',
+        personal: '个人',
+        team: '团队',
+        files: '文件数量',
+        storage: '文件存储',
+        unlimited: '不限制',
+        overLimit: '已超限',
+      },
+    },
     skills: {
       title: '技能',
       selectSpace: '选择一个技能空间开始使用',

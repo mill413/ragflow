@@ -159,6 +159,21 @@ export default {
       memories: 'Memory',
       help: 'Help',
     },
+    homePage: {
+      workspaceQuota: {
+        title: 'Workspace quotas',
+        description:
+          'View file-count and storage quota usage for your personal and team workspaces.',
+        adminDescription:
+          'Super administrators can view quota usage for every personal and team workspace.',
+        personal: 'Personal',
+        team: 'Team',
+        files: 'File count',
+        storage: 'File storage',
+        unlimited: 'Unlimited',
+        overLimit: 'Over limit',
+      },
+    },
     skills: {
       title: 'Skills',
       selectSpace: 'Select a skill space to get started',
