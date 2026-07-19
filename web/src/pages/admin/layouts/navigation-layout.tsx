@@ -169,8 +169,8 @@ const AdminNavigationLayout = () => {
   };
 
   return (
-    <main className="relative w-screen h-screen flex flex-row gap-6 px-6 pt-12 pb-6 dark:*:focus-visible:ring-white">
-      <ThemeSwitch className="absolute right-6 top-3 z-10" />
+    <main className="relative w-screen h-screen flex flex-row gap-6 px-3 pt-6 pb-3 dark:*:focus-visible:ring-white">
+      <ThemeSwitch className="absolute right-3 top-1.5 z-10" />
 
       <aside
         className={cn(
