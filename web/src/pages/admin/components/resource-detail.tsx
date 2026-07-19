@@ -28,11 +28,12 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs';
 import { formatDate } from '@/utils/date';
 import { DetailInformationCard } from './detail-information-card';
 import { StorageSize } from './storage-size';
 import { ChatSessionMonitor } from './chat-session-monitor';
+import { AdminDetailTabsTrigger } from './detail-tabs-trigger';
 
 type DetailItem = {
   label: string;
@@ -843,16 +844,16 @@ export function StandardResourceDetail({
   return (
     <Tabs defaultValue="overview" className="py-5">
       <TabsList className="mb-5 h-auto justify-start gap-2 bg-transparent p-0">
-        <TabsTrigger value="overview">
+        <AdminDetailTabsTrigger value="overview">
           {t('admin.resourceManagementPage.datasetDetail.overview')}
-        </TabsTrigger>
-        <TabsTrigger value="configuration">
+        </AdminDetailTabsTrigger>
+        <AdminDetailTabsTrigger value="configuration">
           {t('admin.resourceManagementPage.resourceDetail.configuration')}
-        </TabsTrigger>
+        </AdminDetailTabsTrigger>
         {detail.resource.resource_type === 'chat' && (
-          <TabsTrigger value="sessions">
+          <AdminDetailTabsTrigger value="sessions">
             {t('admin.resourceManagementPage.chatSessions.title')}
-          </TabsTrigger>
+          </AdminDetailTabsTrigger>
         )}
       </TabsList>
 

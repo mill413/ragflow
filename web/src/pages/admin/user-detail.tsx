@@ -55,7 +55,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -87,6 +87,7 @@ import {
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 import { DetailInformationCard } from './components/detail-information-card';
+import { AdminDetailTabsTrigger } from './components/detail-tabs-trigger';
 import { StorageSize } from './components/storage-size';
 import {
   AdminFileTreeName,
@@ -747,28 +748,24 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
               >
                 <TabsList className="mb-4 h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
                   {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (
-                    <TabsTrigger
+                    <AdminDetailTabsTrigger
                       key={resourceType}
-                      className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
                       value={resourceType}
                     >
                       {t(`admin.resourceType.${resourceType}`)}
                       <Badge className="ml-1" variant="secondary">
                         {resources?.[resourceType]?.length ?? 0}
                       </Badge>
-                    </TabsTrigger>
+                    </AdminDetailTabsTrigger>
                   ))}
-                  <TabsTrigger
-                    className="border-0.5 border-border-button text-text-secondary data-[state=active]:bg-bg-card"
-                    value="model"
-                  >
+                  <AdminDetailTabsTrigger value="model">
                     {t('admin.userModelConfiguration')}
                     <Badge className="ml-1" variant="secondary">
                       {(resources?.model?.defaults.filter(
                         (model) => model.model_name,
                       ).length ?? 0) + (resources?.model?.models.length ?? 0)}
                     </Badge>
-                  </TabsTrigger>
+                  </AdminDetailTabsTrigger>
                 </TabsList>
 
                 {WORKSPACE_RESOURCE_TYPES.map((resourceType) => (

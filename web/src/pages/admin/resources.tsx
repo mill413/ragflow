@@ -73,7 +73,7 @@ import { Input } from '@/components/ui/input';
 import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -113,6 +113,7 @@ import { downloadFileFromBlob } from '@/utils/file-util';
 import { getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
+import { AdminDetailTabsTrigger } from './components/detail-tabs-trigger';
 import { StandardResourceDetail } from './components/resource-detail';
 import { StorageSize } from './components/storage-size';
 import {
@@ -1483,12 +1484,12 @@ export default function AdminResources() {
               {selectedDatasetId ? (
                 <Tabs defaultValue="overview" className="py-5">
                   <TabsList className="mb-5 h-auto justify-start gap-2 bg-transparent p-0">
-                    <TabsTrigger value="overview">
+                    <AdminDetailTabsTrigger value="overview">
                       {t('admin.resourceManagementPage.datasetDetail.overview')}
-                    </TabsTrigger>
-                    <TabsTrigger value="files">
+                    </AdminDetailTabsTrigger>
+                    <AdminDetailTabsTrigger value="files">
                       {t('admin.resourceManagementPage.datasetDetail.files')}
-                    </TabsTrigger>
+                    </AdminDetailTabsTrigger>
                   </TabsList>
 
                   <TabsContent value="overview" className="mt-0 space-y-5">
