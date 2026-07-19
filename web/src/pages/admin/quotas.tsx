@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Files,
+  Eye,
   Gauge,
   HardDrive,
   Pencil,
@@ -23,6 +24,14 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import message from '@/components/ui/message';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -79,6 +88,100 @@ function getQuotaState(quota: AdminService.ResourceQuota): QuotaState {
   return 'unlimited';
 }
 
+function quotaPercentage(used: number, limit: number | null) {
+  if (limit === null) return null;
+  if (limit === 0) return used > 0 ? 100 : 0;
+  return Math.round((used / limit) * 1000) / 10;
+}
+
+function QuotaMetricDetail({
+  title,
+  used,
+  limit,
+  storage = false,
+}: {
+  title: string;
+  used: number;
+  limit: number | null;
+  storage?: boolean;
+}) {
+  const { t } = useTranslation();
+  const percentage = quotaPercentage(used, limit);
+  const remaining = limit === null ? null : Math.max(limit - used, 0);
+  const exceeded = limit === null ? 0 : Math.max(used - limit, 0);
+  const formatValue = (value: number) =>
+    storage ? <StorageSize bytes={value} /> : value.toLocaleString();
+
+  return (
+    <section className="space-y-4 rounded-lg border-0.5 border-border-button bg-bg-input p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="font-medium">{title}</div>
+        <div className="text-sm font-medium">
+          {formatValue(used)} /{' '}
+          {limit === null
+            ? t('admin.resourceQuota.unlimited')
+            : formatValue(limit)}
+        </div>
+      </div>
+      {percentage === null ? (
+        <div className="rounded-md bg-bg-card px-3 py-2 text-xs text-text-secondary">
+          {t('admin.quotaManagementPage.unlimitedUsage')}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="h-2 overflow-hidden rounded-full bg-bg-accent">
+            <div
+              className={
+                exceeded > 0
+                  ? 'h-full rounded-full bg-state-error'
+                  : 'h-full rounded-full bg-accent-primary'
+              }
+              style={{ width: `${Math.min(percentage, 100)}%` }}
+            />
+          </div>
+          <div className="text-right text-xs text-text-secondary">
+            {t('admin.quotaManagementPage.usageRate', {
+              percentage: percentage.toLocaleString(),
+            })}
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-3 text-right">
+        <div className="rounded-md bg-bg-card p-3">
+          <div className="text-xs text-text-secondary">
+            {t('admin.quotaManagementPage.used')}
+          </div>
+          <div className="mt-1 text-sm font-medium">{formatValue(used)}</div>
+        </div>
+        <div className="rounded-md bg-bg-card p-3">
+          <div className="text-xs text-text-secondary">
+            {t('admin.quotaManagementPage.remaining')}
+          </div>
+          <div className="mt-1 text-sm font-medium">
+            {remaining === null
+              ? t('admin.resourceQuota.unlimited')
+              : formatValue(remaining)}
+          </div>
+        </div>
+        <div className="rounded-md bg-bg-card p-3">
+          <div className="text-xs text-text-secondary">
+            {t('admin.quotaManagementPage.exceeded')}
+          </div>
+          <div
+            className={
+              exceeded > 0
+                ? 'mt-1 text-sm font-medium text-state-error'
+                : 'mt-1 text-sm font-medium'
+            }
+          >
+            {formatValue(exceeded)}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function AdminQuotas() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -88,6 +191,7 @@ export default function AdminQuotas() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [editing, setEditing] = useState<AdminService.ResourceQuotaItem>();
+  const [detail, setDetail] = useState<AdminService.ResourceQuotaItem>();
   const [sort, setSort] = useState<{
     key: QuotaSortKey;
     direction: 'asc' | 'desc';
@@ -103,11 +207,18 @@ export default function AdminQuotas() {
       AdminService.ResourceQuota,
       'file_count_limit' | 'storage_bytes_limit'
     >) => updateResourceQuota(editing!.scope_type, editing!.scope_id, limits),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin/resource-quotas'] });
       queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
       queryClient.invalidateQueries({ queryKey: ['admin/teams'] });
       queryClient.invalidateQueries({ queryKey: ['admin/resources'] });
+      setDetail((current) =>
+        current &&
+        current.scope_type === editing?.scope_type &&
+        current.scope_id === editing?.scope_id
+          ? { ...current, ...response.data.data }
+          : current,
+      );
       setEditing(undefined);
       message.success(t('admin.resourceQuota.updated'));
     },
@@ -324,7 +435,15 @@ export default function AdminQuotas() {
                 <TableBody className={isFetching ? 'opacity-60' : undefined}>
                   {rows.length ? (
                     rows.map((quota) => (
-                      <TableRow key={`${quota.scope_type}-${quota.scope_id}`}>
+                      <TableRow
+                        key={`${quota.scope_type}-${quota.scope_id}`}
+                        className="cursor-pointer"
+                        tabIndex={0}
+                        onClick={() => setDetail(quota)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') setDetail(quota);
+                        }}
+                      >
                         <TableCell>
                           <div className="font-medium">{quota.name}</div>
                           <div className="max-w-48 truncate text-xs text-text-secondary">
@@ -361,7 +480,21 @@ export default function AdminQuotas() {
                         <TableCell className="text-center">
                           {stateBadge(quota)}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell
+                          className="text-center"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={t('admin.quotaManagementPage.viewDetail')}
+                            aria-label={t(
+                              'admin.quotaManagementPage.viewDetail',
+                            )}
+                            onClick={() => setDetail(quota)}
+                          >
+                            <Eye />
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -395,6 +528,70 @@ export default function AdminQuotas() {
           </CardFooter>
         </ScrollArea>
       </Card>
+
+      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(undefined)}>
+        <DialogContent
+          className="w-[min(720px,90vw)] max-w-none overflow-hidden p-0"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="border-b border-border-button px-6 py-5">
+            <div className="flex items-start gap-4 pr-7">
+              <div className="min-w-0">
+                <DialogTitle className="truncate">{detail?.name}</DialogTitle>
+                <DialogDescription className="mt-1 truncate font-mono text-xs">
+                  {detail?.scope_id}
+                </DialogDescription>
+              </div>
+              {detail && (
+                <Badge className="ml-auto shrink-0" variant="secondary">
+                  {scopeLabel(detail.scope_type)}
+                </Badge>
+              )}
+            </div>
+          </DialogHeader>
+          {detail && (
+            <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <DetailInformationCard
+                  icon={Gauge}
+                  label={t('admin.quotaManagementPage.scopeType')}
+                  value={scopeLabel(detail.scope_type)}
+                />
+                <DetailInformationCard
+                  icon={HardDrive}
+                  label={t('admin.quotaManagementPage.workspace')}
+                  value={detail.workspace_name || '-'}
+                />
+                <DetailInformationCard
+                  icon={ShieldAlert}
+                  label={t('admin.quotaManagementPage.state')}
+                  value={stateBadge(detail)}
+                />
+              </div>
+              <QuotaMetricDetail
+                title={t('admin.quotaManagementPage.fileQuotaUsage')}
+                used={detail.file_count_used}
+                limit={detail.file_count_limit}
+              />
+              <QuotaMetricDetail
+                storage
+                title={t('admin.quotaManagementPage.storageQuotaUsage')}
+                used={detail.storage_bytes_used}
+                limit={detail.storage_bytes_limit}
+              />
+            </div>
+          )}
+          <DialogFooter className="border-t border-border-button px-6 py-4">
+            <Button variant="outline" onClick={() => setDetail(undefined)}>
+              {t('admin.close')}
+            </Button>
+            <Button disabled={!detail} onClick={() => detail && setEditing(detail)}>
+              <Pencil />
+              {t('admin.resourceQuota.configure')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ResourceQuotaDialog
         open={Boolean(editing)}
