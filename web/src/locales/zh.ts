@@ -42,6 +42,8 @@ export default {
       viewMore: '查看更多',
       viewLess: '收起',
       comingSoon: '即将推出',
+      pageNotFound: '页面不存在，请检查访问地址后重试。',
+      returnHome: '返回首页',
       download: '下载',
       close: '关闭',
       preview: '预览',
@@ -463,6 +465,12 @@ export default {
       notGenerated: '未生成',
       generatedOn: '生成于',
       subbarFiles: '文件列表',
+      metadataField: '元数据字段',
+      systemAttribute: '系统属性',
+      generateKnowledgeGraph:
+        '将从该知识库的所有文档中提取实体和关系，处理过程可能需要一些时间。',
+      generateRaptor:
+        '对文档分块进行递归聚类和摘要，构建层次化树结构，以便在长文档中进行更具上下文感知能力的检索。',
       generate: '生成',
       raptor: 'RAPTOR',
       artifact: 'Artifact',
@@ -1383,6 +1391,29 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       asanaDescription: '连接 Asana，同步工作区中的文件。',
       imapDescription:
         '连接你的 IMAP 邮箱，同步指定mailboxes中的邮件，用于知识检索与分析',
+      mysqlDescription: '连接 MySQL 数据库，通过 SQL 查询同步表中的数据。',
+      mysqlQueryTip:
+        '用于从数据库提取数据的 SQL 查询，例如：SELECT * FROM products WHERE status = "active"。',
+      mysqlContentColumnsTip:
+        '以英文逗号分隔的列名，这些列的值将合并为用于向量化的文档内容。',
+      mysqlMetadataColumnsTip:
+        '以英文逗号分隔的列名，这些列将存储为文档元数据；不会参与向量化，但可用于搜索。',
+      mysqlIdColumnTip:
+        '用作唯一文档 ID 的列。未指定时，将根据文档内容生成哈希值。',
+      mysqlTimestampColumnTip:
+        '用于增量同步的日期时间或时间戳列，仅获取上次同步后修改的记录。',
+      postgresqlDescription:
+        '连接 PostgreSQL 数据库，通过 SQL 查询同步表中的数据。',
+      postgresqlQueryTip:
+        "用于从数据库提取数据的 SQL 查询，例如：SELECT * FROM products WHERE status = 'active'。",
+      postgresqlContentColumnsTip:
+        '以英文逗号分隔的列名，这些列的值将合并为用于向量化的文档内容。',
+      postgresqlMetadataColumnsTip:
+        '以英文逗号分隔的列名，这些列将存储为文档元数据；不会参与向量化，但可用于搜索。',
+      postgresqlIdColumnTip:
+        '用作唯一文档 ID 的列。未指定时，将根据文档内容生成哈希值。',
+      postgresqlTimestampColumnTip:
+        '用于增量同步的日期时间或时间戳列，仅获取上次同步后修改的记录。',
       r2Description: '连接你的 Cloudflare R2 存储桶以导入和同步文件。',
       dropboxAccessTokenTip:
         '请在 Dropbox App Console 生成 Access Token，并勾选 files.metadata.read、files.content.read、sharing.read 等必要权限。',
@@ -1420,7 +1451,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       deleteTemplateGroupModalContent:
         '确定要删除此模板分组吗？此操作无法撤销。',
       addTemplate: '添加模板',
-      noTemplates: '暂无 Compilation templates。',
+      noTemplates: '暂无知识编译模板。',
       deleteTemplateModalTitle: '删除模板',
       deleteTemplateModalContent: '确定要删除此模板吗？此操作无法撤销。',
       editTemplate: '编辑模板',
@@ -1431,13 +1462,13 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       llmForExtractionRequired: '请选择 LLM 模型',
       templateKind: '类型',
       templateKindRequired: '请选择类型',
-      entitySpecification: 'Entity specification',
-      relationSpecification: 'Relation specification',
-      conceptSpecification: 'Concept specification',
-      claimSpecification: 'Claim specification',
+      entitySpecification: '实体规范',
+      relationSpecification: '关系规范',
+      conceptSpecification: '概念规范',
+      claimSpecification: '声明规范',
       field: '字段',
-      fieldType: 'Type',
-      fieldTypeRequired: '请选择 type',
+      fieldType: '类型',
+      fieldTypeRequired: '请选择类型',
       fieldDescription: '描述',
       fieldDescriptionRequired: '请输入描述',
       fieldRule: '规则',
@@ -1447,7 +1478,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       addField: '添加字段',
       example: '页面结构示例',
       examplePlaceholder: '请输入示例',
-      instruction: 'Instruction',
+      instruction: '指令',
       globalRules: '全局规则',
       globalRulesPlaceholder: '请输入全局编译规则',
       raptorTreeSettings: 'RAPTOR 树设置',
@@ -1806,6 +1837,8 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
         speech2text: 'ASR',
       },
       modelFeatures: '模型特性',
+      modelFeatureToolCall: '工具调用',
+      modelFeatureFunctionCall: '函数调用',
       modelNameRequired: '请输入模型名称',
       modelNameDuplicate: '模型名称已存在',
       modelTypeRequired: '请至少选择一个模型类型',
@@ -2009,8 +2042,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
         '它是迭代过程中的当前元素，可以被后续流程引用和操作。',
       guidingQuestion: '引导问题',
       onFailure: '异常时',
-      userPromptDefaultValue:
-        'This is the order you need to send to the agent.',
+      userPromptDefaultValue: '这是需要发送给智能体的指令。',
       descriptionMessage: '这是一个用于特定任务的代理。',
       search: '搜索',
       communication: '通信',

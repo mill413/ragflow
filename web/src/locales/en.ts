@@ -53,6 +53,8 @@ export default {
       viewMore: 'View more',
       viewLess: 'View less',
       comingSoon: 'Coming soon',
+      pageNotFound: 'Page not found. Please check the address and try again.',
+      returnHome: 'Return home',
       download: 'Download',
       close: 'Close',
       preview: 'Preview',
