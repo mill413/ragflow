@@ -29,6 +29,19 @@ type UserModelSortState = {
   direction: 'asc' | 'desc';
 };
 
+function parseModelReference(reference: string) {
+  const parts = reference.split('@');
+  if (parts.length >= 3) {
+    const provider = parts.pop() ?? '';
+    const instance = parts.pop() ?? '';
+    return { name: parts.join('@'), instance, provider };
+  }
+  if (parts.length === 2) {
+    return { name: parts[0], instance: '', provider: parts[1] };
+  }
+  return { name: reference, instance: '', provider: '' };
+}
+
 function UserModelTable({ data }: { data: AdminService.UserModelConfig[] }) {
   const { t } = useTranslation();
   const [providerFilters, setProviderFilters] = useState<string[]>([]);
@@ -128,7 +141,7 @@ function UserModelTable({ data }: { data: AdminService.UserModelConfig[] }) {
         }}
       />
 
-      <Table className="min-w-[1280px]">
+      <Table rootClassName="max-w-full" className="min-w-[1280px]">
         <TableHeader>
           <TableRow>
             <TableHead>
@@ -246,34 +259,59 @@ export function UserModelConfiguration({
   const models = configuration?.models ?? [];
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-3">
+    <div className="min-w-0 w-full space-y-6 overflow-hidden [contain:inline-size]">
+      <section className="min-w-0 space-y-3">
         <div className="text-sm font-medium">
           {t('admin.defaultModelConfiguration')}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {defaults.map((model) => (
-            <DetailInformationCard
-              key={model.model_type}
-              label={t(`admin.modelManagementPage.types.${model.model_type}`)}
-              value={
-                <div className="min-w-0 text-right">
-                  <div className="break-all">{model.model_name || '-'}</div>
-                  {model.model_id && (
-                    <div className="mt-1 truncate text-xs font-normal text-text-secondary">
-                      {model.model_id}
+        <div className="grid gap-3 md:grid-cols-2">
+          {defaults.map((model) => {
+            const reference = parseModelReference(model.model_name);
+            const source = [
+              reference.provider &&
+                `${t('admin.modelManagementPage.provider')}: ${reference.provider}`,
+              reference.instance &&
+                `${t('admin.modelManagementPage.instance')}: ${reference.instance}`,
+            ]
+              .filter(Boolean)
+              .join(' · ');
+
+            return (
+              <DetailInformationCard
+                key={model.model_type}
+                label={t(`admin.modelManagementPage.types.${model.model_type}`)}
+                value={
+                  <div className="min-w-0 text-right">
+                    <div className="break-all font-medium">
+                      {reference.name || '-'}
                     </div>
-                  )}
-                </div>
-              }
-              icon={BrainCircuit}
-              valueClassName="flex justify-end"
-            />
-          ))}
+                    {source && (
+                      <div
+                        className="mt-1 truncate text-xs font-normal text-text-secondary"
+                        title={source}
+                      >
+                        {source}
+                      </div>
+                    )}
+                    {model.model_id && (
+                      <div
+                        className="mt-1 truncate font-mono text-xs font-normal text-text-secondary"
+                        title={model.model_id}
+                      >
+                        {model.model_id}
+                      </div>
+                    )}
+                  </div>
+                }
+                icon={BrainCircuit}
+                valueClassName="flex justify-end"
+              />
+            );
+          })}
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="min-w-0 space-y-3">
         <div className="text-sm font-medium">
           {modelsLabel || t('admin.personalModels')}
         </div>
