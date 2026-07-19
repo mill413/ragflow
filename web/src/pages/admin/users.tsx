@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 
 import { rsaPsw } from '@/utils';
-import { cn, formatBytes } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
@@ -82,6 +82,7 @@ import { LucideSearch } from 'lucide-react';
 import useChangePasswordForm from './forms/change-password-form';
 import useCreateUserForm from './forms/user-form';
 import { UserStatusBadge, UserStatusText } from './components/user-status';
+import { StorageSize } from './components/storage-size';
 
 import {
   createUser,
@@ -475,7 +476,7 @@ function AdminUserManagement() {
 
       columnHelper.accessor('uploaded_storage_bytes', {
         header: t('admin.userMonitoring.storage'),
-        cell: ({ cell }) => formatBytes(cell.getValue(), { decimals: 1 }),
+        cell: ({ cell }) => <StorageSize bytes={cell.getValue()} />,
       }),
 
       columnHelper.display({
@@ -696,36 +697,37 @@ function AdminUserManagement() {
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                [
-                  t('admin.userMonitoring.totalUsersLabel'),
-                  totalUsers,
-                  UsersRound,
-                ],
-                [
-                  t('admin.userMonitoring.activeUsersLabel'),
-                  activeUsers,
-                  UserCheck,
-                ],
-                [t('admin.userMonitoring.datasets'), createdDatasets, Library],
-                [
-                  t('admin.userMonitoring.storage'),
-                  formatBytes(uploadedStorage, { decimals: 1 }),
-                  HardDrive,
-                ],
-              ].map(([label, value, Icon]) => {
-                const MetricIcon = Icon as typeof UsersRound;
+                {
+                  label: t('admin.userMonitoring.totalUsersLabel'),
+                  value: totalUsers,
+                  icon: UsersRound,
+                },
+                {
+                  label: t('admin.userMonitoring.activeUsersLabel'),
+                  value: activeUsers,
+                  icon: UserCheck,
+                },
+                {
+                  label: t('admin.userMonitoring.datasets'),
+                  value: createdDatasets,
+                  icon: Library,
+                },
+                {
+                  label: t('admin.userMonitoring.storage'),
+                  value: <StorageSize bytes={uploadedStorage} />,
+                  icon: HardDrive,
+                },
+              ].map(({ label, value, icon: MetricIcon }) => {
                 return (
                   <div
-                    key={String(label)}
+                    key={label}
                     className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
                   >
                     <div className="flex items-center justify-between text-xs text-text-secondary">
-                      <span>{String(label)}</span>
+                      <span>{label}</span>
                       <MetricIcon className="size-4" />
                     </div>
-                    <div className="mt-2 text-2xl font-semibold">
-                      {String(value)}
-                    </div>
+                    <div className="mt-2 text-2xl font-semibold">{value}</div>
                   </div>
                 );
               })}

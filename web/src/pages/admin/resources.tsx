@@ -84,7 +84,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { formatBytes } from '@/lib/utils';
 import {
   deleteManagedResource,
   getMonitoringSummary,
@@ -97,6 +96,7 @@ import { Routes } from '@/routes';
 import { getSortIcon } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
+import { StorageSize } from './components/storage-size';
 
 type ResourceView = AdminService.ManagedResourceType;
 type SortState = { key: string; direction: 'asc' | 'desc' };
@@ -473,8 +473,9 @@ export default function AdminResources() {
             key: 'storage_bytes',
             label: t('admin.knowledgeMonitoring.storage'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.storage_bytes ?? 0, { decimals: 1 }),
+            render: (resource) => (
+              <StorageSize bytes={resource.storage_bytes ?? 0} />
+            ),
           },
           {
             key: 'failed_documents',
@@ -583,8 +584,9 @@ export default function AdminResources() {
             key: 'memory_size',
             label: t('admin.resourceManagementPage.capacity'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.memory_size ?? 0, { decimals: 1 }),
+            render: (resource) => (
+              <StorageSize bytes={resource.memory_size ?? 0} />
+            ),
           },
         ];
       case 'file':
@@ -598,8 +600,7 @@ export default function AdminResources() {
             key: 'size',
             label: t('admin.knowledgeMonitoring.fileSize'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.size ?? 0, { decimals: 1 }),
+            render: (resource) => <StorageSize bytes={resource.size ?? 0} />,
           },
           {
             key: 'source_type',
@@ -657,7 +658,7 @@ export default function AdminResources() {
         },
         {
           label: t('admin.knowledgeMonitoring.fileSize'),
-          value: formatBytes(document.size ?? 0, { decimals: 1 }),
+          value: <StorageSize bytes={document.size ?? 0} />,
           icon: HardDrive,
         },
         {
@@ -762,7 +763,7 @@ export default function AdminResources() {
           },
           {
             label: t('admin.knowledgeMonitoring.storage'),
-            value: formatBytes(summary?.storage_bytes ?? 0, { decimals: 1 }),
+            value: <StorageSize bytes={summary?.storage_bytes ?? 0} />,
             icon: HardDrive,
           },
           {
@@ -1200,7 +1201,7 @@ export default function AdminResources() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              {formatBytes(document.size ?? 0, { decimals: 1 })}
+                              <StorageSize bytes={document.size ?? 0} />
                             </TableCell>
                             <TableCell className="max-w-md whitespace-normal text-state-error">
                               {document.failure_reason || '-'}

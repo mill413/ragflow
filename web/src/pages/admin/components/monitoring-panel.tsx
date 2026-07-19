@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useQuery } from '@tanstack/react-query';
@@ -34,8 +34,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatBytes } from '@/lib/utils';
+import { formatDecimalBytes } from '@/lib/utils';
 import { getMonitoringSummary } from '@/services/admin-service';
+
+import { StorageSize } from './storage-size';
 
 const STORAGE_COLORS = [
   '#5470c6',
@@ -51,7 +53,7 @@ const STORAGE_COLORS = [
 
 type MonitoringMetric = {
   label: string;
-  value?: number | string;
+  value?: ReactNode;
   detail?: string;
   icon: typeof Library;
   breakdown?: Array<{
@@ -74,7 +76,7 @@ function renderStorageLabel({ name, x, y, textAnchor }: PieLabelRenderProps) {
       x={x}
       y={y}
       className="fill-text-primary"
-      textAnchor={textAnchor}
+      textAnchor={textAnchor as 'start' | 'middle' | 'end' | undefined}
       dominantBaseline="central"
     >
       {name}
@@ -138,9 +140,7 @@ export default function MonitoringPanel() {
       },
       {
         label: t('admin.monitoringPage.storage'),
-        value: data
-          ? formatBytes(data.storage_bytes, { decimals: 1 })
-          : undefined,
+        value: data ? <StorageSize bytes={data.storage_bytes} /> : undefined,
         icon: HardDrive,
       },
       {
@@ -278,7 +278,7 @@ export default function MonitoringPanel() {
                     </Pie>
                     <ChartTooltip
                       formatter={(value, _name, item) => [
-                        `${formatBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
+                        `${formatDecimalBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
                         item.payload.label,
                       ]}
                       contentStyle={{

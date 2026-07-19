@@ -65,7 +65,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatBytes } from '@/lib/utils';
 import {
   addAdminTeamMember,
   createAdminTeam,
@@ -86,6 +85,7 @@ import {
   matchesSelectedFilter,
 } from './components/table-filter-utils';
 import { DetailInformationCard } from './components/detail-information-card';
+import { StorageSize } from './components/storage-size';
 
 type TeamSortKey =
   | 'name'
@@ -351,32 +351,37 @@ export default function AdminTeams() {
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              [t('admin.teamManagement.teams'), teams.length, UsersRound],
-              [
-                t('admin.teamManagement.activeMemberships'),
-                activeMemberCount,
-                UserRoundPlus,
-              ],
-              [t('admin.teamManagement.teamDatasets'), datasetCount, Library],
-              [
-                t('admin.teamManagement.storage'),
-                formatBytes(storageBytes, { decimals: 1 }),
-                HardDrive,
-              ],
-            ].map(([label, value, Icon]) => {
-              const MetricIcon = Icon as typeof UsersRound;
+              {
+                label: t('admin.teamManagement.teams'),
+                value: teams.length,
+                icon: UsersRound,
+              },
+              {
+                label: t('admin.teamManagement.activeMemberships'),
+                value: activeMemberCount,
+                icon: UserRoundPlus,
+              },
+              {
+                label: t('admin.teamManagement.teamDatasets'),
+                value: datasetCount,
+                icon: Library,
+              },
+              {
+                label: t('admin.teamManagement.storage'),
+                value: <StorageSize bytes={storageBytes} />,
+                icon: HardDrive,
+              },
+            ].map(({ label, value, icon: MetricIcon }) => {
               return (
                 <div
-                  key={String(label)}
+                  key={label}
                   className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
                 >
                   <div className="flex items-center justify-between text-xs text-text-secondary">
-                    <span>{String(label)}</span>
+                    <span>{label}</span>
                     <MetricIcon className="size-4" />
                   </div>
-                  <div className="mt-2 text-2xl font-semibold">
-                    {String(value)}
-                  </div>
+                  <div className="mt-2 text-2xl font-semibold">{value}</div>
                 </div>
               );
             })}
@@ -508,7 +513,7 @@ export default function AdminTeams() {
                     {team.document_count}
                   </TableCell>
                   <TableCell className="text-center">
-                    {formatBytes(team.storage_bytes)}
+                    <StorageSize bytes={team.storage_bytes} />
                   </TableCell>
                   <TableCell>{formatDate(team.update_date) || '-'}</TableCell>
                   <TableCell>
@@ -663,7 +668,11 @@ export default function AdminTeams() {
                   },
                   {
                     label: t('admin.teamManagement.storage'),
-                    value: formatBytes(selectedTeamDetails?.storage_bytes ?? 0),
+                    value: (
+                      <StorageSize
+                        bytes={selectedTeamDetails?.storage_bytes ?? 0}
+                      />
+                    ),
                     icon: HardDrive,
                   },
                   {

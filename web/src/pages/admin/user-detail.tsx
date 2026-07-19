@@ -66,7 +66,6 @@ import {
 } from '@/services/admin-service';
 import { rsaPsw } from '@/utils';
 import { formatDate } from '@/utils/date';
-import { formatBytes } from '@/lib/utils';
 
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
@@ -80,6 +79,7 @@ import {
 import { CurrentUserInfoContext } from './layouts/root-layout';
 import { getSortIcon, parseBooleanish } from './utils';
 import { DetailInformationCard } from './components/detail-information-card';
+import { StorageSize } from './components/storage-size';
 
 const USER_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
@@ -168,8 +168,9 @@ function UserResourceTable({
             key: 'storage_bytes',
             label: t('admin.knowledgeMonitoring.storage'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.storage_bytes ?? 0, { decimals: 1 }),
+            render: (resource) => (
+              <StorageSize bytes={resource.storage_bytes ?? 0} />
+            ),
           },
           updatedAt,
         ];
@@ -258,8 +259,9 @@ function UserResourceTable({
             key: 'memory_size',
             label: t('admin.resourceManagementPage.capacity'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.memory_size ?? 0, { decimals: 1 }),
+            render: (resource) => (
+              <StorageSize bytes={resource.memory_size ?? 0} />
+            ),
           },
           updatedAt,
         ];
@@ -275,8 +277,7 @@ function UserResourceTable({
             key: 'size',
             label: t('admin.knowledgeMonitoring.fileSize'),
             numeric: true,
-            render: (resource) =>
-              formatBytes(resource.size ?? 0, { decimals: 1 }),
+            render: (resource) => <StorageSize bytes={resource.size ?? 0} />,
           },
           {
             key: 'creator_name',
