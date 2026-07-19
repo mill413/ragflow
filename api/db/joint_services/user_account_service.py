@@ -31,7 +31,7 @@ from api.db.services.mcp_server_service import MCPServerService
 from api.db.services.search_service import SearchService
 from api.db.services.task_service import TaskService
 from api.db.services.user_canvas_version import UserCanvasVersionService
-from api.db.services.user_service import TenantService, UserService, UserTenantService
+from api.db.services.user_service import TenantService, UserService, UserTenantService, get_personal_workspace_name
 from api.db.services.memory_service import MemoryService
 from memory.services.messages import MessageService
 from rag.nlp import search
@@ -61,7 +61,7 @@ def create_new_user(user_info: dict) -> dict:
     # construct tenant info
     tenant = {
         "id": user_id,
-        "name": user_info["nickname"] + "‘s Kingdom",
+        "name": get_personal_workspace_name(user_info.get("nickname"), user_info.get("email")),
         "llm_id": settings.CHAT_MDL,
         "embd_id": settings.EMBEDDING_MDL,
         "asr_id": settings.ASR_MDL,

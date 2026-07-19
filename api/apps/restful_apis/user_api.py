@@ -27,7 +27,13 @@ from quart import make_response, redirect, request, session
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
 from api.db.services.file_service import FileService
-from api.db.services.user_service import generate_access_token, TenantService, UserService, UserTenantService
+from api.db.services.user_service import (
+    TenantService,
+    UserService,
+    UserTenantService,
+    generate_access_token,
+    get_personal_workspace_name,
+)
 from common.time_utils import current_timestamp, datetime_format, get_format_time
 from common.misc_utils import download_img, get_uuid
 from common.constants import RetCode
@@ -361,7 +367,7 @@ async def setting_user():
         update_dict["nickname"] = update_dict["nickname"].strip()
 
     try:
-        UserService.update_by_id(current_user.id, update_dict)
+        UserService.update_user(current_user.id, update_dict)
         if password_changed:
             logout_user()
         return get_json_result(data=True)
@@ -420,7 +426,7 @@ def user_register(user_id, user):
     user["id"] = user_id
     tenant = {
         "id": user_id,
-        "name": user["nickname"] + "‘s Kingdom",
+        "name": get_personal_workspace_name(user.get("nickname"), user.get("email")),
         "llm_id": settings.CHAT_MDL,
         "embd_id": settings.EMBEDDING_MDL,
         "asr_id": settings.ASR_MDL,

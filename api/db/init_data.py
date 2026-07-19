@@ -29,7 +29,7 @@ from api.db.services.compilation_template_service import CompilationTemplateServ
 from api.db.services.document_service import DocumentService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.llm_service import LLMBundle
-from api.db.services.user_service import TenantService, UserTenantService
+from api.db.services.user_service import TenantService, UserTenantService, get_personal_workspace_name
 from api.db.services.system_settings_service import SystemSettingsService
 from api.db.template_utils import normalize_canvas_template_categories
 from api.db.joint_services.memory_message_service import init_message_id_sequence, init_memory_size_cache, fix_missing_tokenized_memory
@@ -60,7 +60,7 @@ def init_superuser(nickname=DEFAULT_SUPERUSER_NICKNAME, email=DEFAULT_SUPERUSER_
     }
     tenant = {
         "id": user_info["id"],
-        "name": user_info["nickname"] + "‘s Kingdom",
+        "name": get_personal_workspace_name(user_info.get("nickname"), user_info.get("email")),
         "llm_id": settings.CHAT_MDL,
         "embd_id": settings.EMBEDDING_MDL,
         "asr_id": settings.ASR_MDL,

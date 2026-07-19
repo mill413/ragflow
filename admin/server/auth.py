@@ -27,7 +27,7 @@ from api.common.exceptions import AdminException, UserNotFoundError
 from api.common.base64 import encode_to_base64
 from api.db.services import UserService, generate_access_token, get_user_id_from_access_token
 from api.db import UserTenantRole
-from api.db.services.user_service import TenantService, UserTenantService
+from api.db.services.user_service import TenantService, UserTenantService, get_personal_workspace_name
 from common.constants import ActiveEnum, StatusEnum
 from api.utils.crypt import decrypt
 from common.time_utils import current_timestamp, datetime_format, get_format_time
@@ -102,7 +102,7 @@ def add_tenant_for_admin(user_info: dict, role: str):
 
     tenant = {
         "id": user_info["id"],
-        "name": user_info["nickname"] + "‘s Kingdom",
+        "name": get_personal_workspace_name(user_info.get("nickname"), user_info.get("email")),
         "llm_id": settings.CHAT_MDL,
         "embd_id": settings.EMBEDDING_MDL,
         "asr_id": settings.ASR_MDL,

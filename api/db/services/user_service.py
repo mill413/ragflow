@@ -33,6 +33,10 @@ from api.utils.crypt import check_password_hash, generate_password_hash
 ACCESS_TOKEN_SEPARATOR = "|"
 
 
+def get_personal_workspace_name(nickname, email):
+    return str(nickname or "").strip() or str(email or "").strip()
+
+
 def generate_access_token(user_id):
     return f"{get_uuid()}{ACCESS_TOKEN_SEPARATOR}{user_id}"
 
@@ -156,6 +160,16 @@ class UserService(CommonService):
                 user_dict["update_time"] = current_timestamp()
                 user_dict["update_date"] = datetime_format(datetime.now())
                 cls.model.update(user_dict).where(cls.model.id == user_id).execute()
+                if {"nickname", "email"} & user_dict.keys():
+                    user = cls.model.select(cls.model.nickname, cls.model.email).where(cls.model.id == user_id).first()
+                    if user:
+                        Tenant.update(
+                            {
+                                "name": get_personal_workspace_name(user.nickname, user.email),
+                                "update_time": current_timestamp(),
+                                "update_date": datetime_format(datetime.now()),
+                            }
+                        ).where(Tenant.id == user_id).execute()
 
     @classmethod
     @DB.connection_context()

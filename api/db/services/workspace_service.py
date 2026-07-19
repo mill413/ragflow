@@ -165,7 +165,11 @@ class WorkspaceAccessService:
         return {
             "workspace_type": workspace_type,
             "workspace_name": cls._value(workspace, "name", "") if workspace_exists else "",
-            "creator_name": cls._value(creator, "nickname", "") if creator_exists else "",
+            "creator_name": (
+                cls._value(creator, "nickname", "") or cls._value(creator, "email", "")
+                if creator_exists
+                else ""
+            ),
         }
 
     @classmethod
