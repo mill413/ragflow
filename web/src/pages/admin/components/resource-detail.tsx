@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/utils/date';
 import { DetailInformationCard } from './detail-information-card';
@@ -43,38 +44,562 @@ type StandardResourceDetailProps = {
   loading: boolean;
 };
 
-function ConfigurationSection({
-  name,
-  value,
+type ConfigurationRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): ConfigurationRecord {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as ConfigurationRecord)
+    : {};
+}
+
+function configurationLabel(
+  key: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  return t(`admin.resourceManagementPage.resourceDetail.fields.${key}`, {
+    defaultValue: key.replaceAll('_', ' '),
+  });
+}
+
+function ConfigurationGroup({
+  title,
+  children,
 }: {
-  name: string;
-  value: unknown;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border-0.5 border-border-button bg-bg-input">
+      <div className="border-b border-border-button px-4 py-3 text-sm font-medium">
+        {title}
+      </div>
+      <div className="space-y-3 p-4">{children}</div>
+    </section>
+  );
+}
+
+function ReadonlyField({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: ReactNode;
+  multiline?: boolean;
+}) {
+  return (
+    <div
+      className={
+        multiline
+          ? 'space-y-2'
+          : 'grid min-h-9 grid-cols-[minmax(150px,0.8fr)_minmax(0,1.7fr)] items-center gap-4'
+      }
+    >
+      <div className="text-sm text-text-secondary">{label}</div>
+      <div
+        className={
+          multiline
+            ? 'max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border-0.5 border-border-button bg-bg-card p-3 text-sm leading-6 text-text-primary'
+            : 'min-w-0 break-words text-right text-sm font-medium text-text-primary'
+        }
+      >
+        {value === '' || value === null || value === undefined ? '-' : value}
+      </div>
+    </div>
+  );
+}
+
+function ReadonlySwitch({
+  label,
+  checked,
+}: {
+  label: string;
+  checked: boolean;
 }) {
   const { t } = useTranslation();
-  const label = t(
-    `admin.resourceManagementPage.resourceDetail.configurationSections.${name}`,
-    { defaultValue: name },
+  return (
+    <div className="flex min-h-9 items-center justify-between gap-4">
+      <div className="text-sm text-text-secondary">{label}</div>
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Switch checked={checked} disabled />
+        <span>
+          {t(
+            checked
+              ? 'admin.resourceManagementPage.resourceDetail.enabled'
+              : 'admin.resourceManagementPage.resourceDetail.disabled',
+          )}
+        </span>
+      </div>
+    </div>
   );
-  const formatted =
-    typeof value === 'object' && value !== null
-      ? JSON.stringify(value, null, 2)
-      : String(value ?? '-');
+}
+
+function ReadonlySlider({
+  label,
+  value,
+  max = 1,
+}: {
+  label: string;
+  value: number;
+  max?: number;
+}) {
+  const percentage = Math.max(0, Math.min(100, (value / max) * 100));
+  return (
+    <div className="grid min-h-9 grid-cols-[minmax(150px,0.8fr)_minmax(0,1.7fr)] items-center gap-4">
+      <div className="text-sm text-text-secondary">{label}</div>
+      <div className="flex items-center gap-3">
+        <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border-button">
+          <div
+            className="h-full rounded-full bg-primary"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <span className="w-12 text-right text-sm font-medium">{value}</span>
+      </div>
+    </div>
+  );
+}
+
+function StructuredValue({ name, value }: { name: string; value: unknown }) {
+  const { t } = useTranslation();
+  const label = configurationLabel(name, t);
+
+  if (typeof value === 'boolean') {
+    return <ReadonlySwitch label={label} checked={value} />;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return <ReadonlyField label={label} value="-" />;
+    const primitives = value.every(
+      (item) => item === null || typeof item !== 'object',
+    );
+    return (
+      <div className="space-y-2">
+        <div className="text-sm text-text-secondary">{label}</div>
+        {primitives ? (
+          <div className="flex flex-wrap gap-2">
+            {value.map((item, index) => (
+              <Badge key={`${String(item)}-${index}`} variant="secondary">
+                {String(item)}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2 border-l-2 border-border-button pl-3">
+            {value.map((item, index) => (
+              <StructuredValue
+                key={index}
+                name={`${label} ${index + 1}`}
+                value={item}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (value && typeof value === 'object') {
+    return (
+      <details className="rounded-md border-0.5 border-border-button bg-bg-card">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+          {label}
+        </summary>
+        <div className="space-y-2 border-t border-border-button p-3">
+          {Object.entries(value as ConfigurationRecord).map(
+            ([childName, childValue]) => (
+              <StructuredValue
+                key={childName}
+                name={childName}
+                value={childValue}
+              />
+            ),
+          )}
+        </div>
+      </details>
+    );
+  }
+  return (
+    <ReadonlyField
+      label={label}
+      value={String(value ?? '-')}
+      multiline={
+        typeof value === 'string' &&
+        (value.includes('\n') || value.length > 120)
+      }
+    />
+  );
+}
+
+function ChatConfiguration({
+  configuration,
+}: {
+  configuration: ConfigurationRecord;
+}) {
+  const { t } = useTranslation();
+  const settings = asRecord(configuration.model_settings);
+  const prompt = asRecord(configuration.prompt);
+  const retrieval = asRecord(configuration.retrieval);
+  const metadata = asRecord(configuration.metadata_filter);
 
   return (
-    <details
-      open
-      className="rounded-lg border-0.5 border-border-button bg-bg-input"
-    >
-      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-        {label}
-      </summary>
-      <div className="border-t border-border-button p-4">
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-bg-card p-3 font-mono text-xs leading-6 text-text-primary">
-          {formatted}
-        </pre>
-      </div>
-    </details>
+    <div className="space-y-4">
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.model_settings',
+        )}
+      >
+        <ReadonlySlider
+          label={t('chat.temperature')}
+          value={Number(settings.temperature ?? 0)}
+        />
+        <ReadonlySlider
+          label={t('chat.topP')}
+          value={Number(settings.top_p ?? 0)}
+        />
+        <ReadonlySlider
+          label={t('chat.presencePenalty')}
+          value={Number(settings.presence_penalty ?? 0)}
+        />
+        <ReadonlySlider
+          label={t('chat.frequencyPenalty')}
+          value={Number(settings.frequency_penalty ?? 0)}
+        />
+        <ReadonlyField
+          label={configurationLabel('max_tokens', t)}
+          value={String(settings.max_tokens ?? '-')}
+        />
+      </ConfigurationGroup>
+
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.retrieval',
+        )}
+      >
+        <ReadonlySlider
+          label={configurationLabel('similarity_threshold', t)}
+          value={Number(retrieval.similarity_threshold ?? 0.2)}
+        />
+        <ReadonlySlider
+          label={configurationLabel('vector_similarity_weight', t)}
+          value={Number(retrieval.vector_similarity_weight ?? 0.3)}
+        />
+        <ReadonlyField
+          label={configurationLabel('top_n', t)}
+          value={String(retrieval.top_n ?? '-')}
+        />
+        <ReadonlyField label="Top K" value={String(retrieval.top_k ?? '-')} />
+        <ReadonlyField
+          label={configurationLabel('rerank_id', t)}
+          value={String(retrieval.rerank_id ?? '-')}
+        />
+        <ReadonlySwitch
+          label={configurationLabel('do_refer', t)}
+          checked={Boolean(retrieval.do_refer)}
+        />
+      </ConfigurationGroup>
+
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.prompt',
+        )}
+      >
+        <ReadonlyField
+          label={t('chat.setAnOpener')}
+          value={String(prompt.prologue ?? '')}
+          multiline
+        />
+        <ReadonlyField
+          label={configurationLabel('system_prompt', t)}
+          value={String(prompt.system ?? '')}
+          multiline
+        />
+        <ReadonlyField
+          label={t('chat.emptyResponse')}
+          value={String(prompt.empty_response ?? '')}
+          multiline
+        />
+        {['quote', 'keyword', 'tts', 'toc_enhance'].map((field) => (
+          <ReadonlySwitch
+            key={field}
+            label={configurationLabel(field, t)}
+            checked={Boolean(prompt[field])}
+          />
+        ))}
+        <StructuredValue name="parameters" value={prompt.parameters ?? []} />
+      </ConfigurationGroup>
+
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.metadata_filter',
+        )}
+      >
+        {Object.keys(metadata).length ? (
+          Object.entries(metadata).map(([name, value]) => (
+            <StructuredValue key={name} name={name} value={value} />
+          ))
+        ) : (
+          <ReadonlyField
+            label={configurationLabel('metadata_filter', t)}
+            value={t(
+              'admin.resourceManagementPage.resourceDetail.notConfigured',
+            )}
+          />
+        )}
+      </ConfigurationGroup>
+    </div>
   );
+}
+
+function SearchConfiguration({
+  configuration,
+}: {
+  configuration: ConfigurationRecord;
+}) {
+  const { t } = useTranslation();
+  const search = asRecord(configuration.search);
+  const llmSettings = asRecord(search.llm_setting);
+  const metadata = asRecord(search.meta_data_filter);
+  const referenceMetadata = asRecord(search.reference_metadata);
+
+  return (
+    <div className="space-y-4">
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.retrieval',
+        )}
+      >
+        <ReadonlySlider
+          label={configurationLabel('similarity_threshold', t)}
+          value={Number(search.similarity_threshold ?? 0.2)}
+        />
+        <ReadonlySlider
+          label={configurationLabel('vector_similarity_weight', t)}
+          value={Number(search.vector_similarity_weight ?? 0.3)}
+        />
+        <ReadonlySwitch
+          label={configurationLabel('use_rerank', t)}
+          checked={Boolean(search.use_rerank || search.rerank_id)}
+        />
+        <ReadonlyField
+          label={configurationLabel('rerank_id', t)}
+          value={String(search.rerank_id ?? '-')}
+        />
+        <ReadonlyField label="Top K" value={String(search.top_k ?? 1024)} />
+      </ConfigurationGroup>
+
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.search_features',
+        )}
+      >
+        {[
+          'highlight',
+          'keyword',
+          'summary',
+          'related_search',
+          'query_mindmap',
+          'web_search',
+        ].map((field) => (
+          <ReadonlySwitch
+            key={field}
+            label={configurationLabel(field, t)}
+            checked={Boolean(search[field])}
+          />
+        ))}
+        {Boolean(search.summary) && (
+          <>
+            <ReadonlyField
+              label={configurationLabel('summary_model', t)}
+              value={String(search.chat_id ?? llmSettings.llm_id ?? '-')}
+            />
+            {Object.entries(llmSettings).map(([name, value]) => (
+              <StructuredValue key={name} name={name} value={value} />
+            ))}
+          </>
+        )}
+      </ConfigurationGroup>
+
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.metadata',
+        )}
+      >
+        <ReadonlySwitch
+          label={configurationLabel('show_chunk_metadata', t)}
+          checked={Boolean(referenceMetadata.include)}
+        />
+        <StructuredValue
+          name="metadata_fields"
+          value={referenceMetadata.fields ?? []}
+        />
+        {Object.entries(metadata).map(([name, value]) => (
+          <StructuredValue key={name} name={name} value={value} />
+        ))}
+        {!Object.keys(metadata).length && (
+          <ReadonlyField
+            label={configurationLabel('metadata_filter', t)}
+            value={t(
+              'admin.resourceManagementPage.resourceDetail.notConfigured',
+            )}
+          />
+        )}
+      </ConfigurationGroup>
+    </div>
+  );
+}
+
+function AgentConfiguration({
+  configuration,
+}: {
+  configuration: ConfigurationRecord;
+}) {
+  const { t } = useTranslation();
+  const canvas = asRecord(configuration.canvas);
+  const components = asRecord(canvas.components);
+  const history = Array.isArray(canvas.history) ? canvas.history : [];
+
+  return (
+    <div className="space-y-4">
+      <ConfigurationGroup
+        title={t(
+          'admin.resourceManagementPage.resourceDetail.configurationSections.canvas',
+        )}
+      >
+        <ReadonlyField
+          label={configurationLabel('node_count', t)}
+          value={String(Object.keys(components).length)}
+        />
+        {Object.entries(components).map(([nodeId, nodeValue]) => {
+          const node = asRecord(nodeValue);
+          const object = asRecord(node.obj);
+          const params = asRecord(object.params);
+          return (
+            <details
+              key={nodeId}
+              className="rounded-md border-0.5 border-border-button bg-bg-card"
+            >
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                {String(object.component_name ?? nodeId)}
+                <span className="ml-2 font-mono text-xs text-text-secondary">
+                  {nodeId}
+                </span>
+              </summary>
+              <div className="space-y-3 border-t border-border-button p-3">
+                <StructuredValue name="upstream" value={node.upstream ?? []} />
+                <StructuredValue
+                  name="downstream"
+                  value={node.downstream ?? []}
+                />
+                {Object.entries(params).map(([name, value]) => (
+                  <StructuredValue key={name} name={name} value={value} />
+                ))}
+              </div>
+            </details>
+          );
+        })}
+        {!Object.keys(components).length && (
+          <ReadonlyField
+            label={configurationLabel('nodes', t)}
+            value={t('common.noData')}
+          />
+        )}
+      </ConfigurationGroup>
+
+      {history.length > 0 && (
+        <ConfigurationGroup
+          title={t(
+            'admin.resourceManagementPage.resourceDetail.configurationSections.history',
+          )}
+        >
+          {history.map((entry, index) => (
+            <StructuredValue
+              key={index}
+              name={`${configurationLabel('history', t)} ${index + 1}`}
+              value={entry}
+            />
+          ))}
+        </ConfigurationGroup>
+      )}
+    </div>
+  );
+}
+
+function MemoryConfiguration({
+  configuration,
+}: {
+  configuration: ConfigurationRecord;
+}) {
+  const { t } = useTranslation();
+  const extraction = asRecord(configuration.extraction);
+  return (
+    <ConfigurationGroup
+      title={t(
+        'admin.resourceManagementPage.resourceDetail.configurationSections.extraction',
+      )}
+    >
+      <ReadonlySlider
+        label={t('memory.config.temperature')}
+        value={Number(extraction.temperature ?? 0.5)}
+      />
+      <ReadonlyField
+        label={t('memory.config.systemPrompt')}
+        value={String(extraction.system_prompt ?? '')}
+        multiline
+      />
+      <ReadonlyField
+        label={t('memory.config.userPrompt')}
+        value={String(extraction.user_prompt ?? '')}
+        multiline
+      />
+    </ConfigurationGroup>
+  );
+}
+
+function FileConfiguration({
+  configuration,
+}: {
+  configuration: ConfigurationRecord;
+}) {
+  const { t } = useTranslation();
+  const storage = asRecord(configuration.storage);
+  return (
+    <ConfigurationGroup
+      title={t(
+        'admin.resourceManagementPage.resourceDetail.configurationSections.storage',
+      )}
+    >
+      <ReadonlyField
+        label={configurationLabel('location', t)}
+        value={String(storage.location ?? '-')}
+      />
+      <ReadonlyField
+        label={configurationLabel('parent_id', t)}
+        value={String(storage.parent_id ?? '-')}
+      />
+    </ConfigurationGroup>
+  );
+}
+
+function ResourceConfiguration({
+  resourceType,
+  configuration,
+}: {
+  resourceType: AdminService.ManagedResourceType;
+  configuration: ConfigurationRecord;
+}) {
+  switch (resourceType) {
+    case 'chat':
+      return <ChatConfiguration configuration={configuration} />;
+    case 'search':
+      return <SearchConfiguration configuration={configuration} />;
+    case 'agent':
+      return <AgentConfiguration configuration={configuration} />;
+    case 'memory':
+      return <MemoryConfiguration configuration={configuration} />;
+    case 'file':
+      return <FileConfiguration configuration={configuration} />;
+    default:
+      return null;
+  }
 }
 
 function buildDetailItems(
@@ -204,11 +729,20 @@ function buildDetailItems(
         },
       );
       break;
-    case 'memory':
+    case 'memory': {
+      const memoryType = Number(resource.memory_type ?? 0);
+      const memoryTypes = [
+        [1, t('memories.raw')],
+        [2, t('memories.semantic')],
+        [4, t('memories.episodic')],
+        [8, t('memories.procedural')],
+      ]
+        .filter(([flag]) => (memoryType & Number(flag)) !== 0)
+        .map(([, label]) => label);
       items.push(
         {
           label: t('admin.resourceManagementPage.memoryType'),
-          value: resource.memory_type ?? '-',
+          value: memoryTypes.length ? memoryTypes.join('、') : '-',
           icon: Brain,
         },
         {
@@ -240,6 +774,7 @@ function buildDetailItems(
         },
       );
       break;
+    }
     case 'file':
       items.push(
         {
@@ -303,7 +838,6 @@ export function StandardResourceDetail({
   }
 
   const detailItems = buildDetailItems(detail.resource, t);
-  const configurations = Object.entries(detail.configuration ?? {});
 
   return (
     <Tabs defaultValue="overview" className="py-5">
@@ -370,15 +904,10 @@ export function StandardResourceDetail({
       </TabsContent>
 
       <TabsContent value="configuration" className="mt-0 space-y-3">
-        {configurations.length ? (
-          configurations.map(([name, value]) => (
-            <ConfigurationSection key={name} name={name} value={value} />
-          ))
-        ) : (
-          <div className="py-20 text-center text-sm text-text-secondary">
-            {t('common.noData')}
-          </div>
-        )}
+        <ResourceConfiguration
+          resourceType={detail.resource.resource_type}
+          configuration={detail.configuration ?? {}}
+        />
       </TabsContent>
     </Tabs>
   );

@@ -1267,6 +1267,14 @@ class ResourceMgr:
                 configuration = {
                     "model_settings": resource.pop("llm_setting", {}) or {},
                     "prompt": resource.pop("prompt_config", {}) or {},
+                    "retrieval": {
+                        "similarity_threshold": resource.get("similarity_threshold"),
+                        "vector_similarity_weight": resource.get("vector_similarity_weight"),
+                        "top_n": resource.get("top_n"),
+                        "top_k": resource.get("top_k"),
+                        "rerank_id": resource.get("rerank_id"),
+                        "do_refer": resource.get("do_refer") == "1",
+                    },
                     "metadata_filter": resource.pop("meta_data_filter", {}) or {},
                 }
                 related_resources = cls._dataset_references(resource.pop("kb_ids", []) or [])
