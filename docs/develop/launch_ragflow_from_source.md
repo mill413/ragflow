@@ -58,10 +58,10 @@ cd ragflow/
 
 ### Launch third-party services
 
-The following command launches the 'base' services (MinIO, Elasticsearch, Redis, and MySQL) using Docker Compose:
+The following command launches the resource-limited dependency services from the local Compose file:
 
 ```bash
-docker compose -f docker/docker-compose-base.yml up -d
+docker compose --env-file docker/.env -f docker/docker-compose.local.yml up -d mysql es01 minio redis
 ```
 
 ### Update `host` and `port` Settings for Third-party Services
@@ -69,7 +69,7 @@ docker compose -f docker/docker-compose-base.yml up -d
 1. Add the following line to `/etc/hosts` to resolve all hosts specified in **docker/service_conf.yaml.template** to `127.0.0.1`:
 
    ```
-   127.0.0.1       es01 infinity mysql minio redis
+   127.0.0.1       es01 mysql minio redis
    ```
 
 2. In **docker/service_conf.yaml.template**, update mysql port to `5455` and es port to `1200`, as specified in **docker/.env**.

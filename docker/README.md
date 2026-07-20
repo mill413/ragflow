@@ -13,12 +13,34 @@
 ## 🐳 Docker Compose
 
 - **docker-compose.yml**
-  Sets up environment for RAGFlow and its dependencies.
-- **docker-compose-base.yml**
-  Sets up environment for RAGFlow's dependencies: Elasticsearch/[Infinity](https://github.com/infiniflow/infinity), MySQL, MinIO, and Redis.
+  Runs the resource-limited test environment from a built RAGFlow image.
+- **docker-compose.local.yml**
+  Runs the resource-limited local environment with backend source watching and Vite hot reload.
 
-> [!CAUTION]
-> We do not actively maintain **docker-compose-CN-oc9.yml**, **docker-compose-macos.yml**, so use them at your own risk. However, you are welcome to file a pull request to improve any of them.
+Both deployments use Elasticsearch as their only document engine. Kibana and the sandbox executor are disabled by default and can be enabled with the `kibana` and `sandbox` profiles.
+
+### Deployment script
+
+Use `docker/manage.sh` as the single entry point for image and container operations:
+
+```bash
+# Build ragflow-local:<version>.<9-character-git-hash>
+docker/manage.sh build
+
+# Deploy the resource-limited hot-reload environment
+docker/manage.sh deploy local
+
+# Deploy the non-hot-reload test environment with Kibana
+docker/manage.sh deploy test --kibana
+
+# Export all deployment images, including optional components
+docker/manage.sh export ragflow-images.tar.gz --optional
+
+# Import images on an offline host
+docker/manage.sh import ragflow-images.tar.gz
+```
+
+The script refuses to deploy the local environment unless the `ragflow` service has positive CPU and memory limits. Pass `--volumes` to `stop` only when the environment's named volumes should also be deleted.
 
 ## 🐬 Docker environment variables
 
@@ -79,7 +101,7 @@ The [.env](./.env) file contains important environment variables for Docker.
 - `SVR_HTTP_PORT`
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
-  The Docker image edition. Defaults to `infiniflow/ragflow:v0.26.4`. The RAGFlow Docker image does not include embedding models.
+  Overrides the image name used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<9-character-git-hash>`.
 
 
 > [!TIP]
@@ -88,17 +110,6 @@ The [.env](./.env) file contains important environment variables for Docker.
 > - For the `nightly` edition:
 >   - `RAGFLOW_IMAGE=swr.cn-north-4.myhuaweicloud.com/infiniflow/ragflow:nightly` or,
 >   - `RAGFLOW_IMAGE=registry.cn-hangzhou.aliyuncs.com/infiniflow/ragflow:nightly`.
-
-### DeepDoc Vision Service (OSS)
-
-- `DEEPDOC_URL`
-  URL for the deepdoc vision API serving DLA (layout analysis), OCR (text detection/recognition), and TSR (table structure recognition). The `deepdoc` service in `docker-compose.yml` provides this endpoint. Defaults to `http://deepdoc:9390`. When unset, the parser falls back to inline ONNX Runtime inference.
-
-  > The OSS deepdoc service runs on CPU using ONNX Runtime models. No GPU required.
-  > API endpoints: `GET /health`, `GET /model`, `POST /predict/dla`, `POST /predict/tsr`, `POST /predict/ocr`.
-
-- `DEEPDOC_IMAGE`
-  Docker image for the OSS deepdoc service. Defaults to `infiniflow/deepdoc_oss:latest`.
 
 ### Timezone
 
@@ -109,11 +120,6 @@ The [.env](./.env) file contains important environment variables for Docker.
 
 - `HF_ENDPOINT`
   The mirror site for huggingface.co. It is disabled by default. You can uncomment this line if you have limited access to the primary Hugging Face domain.
-
-### MacOS
-
-- `MACOS`
-  Optimizations for macOS. It is disabled by default. You can uncomment this line if your OS is macOS.
 
 ### Maximum file size
 
@@ -130,46 +136,6 @@ The [.env](./.env) file contains important environment variables for Docker.
 - `EMBEDDING_BATCH_SIZE`
   The number of text chunks processed in a single batch during embedding vectorization. Defaults to `16`.
 
-### OceanBase prerequisites
-
-Before setting `DOC_ENGINE=oceanbase`, make sure the host OS allows the file descriptor and core dump limits OceanBase expects.
-
-1. Set host limits:
-
-   ```bash
-   sudo tee /etc/security/limits.d/99-oceanbase.conf >/dev/null <<'EOF'
-   root soft nofile 655350
-   root hard nofile 655350
-   * soft nofile 655350
-   * hard nofile 655350
-   * soft core unlimited
-   * hard core unlimited
-   EOF
-   ```
-
-2. Make sure PAM limits are enabled:
-
-   ```bash
-   grep -E 'pam_limits\.so' /etc/pam.d/common-session /etc/pam.d/common-session-noninteractive
-   ```
-
-   If missing, add them:
-
-   ```bash
-   echo 'session required pam_limits.so' | sudo tee -a /etc/pam.d/common-session
-   echo 'session required pam_limits.so' | sudo tee -a /etc/pam.d/common-session-noninteractive
-   ```
-
-3. Log out and log back in, or reboot.
-
-4. Verify the effective limit:
-
-   ```bash
-   ulimit -n
-   ```
-
-   Expected: `655350`, or at least `20000`.
-
 ## 🐋 Service configuration
 
 [service_conf.yaml](./service_conf.yaml) specifies the system-level configuration for RAGFlow and is used by its API server and task executor. In a dockerized setup, this file is automatically created based on the [service_conf.yaml.template](./service_conf.yaml.template) file (replacing all environment variables by their values).
@@ -177,13 +143,6 @@ Before setting `DOC_ENGINE=oceanbase`, make sure the host OS allows the file des
 - `ragflow`
   - `host`: The API server's IP address inside the Docker container. Defaults to `0.0.0.0`.
   - `port`: The API server's serving port inside the Docker container. Defaults to `9380`.
-
-- `deepdoc`
-  The OSS DeepDoc vision service provides DLA, OCR, and TSR inference via ONNX Runtime.
-  Defined in `docker-compose.yml`, it is started automatically as a dependency of `ragflow-cpu` and `ragflow-gpu`.
-  - `image`: Docker image. Defaults to `infiniflow/deepdoc_oss:latest`.
-  - `port`: Serving port inside the container. Defaults to `9390`.
-  - Health check: `curl -f http://localhost:9390/health` every 10s.
 
 - `mysql`
   - `name`: The MySQL database name. Defaults to `rag_flow`.
@@ -197,15 +156,6 @@ Before setting `DOC_ENGINE=oceanbase`, make sure the host OS allows the file des
   - `user`: The username for MinIO.
   - `password`: The password for MinIO.
   - `host`: The MinIO serving IP *and* port inside the Docker container. Defaults to `minio:9000`.
-
-- `oceanbase`
-  - `scheme`: The connection scheme. Set to `mysql` to use mysql config, or other values to use config below.
-  - `config`:
-    - `db_name`: The OceanBase database name.
-    - `user`: The username for OceanBase.
-    - `password`: The password for OceanBase.
-    - `host`: The hostname of the OceanBase service.
-    - `port`: The port of OceanBase.
 
 - `oss`
   - `access_key`: The access key ID used to authenticate requests to the OSS service.

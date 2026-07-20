@@ -1,8 +1,9 @@
-name: ragflow-test
+name: ragflow-local
 
 services:
   ragflow:
-    image: ${RAGFLOW_IMAGE:-ragflow-local:dev}
+    image: ${RAGFLOW_LOCAL_IMAGE:-ragflow-local:dev}
+    entrypoint: ["/usr/local/bin/ragflow-dev-entrypoint"]
     command:
       # Component switches. Web, task executor, and data sync are enabled by
       # default; uncomment the corresponding disable flag when separating them.
@@ -39,20 +40,34 @@ services:
     env_file: .env
     environment:
       API_PROXY_SCHEME: python
+      DOC_BULK_SIZE: "1"
       DOC_ENGINE: elasticsearch
+      EMBEDDING_BATCH_SIZE: "1"
       ES_HOST: es01
       MYSQL_HOST: mysql
       MINIO_HOST: minio
       REDIS_HOST: redis
       TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - ${SVR_WEB_HTTP_PORT:-80}:80
-      - ${SVR_WEB_HTTPS_PORT:-443}:443
-      - ${SVR_HTTP_PORT:-9380}:9380
-      - ${ADMIN_SVR_HTTP_PORT:-9381}:9381
-      - ${SVR_MCP_PORT:-9382}:9382
+      - ${RAGFLOW_LOCAL_HTTP_PORT:-18082}:80
+      - ${RAGFLOW_LOCAL_HTTPS_PORT:-18443}:443
+      - ${RAGFLOW_LOCAL_API_PORT:-19380}:9380
+      - ${RAGFLOW_LOCAL_ADMIN_PORT:-19381}:9381
+      - ${RAGFLOW_LOCAL_MCP_PORT:-19382}:9382
     volumes:
+      - ./dev-entrypoint.sh:/usr/local/bin/ragflow-dev-entrypoint:ro
+      - ./nginx/ragflow.dev.conf.python:/etc/nginx/conf.d/ragflow.conf.python:ro
+      - ./service_conf.yaml.template:/ragflow/conf/service_conf.yaml.template:ro
+      - ../admin:/ragflow/admin:ro
+      - ../agent:/ragflow/agent:ro
+      - ../api:/ragflow/api:ro
+      - ../common:/ragflow/common:ro
+      - ../deepdoc:/ragflow/deepdoc:ro
+      - ../mcp:/ragflow/mcp:ro
+      - ../memory:/ragflow/memory:ro
+      - ../rag:/ragflow/rag:ro
       - ragflow_logs:/ragflow/logs
+      - ragflow_deepdoc_models:/ragflow/rag/res/deepdoc
     depends_on:
       es01:
         condition: service_healthy
@@ -62,6 +77,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      web-dev:
+        condition: service_started
+    mem_limit: 4g
+    cpus: 2.0
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9381/api/v1/admin/ping"]
       interval: 15s
@@ -72,13 +91,35 @@ services:
     networks:
       - ragflow
 
+  web-dev:
+    image: ${RAGFLOW_LOCAL_IMAGE:-ragflow-local:dev}
+    entrypoint: []
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    working_dir: /workspace/web
+    volumes:
+      - ../web:/workspace/web
+      - ../docs:/workspace/docs:ro
+    ports:
+      - ${RAGFLOW_LOCAL_VITE_PORT:-18084}:9222
+    environment:
+      API_PROXY_SCHEME: python
+      API_PROXY_URL: http://ragflow:9380/
+      ADMIN_API_PROXY_URL: http://ragflow:9381/
+      NODE_OPTIONS: --max-old-space-size=1536
+      PORT: "9222"
+    mem_limit: 2g
+    cpus: 1.0
+    restart: unless-stopped
+    networks:
+      - ragflow
+
   mysql:
     image: mysql:8.0.39
     env_file: .env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-infini_rag_flow}
     command:
-      - --max_connections=256
+      - --max_connections=128
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
@@ -88,12 +129,12 @@ services:
       - --innodb_buffer_pool_size=256M
       - --max_allowed_packet=1073741824
     ports:
-      - ${EXPOSE_MYSQL_PORT:-3306}:3306
+      - ${RAGFLOW_LOCAL_MYSQL_PORT:-13306}:3306
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init.sql:/data/application/init.sql:ro
-    mem_limit: ${RAGFLOW_TEST_MYSQL_MEMORY:-1g}
-    cpus: ${RAGFLOW_TEST_MYSQL_CPUS:-1.0}
+    mem_limit: 768m
+    cpus: 0.75
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
@@ -115,18 +156,18 @@ services:
       xpack.security.http.ssl.enabled: "false"
       xpack.security.transport.ssl.enabled: "false"
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-infini_rag_flow}
-      ES_JAVA_OPTS: ${RAGFLOW_ES_JAVA_OPTS:--Xms1g -Xmx1g}
+      ES_JAVA_OPTS: -Xms768m -Xmx768m
       cluster.routing.allocation.disk.watermark.low: 5gb
       cluster.routing.allocation.disk.watermark.high: 3gb
       cluster.routing.allocation.disk.watermark.flood_stage: 2gb
     ports:
-      - ${ES_PORT:-1200}:9200
+      - ${RAGFLOW_LOCAL_ES_PORT:-11200}:9200
     volumes:
       - es_data:/usr/share/elasticsearch/data
     tmpfs:
       - /tmp:mode=1777,size=512m
-    mem_limit: ${RAGFLOW_TEST_ES_MEMORY:-3g}
-    cpus: ${RAGFLOW_TEST_ES_CPUS:-2.0}
+    mem_limit: 2g
+    cpus: 1.5
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health"]
       interval: 10s
@@ -145,12 +186,12 @@ services:
       MINIO_ROOT_USER: ${MINIO_USER:-rag_flow}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-infini_rag_flow}
     ports:
-      - ${MINIO_PORT:-9000}:9000
-      - ${MINIO_CONSOLE_PORT:-9001}:9001
+      - ${RAGFLOW_LOCAL_MINIO_PORT:-19000}:9000
+      - ${RAGFLOW_LOCAL_MINIO_CONSOLE_PORT:-19001}:9001
     volumes:
       - minio_data:/data
-    mem_limit: ${RAGFLOW_TEST_MINIO_MEMORY:-512m}
-    cpus: ${RAGFLOW_TEST_MINIO_CPUS:-0.5}
+    mem_limit: 384m
+    cpus: 0.5
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -171,15 +212,15 @@ services:
       - --appendonly
       - "yes"
       - --maxmemory
-      - 192mb
+      - 128mb
       - --maxmemory-policy
       - allkeys-lru
     ports:
-      - ${REDIS_PORT:-6379}:6379
+      - ${RAGFLOW_LOCAL_REDIS_PORT:-16379}:6379
     volumes:
       - redis_data:/data
-    mem_limit: ${RAGFLOW_TEST_REDIS_MEMORY:-256m}
-    cpus: ${RAGFLOW_TEST_REDIS_CPUS:-0.5}
+    mem_limit: 192m
+    cpus: 0.25
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-infini_rag_flow}", "ping"]
       interval: 10s
@@ -208,8 +249,8 @@ services:
     depends_on:
       es01:
         condition: service_healthy
-    mem_limit: ${RAGFLOW_TEST_KIBANA_SETUP_MEMORY:-256m}
-    cpus: ${RAGFLOW_TEST_KIBANA_SETUP_CPUS:-0.25}
+    mem_limit: 256m
+    cpus: 0.25
     restart: "no"
     networks:
       - ragflow
@@ -223,14 +264,14 @@ services:
       ELASTICSEARCH_USERNAME: kibana_system
       ELASTICSEARCH_PASSWORD: ${KIBANA_PASSWORD:-infini_rag_flow}
     ports:
-      - ${KIBANA_PORT:-6601}:5601
+      - ${RAGFLOW_LOCAL_KIBANA_PORT:-16601}:5601
     volumes:
       - kibana_data:/usr/share/kibana/data
     depends_on:
       kibana-setup:
         condition: service_completed_successfully
-    mem_limit: ${RAGFLOW_TEST_KIBANA_MEMORY:-1g}
-    cpus: ${RAGFLOW_TEST_KIBANA_CPUS:-1.0}
+    mem_limit: 768m
+    cpus: 0.75
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:5601/api/status"]
       interval: 10s
@@ -247,20 +288,20 @@ services:
     privileged: true
     env_file: .env
     environment:
-      SANDBOX_EXECUTOR_MANAGER_POOL_SIZE: ${SANDBOX_EXECUTOR_MANAGER_POOL_SIZE:-3}
+      SANDBOX_EXECUTOR_MANAGER_POOL_SIZE: 3
       SANDBOX_BASE_PYTHON_IMAGE: ${SANDBOX_BASE_PYTHON_IMAGE:-infiniflow/sandbox-base-python:latest}
       SANDBOX_BASE_NODEJS_IMAGE: ${SANDBOX_BASE_NODEJS_IMAGE:-infiniflow/sandbox-base-nodejs:latest}
       SANDBOX_ENABLE_SECCOMP: ${SANDBOX_ENABLE_SECCOMP:-false}
-      SANDBOX_MAX_MEMORY: ${SANDBOX_MAX_MEMORY:-256m}
-      SANDBOX_TIMEOUT: ${SANDBOX_TIMEOUT:-10s}
+      SANDBOX_MAX_MEMORY: 256m
+      SANDBOX_TIMEOUT: 10s
     ports:
-      - ${SANDBOX_EXECUTOR_MANAGER_PORT:-9385}:9385
+      - ${RAGFLOW_LOCAL_SANDBOX_PORT:-19385}:9385
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     security_opt:
       - no-new-privileges:true
-    mem_limit: ${RAGFLOW_TEST_SANDBOX_MANAGER_MEMORY:-512m}
-    cpus: ${RAGFLOW_TEST_SANDBOX_MANAGER_CPUS:-1.0}
+    mem_limit: 512m
+    cpus: 0.75
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9385/healthz"]
       interval: 10s
@@ -273,6 +314,7 @@ services:
 
 volumes:
   ragflow_logs:
+  ragflow_deepdoc_models:
   mysql_data:
   es_data:
   minio_data:

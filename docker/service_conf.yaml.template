@@ -27,64 +27,15 @@ es:
   hosts: 'http://${ES_HOST:-es01}:9200'
   username: '${ES_USER:-elastic}'
   password: '${ELASTIC_PASSWORD:-infini_rag_flow}'
-os:
-  hosts: 'http://${OS_HOST:-opensearch01}:9201'
-  username: '${OS_USER:-admin}'
-  password: '${OPENSEARCH_PASSWORD:-infini_rag_flow_OS_01}'
-  # Optional hybrid (BM25 + KNN) search tuning. The connector self-provisions the
-  # normalization search pipeline on start-up (requires OpenSearch >= 2.10).
-  # hybrid_search_pipeline: 'ragflow_hybrid_pipeline'
-  # hybrid_search_weights: [0.5, 0.5]   # [text/BM25 leg, vector/KNN leg]
-infinity:
-  uri: '${INFINITY_HOST:-infinity}:23817'
-  postgres_port: 5432
-  db_name: 'default_db'
-oceanbase:
-  scheme: 'oceanbase' # set 'mysql' to create connection using mysql config
-  config:
-    db_name: '${OCEANBASE_DOC_DBNAME:-test}'
-    user: '${OCEANBASE_USER:-root@ragflow}'
-    password: '${OCEANBASE_PASSWORD:-infini_rag_flow}'
-    host: '${OCEANBASE_HOST:-oceanbase}'
-    port: ${OCEANBASE_PORT:-2881}
-seekdb:
-  scheme: 'oceanbase' # SeekDB is the lite version of OceanBase
-  config:
-    db_name: '${SEEKDB_DOC_DBNAME:-ragflow_doc}'
-    user: '${SEEKDB_USER:-root}'
-    password: '${SEEKDB_PASSWORD:-infini_rag_flow}'
-    host: '${SEEKDB_HOST:-seekdb}'
-    port: ${SEEKDB_PORT:-2881}
 redis:
   db: 1
   username: '${REDIS_USERNAME:-}'
   password: '${REDIS_PASSWORD:-infini_rag_flow}'
   host: '${REDIS_HOST:-redis}:6379'
-nats:
-  host: ${NATS_HOST:-0.0.0.0}
-  port: ${NATS_PORT:-4222}
-clickhouse:
-  host: '${CLICKHOUSE_HOST:-clickhouse}'
-  port: ${CLICKHOUSE_TCP_PORT:-9000}
-  user: '${CLICKHOUSE_USER:-ragflow}'
-  password: '${CLICKHOUSE_PASSWORD:-infini_rag_flow}'
-  database: '${CLICKHOUSE_DATABASE:-ragflow}'
-otel:
-  host: ${OTEL_HOST:-0.0.0.0}
-  port: ${OTEL_PORT:-4318}
-  secure: false
-  sample_ratio: 1.0
-  stdout: false
-task_executor:
-  message_queue_type: 'nats'
-file_syncer:
-  max_concurrent_syncs: 4
-  sync_interval: 3
 user_default_llm:
   default_models:
     embedding_model:
       api_key: 'xxx'
-      base_url: 'http://${TEI_HOST}:80'
 # postgres:
 #   name: '${POSTGRES_DBNAME:-rag_flow}'
 #   user: '${POSTGRES_USER:-rag_flow}'

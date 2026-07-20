@@ -32,13 +32,11 @@ docker compose -f docker/docker-compose.yml up -d
 ## Docker Compose
 
 - **docker-compose.yml**
-  Sets up environment for RAGFlow and its dependencies.
-- **docker-compose-base.yml**
-  Sets up environment for RAGFlow's dependencies: Elasticsearch/[Infinity](https://github.com/infiniflow/infinity), MySQL, MinIO, and Redis.
+  Runs the resource-limited test environment from a built RAGFlow image.
+- **docker-compose.local.yml**
+  Runs the resource-limited local environment with backend source watching and Vite hot reload.
 
-:::danger IMPORTANT
-We do not actively maintain **docker-compose-CN-oc9.yml**, **docker-compose-macos.yml**, so use them at your own risk. However, you are welcome to file a pull request to improve them.
-:::
+Both deployments use Elasticsearch. Kibana and the sandbox executor are optional Compose profiles.
 
 ## Docker environment variables
 
@@ -103,7 +101,7 @@ RAGFlow utilizes MinIO as its object storage solution, leveraging its scalabilit
 - `SVR_HTTP_PORT`
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
-  The Docker image edition. Defaults to `infiniflow/ragflow:v0.26.4` (the RAGFlow Docker image without embedding models).
+  Overrides the image used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<9-character-git-hash>`.
 
 :::tip NOTE
 If you cannot download the RAGFlow Docker image, try the following mirrors.
@@ -112,14 +110,6 @@ If you cannot download the RAGFlow Docker image, try the following mirrors.
   - `RAGFLOW_IMAGE=swr.cn-north-4.myhuaweicloud.com/infiniflow/ragflow:nightly` or,
   - `RAGFLOW_IMAGE=registry.cn-hangzhou.aliyuncs.com/infiniflow/ragflow:nightly`.
   :::
-
-### Embedding service
-
-- `TEI_MODEL`
-  The embedding model which text-embeddings-inference serves. Allowed values are one of `Qwen/Qwen3-Embedding-0.6B`(default), `BAAI/bge-m3`, and `BAAI/bge-small-en-v1.5`.
-
-- `TEI_PORT`
-  The port used to expose the text-embeddings-inference service to the host machine, allowing **external** access to the text-embeddings-inference service running inside the Docker container. Defaults to `6380`.
 
 ### Timezone
 
@@ -130,11 +120,6 @@ If you cannot download the RAGFlow Docker image, try the following mirrors.
 
 - `HF_ENDPOINT`
   The mirror site for huggingface.co. It is disabled by default. You can uncomment this line if you have limited access to the primary Hugging Face domain.
-
-### MacOS
-
-- `MACOS`
-  Optimizations for macOS. It is disabled by default. You can uncomment this line if your OS is macOS.
 
 ### User registration
 
@@ -188,7 +173,7 @@ s3:
 - `addressing_style`: Must be `virtual`.
 - `bucket` / `prefix_path`: Optional. Enables single-bucket mode — see [Migrate from multi-bucket to single-bucket mode](/migration#migrate-from-multi-bucket-to-single-bucket-mode).
 
-When using an external storage backend, you can remove the `minio` service from `docker-compose-base.yml`.
+When using an external storage backend, you can remove the `minio` service from both Compose files.
 
 For other S3-compatible backends (AWS S3, Alibaba Cloud OSS, Azure Blob, Google Cloud Storage), see the commented examples in [service_conf.yaml.template](https://github.com/infiniflow/ragflow/blob/main/docker/service_conf.yaml.template).
 
