@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,13 +6,16 @@ import {
   BrainCircuit,
   ExternalLink,
   KeyRound,
+  Loader2,
   Pencil,
   Plus,
   Search,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
+import { DynamicForm, type DynamicFormRef } from '@/components/dynamic-form';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +41,7 @@ import { Label } from '@/components/ui/label';
 import message from '@/components/ui/message';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -65,6 +69,7 @@ import {
   listManagedModels,
   listModelWorkspaces,
   updateManagedModel,
+  verifyManagedModel,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
 import { Routes } from '@/routes';
@@ -74,18 +79,11 @@ import {
   createFilterOptions,
   matchesSelectedFilter,
 } from './components/table-filter-utils';
+import { getProviderConfig } from '@/pages/user-setting/setting-model/provider-schema/field-config';
+import { useProviderFields } from '@/pages/user-setting/setting-model/provider-schema/hooks';
+import { useCustomModelFields } from '@/pages/user-setting/setting-model/instance-card/use-custom-model-fields';
 
 const PROVIDERS = ['MinerU', 'OpenAI-API-Compatible', 'Xinference'];
-const MODEL_TYPES = [
-  'chat',
-  'embedding',
-  'asr',
-  'vision',
-  'rerank',
-  'tts',
-  'ocr',
-];
-
 const EMPTY_FORM: AdminService.ManagedModelInput = {
   provider_name: 'OpenAI-API-Compatible',
   instance_name: '',
@@ -93,11 +91,54 @@ const EMPTY_FORM: AdminService.ManagedModelInput = {
   api_key: '',
   base_url: '',
   model_types: ['chat'],
-  max_tokens: 8192,
+  features: [],
+  max_tokens: 0,
   status: 'active',
   visibility: 'all',
   workspace_ids: [],
+  provider_config: {
+    mineru_output_dir: '',
+    mineru_backend: 'pipeline',
+    mineru_server_url: '',
+    mineru_delete_output: true,
+  },
 };
+
+type AdminProviderConfigurationProps = {
+  providerName: string;
+  initialValues: Record<string, unknown>;
+  onSubmit: (values: Record<string, unknown>) => void;
+};
+
+const AdminProviderConfiguration = forwardRef<
+  DynamicFormRef,
+  AdminProviderConfigurationProps
+>(({ providerName, initialValues, onSubmit }, ref) => {
+  const { fields } = useProviderFields({
+    llmFactory: providerName,
+    editMode: true,
+    initialValues,
+    hideWhenInstanceExists: () => true,
+  });
+  const providerFields = useMemo(
+    () => fields.filter((field) => field.name !== 'instance_name'),
+    [fields],
+  );
+
+  return (
+    <DynamicForm.Root
+      key={providerName}
+      ref={ref}
+      fields={providerFields}
+      defaultValues={initialValues}
+      onSubmit={onSubmit}
+      className="md:col-span-2"
+      labelClassName="font-normal"
+    />
+  );
+});
+
+AdminProviderConfiguration.displayName = 'AdminProviderConfiguration';
 
 type SortState = {
   key: keyof AdminService.ManagedModel;
@@ -107,6 +148,19 @@ type SortState = {
 export default function AdminModels() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const customModelFields = useCustomModelFields();
+  const modelNameField = customModelFields.find(
+    (field) => field.name === 'name',
+  );
+  const modelTypesField = customModelFields.find(
+    (field) => field.name === 'model_types',
+  );
+  const maxTokensField = customModelFields.find(
+    (field) => field.name === 'max_tokens',
+  );
+  const featuresField = customModelFields.find(
+    (field) => field.name === 'features',
+  );
   const [query, setQuery] = useState('');
   const [providerFilters, setProviderFilters] = useState<string[]>([]);
   const [typeFilters, setTypeFilters] = useState<string[]>([]);
@@ -121,6 +175,35 @@ export default function AdminModels() {
   const [editing, setEditing] = useState<AdminService.ManagedModel>();
   const [deleting, setDeleting] = useState<AdminService.ManagedModel>();
   const [form, setForm] = useState<AdminService.ManagedModelInput>(EMPTY_FORM);
+  const [verificationResult, setVerificationResult] = useState<{
+    valid: boolean;
+    message: string;
+  }>();
+  const providerFormRef = useRef<DynamicFormRef>(null);
+  const providerFormActionRef = useRef<'save' | 'verify'>('save');
+
+  useEffect(() => {
+    setVerificationResult(undefined);
+  }, [form]);
+
+  const providerInitialValues = useMemo<Record<string, unknown>>(() => {
+    if (form.provider_name === 'MinerU') {
+      return {
+        mineru_apiserver: form.base_url,
+        mineru_api_key: form.api_key,
+        mineru_output_dir: form.provider_config?.mineru_output_dir ?? '',
+        mineru_backend: form.provider_config?.mineru_backend ?? 'pipeline',
+        mineru_server_url: form.provider_config?.mineru_server_url ?? '',
+        mineru_delete_output:
+          form.provider_config?.mineru_delete_output ?? true,
+      };
+    }
+    return {
+      base_url: form.base_url,
+      api_key: form.api_key,
+      vision: form.provider_config?.vision ?? false,
+    };
+  }, [form.api_key, form.base_url, form.provider_config, form.provider_name]);
 
   const { data: models = [], isFetching } = useQuery({
     queryKey: ['admin/managed-models'],
@@ -132,12 +215,37 @@ export default function AdminModels() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      editing ? updateManagedModel(editing.id, form) : createManagedModel(form),
+    mutationFn: (payload: AdminService.ManagedModelInput) =>
+      editing
+        ? updateManagedModel(editing.id, payload)
+        : createManagedModel(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin/managed-models'] });
       message.success(t('admin.modelManagementPage.saved'));
       setDialogOpen(false);
+    },
+  });
+  const verifyMutation = useMutation({
+    mutationFn: verifyManagedModel,
+    onMutate: () => setVerificationResult(undefined),
+    onSuccess: (response) => {
+      const result = response.data.data;
+      if (result.valid) {
+        setVerificationResult({
+          valid: true,
+          message: t('admin.modelManagementPage.verifySucceeded'),
+        });
+      } else if (result.message.includes('timed out after')) {
+        setVerificationResult({
+          valid: false,
+          message: t('admin.modelManagementPage.verifyTimeout'),
+        });
+      } else {
+        setVerificationResult({
+          valid: false,
+          message: result.message || t('admin.modelManagementPage.verifyFailed'),
+        });
+      }
     },
   });
   const deleteMutation = useMutation({
@@ -225,30 +333,79 @@ export default function AdminModels() {
 
   const openCreate = () => {
     setEditing(undefined);
+    setVerificationResult(undefined);
     setForm({ ...EMPTY_FORM, model_types: [...EMPTY_FORM.model_types] });
     setDialogOpen(true);
   };
   const openEdit = (model: AdminService.ManagedModel) => {
     setEditing(model);
+    setVerificationResult(undefined);
     setForm({
       provider_name: model.provider_name,
       instance_name: model.instance_name,
       model_name: model.name,
       api_key: model.api_key,
       base_url: model.base_url,
-      model_types: model.model_types.slice(0, 1),
+      model_types: model.model_types.map((modelType) =>
+        modelType === 'asr'
+          ? 'speech2text'
+          : modelType === 'vision'
+            ? 'image2text'
+            : modelType,
+      ),
+      features: [...(model.features ?? [])],
       max_tokens: model.max_tokens,
       status: model.status,
       visibility: model.visibility === 'private' ? 'all' : model.visibility,
       workspace_ids: [...model.workspace_ids],
+      provider_config: { ...model.provider_config },
     });
     setDialogOpen(true);
   };
   const canSave =
     form.model_name.trim() &&
     form.instance_name.trim() &&
-    form.model_types.length > 0 &&
     (form.visibility === 'all' || form.workspace_ids.length > 0);
+  const canVerify =
+    Boolean(form.model_name.trim() && form.instance_name.trim()) &&
+    (form.provider_name === 'MinerU' || form.model_types.length > 0);
+
+  const submitProviderConfiguration = (values: Record<string, unknown>) => {
+    const config = getProviderConfig(form.provider_name);
+    const transformed = config.verifyTransform?.(values) ?? {
+      apiKey: values.api_key ?? '',
+      baseUrl: values.base_url ?? '',
+    };
+    const apiKey = transformed.apiKey;
+    const mineruConfig =
+      form.provider_name === 'MinerU' && apiKey && typeof apiKey === 'object'
+        ? (apiKey as Record<string, unknown>)
+        : undefined;
+    const payload: AdminService.ManagedModelInput = {
+      ...form,
+      base_url: String(transformed.baseUrl ?? ''),
+      api_key: String(mineruConfig?.mineru_api_key ?? transformed.apiKey ?? ''),
+      provider_config: {
+        ...form.provider_config,
+        vision: Boolean(values.vision),
+        ...(mineruConfig
+          ? {
+              mineru_output_dir: String(mineruConfig.mineru_output_dir ?? ''),
+              mineru_backend: String(mineruConfig.mineru_backend ?? 'pipeline'),
+              mineru_server_url: String(mineruConfig.mineru_server_url ?? ''),
+              mineru_delete_output:
+                String(mineruConfig.mineru_delete_output ?? '1') !== '0',
+            }
+          : {}),
+      },
+    };
+    if (providerFormActionRef.current === 'verify') {
+      providerFormActionRef.current = 'save';
+      verifyMutation.mutate(payload);
+      return;
+    }
+    saveMutation.mutate(payload);
+  };
 
   const sharedModelCount = models.filter(
     (model) => model.source === 'shared',
@@ -335,10 +492,12 @@ export default function AdminModels() {
                   {
                     id: 'model-type',
                     label: t('admin.modelManagementPage.modelTypes'),
-                    options: MODEL_TYPES.map((modelType) => ({
-                      value: modelType,
-                      label: t(`admin.modelManagementPage.types.${modelType}`),
-                    })),
+                    options: createFilterOptions(
+                      models.flatMap((model) => model.model_types),
+                      (modelType) => modelType,
+                      (modelType) =>
+                        t(`admin.modelManagementPage.types.${modelType}`),
+                    ),
                     value: typeFilters,
                     onChange: setTypeFilters,
                   },
@@ -480,11 +639,13 @@ export default function AdminModels() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {`${t(
-                            model.owner_workspace.type === 'team'
-                              ? 'admin.teamWorkspace'
-                              : 'admin.personalWorkspace',
-                          )}-${model.owner_workspace.name}`}
+                          {model.source === 'shared'
+                            ? t('admin.modelManagementPage.systemShared')
+                            : `${t(
+                                model.owner_workspace.type === 'team'
+                                  ? 'admin.teamWorkspace'
+                                  : 'admin.personalWorkspace',
+                              )}-${model.owner_workspace.name}`}
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">{model.name}</div>
@@ -667,6 +828,19 @@ export default function AdminModels() {
                       setForm((current) => ({
                         ...current,
                         provider_name: value,
+                        model_name:
+                          value === 'MinerU' ? current.instance_name : '',
+                        api_key: '',
+                        base_url: '',
+                        model_types: value === 'MinerU' ? ['ocr'] : ['chat'],
+                        features: [],
+                        max_tokens: 0,
+                        provider_config: {
+                          mineru_output_dir: '',
+                          mineru_backend: 'pipeline',
+                          mineru_server_url: '',
+                          mineru_delete_output: true,
+                        },
                       }))
                     }
                   >
@@ -691,69 +865,58 @@ export default function AdminModels() {
                       setForm((current) => ({
                         ...current,
                         instance_name: event.target.value,
+                        model_name:
+                          current.provider_name === 'MinerU'
+                            ? event.target.value
+                            : current.model_name,
                       }))
                     }
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('admin.modelManagementPage.modelName')}</Label>
-                  <Input
-                    value={form.model_name}
-                    disabled={Boolean(editing)}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        model_name: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('admin.modelManagementPage.endpoint')}</Label>
-                  <Input
-                    value={form.base_url}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        base_url: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('admin.modelManagementPage.apiKey')}</Label>
-                  <div className="relative">
-                    <KeyRound className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
+                {form.provider_name !== 'MinerU' && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>
+                      {modelNameField?.label ??
+                        t('admin.modelManagementPage.modelName')}
+                    </Label>
                     <Input
-                      className="pl-9"
-                      type="password"
-                      value={form.api_key}
+                      value={form.model_name}
+                      disabled={Boolean(editing)}
                       onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          api_key: event.target.value,
+                          model_name: event.target.value,
                         }))
                       }
                     />
                   </div>
-                  <div className="text-xs text-text-secondary">
-                    {t('admin.modelManagementPage.instanceConfigTip')}
+                )}
+                <AdminProviderConfiguration
+                  key={`${editing?.id ?? 'new'}-${form.provider_name}`}
+                  ref={providerFormRef}
+                  providerName={form.provider_name}
+                  initialValues={providerInitialValues}
+                  onSubmit={submitProviderConfiguration}
+                />
+                {form.provider_name !== 'MinerU' && (
+                  <div className="space-y-2">
+                    <Label>
+                      {maxTokensField?.label ??
+                        t('admin.modelManagementPage.maxTokens')}
+                    </Label>
+                    <Input
+                      type="number"
+                      min={maxTokensField?.min ?? 0}
+                      value={form.max_tokens}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          max_tokens: Number(event.target.value),
+                        }))
+                      }
+                    />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('admin.modelManagementPage.maxTokens')}</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.max_tokens}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        max_tokens: Number(event.target.value),
-                      }))
-                    }
-                  />
-                </div>
+                )}
                 {editing && (
                   <div className="space-y-2">
                     <Label>{t('admin.modelManagementPage.status')}</Label>
@@ -777,29 +940,59 @@ export default function AdminModels() {
                     </Select>
                   </div>
                 )}
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{t('admin.modelManagementPage.modelTypes')}</Label>
-                  <Select
-                    value={form.model_types[0] ?? ''}
-                    onValueChange={(modelType) =>
-                      setForm((current) => ({
-                        ...current,
-                        model_types: [modelType],
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MODEL_TYPES.map((modelType) => (
-                        <SelectItem key={modelType} value={modelType}>
-                          {t(`admin.modelManagementPage.types.${modelType}`)}
-                        </SelectItem>
+                {form.provider_name !== 'MinerU' && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>
+                      {modelTypesField?.label ??
+                        t('admin.modelManagementPage.modelTypes')}
+                    </Label>
+                    <MultiSelect
+                      key={`${editing?.id ?? 'new'}-${form.provider_name}-model-types`}
+                      options={modelTypesField?.options ?? []}
+                      defaultValue={form.model_types}
+                      onValueChange={(modelTypes) =>
+                        setForm((current) => ({
+                          ...current,
+                          model_types: modelTypes,
+                        }))
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                )}
+                {form.provider_name !== 'MinerU' && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>{featuresField?.label}</Label>
+                    <div className="space-y-2 rounded-md border border-border-button p-3">
+                      {featuresField?.options?.map((option) => (
+                        <div
+                          key={option.value}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <Label className="font-normal">{option.label}</Label>
+                          <Switch
+                            checked={form.features?.includes(option.value)}
+                            onCheckedChange={(checked) =>
+                              setForm((current) => ({
+                                ...current,
+                                features: checked
+                                  ? [
+                                      ...(current.features ?? []).filter(
+                                        (feature) => feature !== option.value,
+                                      ),
+                                      option.value,
+                                    ]
+                                  : (current.features ?? []).filter(
+                                      (feature) => feature !== option.value,
+                                    ),
+                              }))
+                            }
+                          />
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-2 md:col-span-2">
                   <Label>{t('admin.modelManagementPage.visibility')}</Label>
                   <Select
@@ -851,6 +1044,17 @@ export default function AdminModels() {
                 )}
               </div>
             </ScrollArea>
+            {verificationResult && (
+              <div
+                className={`rounded-md border px-3 py-2 text-sm whitespace-pre-line ${
+                  verificationResult.valid
+                    ? 'border-state-success/30 bg-state-success/10 text-state-success'
+                    : 'border-state-error/30 bg-state-error/10 text-state-error'
+                }`}
+              >
+                {verificationResult.message}
+              </div>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 {t('admin.cancel')}
@@ -859,8 +1063,45 @@ export default function AdminModels() {
                 <TooltipTrigger asChild>
                   <span className="inline-flex">
                     <Button
-                      disabled={!canSave || saveMutation.isPending}
-                      onClick={() => saveMutation.mutate()}
+                      variant="outline"
+                      disabled={
+                        !canVerify ||
+                        verifyMutation.isPending ||
+                        saveMutation.isPending
+                      }
+                      onClick={() => {
+                        providerFormActionRef.current = 'verify';
+                        providerFormRef.current?.submit();
+                      }}
+                    >
+                      {verifyMutation.isPending ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <ShieldCheck />
+                      )}
+                      {t('admin.modelManagementPage.verify')}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!canVerify && (
+                  <TooltipContent>
+                    {t('admin.modelManagementPage.verifyRequired')}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      disabled={
+                        !canSave ||
+                        saveMutation.isPending ||
+                        verifyMutation.isPending
+                      }
+                      onClick={() => {
+                        providerFormActionRef.current = 'save';
+                        providerFormRef.current?.submit();
+                      }}
                     >
                       {t('admin.modelManagementPage.save')}
                     </Button>

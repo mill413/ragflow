@@ -233,16 +233,23 @@ function AdminUserManagement() {
   const createUserMutation = useMutation({
     mutationFn: async ({
       email,
+      nickname,
       password,
       role,
       departmentId,
     }: {
       email: string;
+      nickname?: string;
       password: string;
       role?: string;
       departmentId?: string;
     }) => {
-      await createUser(email, rsaPsw(password) as string, departmentId);
+      await createUser(
+        email,
+        nickname ?? '',
+        rsaPsw(password) as string,
+        departmentId,
+      );
 
       if (IS_ENTERPRISE && role) {
         await updateUserRoleMutation.mutateAsync({ email, role });

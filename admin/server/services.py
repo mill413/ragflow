@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 
+import asyncio
 import base64
 import binascii
 import json
@@ -24,6 +25,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from peewee import Case, fn
 
@@ -452,17 +454,20 @@ class UserMgr:
         return {"email": refreshed.email, "id": refreshed.id}
 
     @staticmethod
-    def create_user(username, password, role="user") -> dict:
+    def create_user(username, nickname, password, role="user") -> dict:
         # Validate the email address
         if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", username):
             raise AdminException(f"Invalid email address: {username}!")
         # Check if the email address is already used
         if UserService.query(email=username):
             raise UserAlreadyExistsError(username)
+        nickname = str(nickname or "").strip()
+        if len(nickname) > 100:
+            raise AdminException("Nickname must be at most 100 characters", 400)
         # Construct user info data
         user_info_dict = {
             "email": username,
-            "nickname": "",  # ask user to edit it manually in settings.
+            "nickname": nickname,
             "password": decrypt(password),
             "login_channel": "password",
             "is_superuser": role == "admin",
@@ -1273,6 +1278,15 @@ class ResourceMgr:
             .dicts()
         )
 
+        document_ids = [document["id"] for document in documents]
+        file_ids_by_document = {
+            relation.document_id: relation.file_id
+            for relation in File2Document.select(
+                File2Document.document_id,
+                File2Document.file_id,
+            ).where(File2Document.document_id.in_(document_ids))
+        } if document_ids else {}
+
         creator_ids = {row.get("creator_id") for row in documents if row.get("creator_id")}
         creators = {
             user.id: user.nickname or user.email
@@ -1281,6 +1295,7 @@ class ResourceMgr:
             )
         }
         for document in documents:
+            document["file_id"] = file_ids_by_document.get(document["id"], "")
             document["creator_name"] = creators.get(document.get("creator_id"), "")
             progress = float(document.get("progress") or 0)
             if progress < 0:
@@ -1946,7 +1961,23 @@ class QuotaMgr:
 
 class AdminModelMgr:
     PROVIDERS = {"MinerU", "OpenAI-API-Compatible", "Xinference"}
-    MODEL_TYPES = {"chat", "embedding", "asr", "vision", "rerank", "tts", "ocr"}
+    MODEL_TYPES = {"chat", "embedding", "rerank", "tts", "image2text", "ocr", "speech2text"}
+
+    @staticmethod
+    def _validate_base_url(provider_name: str, base_url: str) -> str:
+        base_url = str(base_url or "").strip().rstrip("/")
+        if provider_name != "OpenAI-API-Compatible":
+            return base_url
+        parsed = urlparse(base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or not parsed.path.endswith("/v1")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise AdminException("OpenAI-compatible base URL must be a valid HTTP or HTTPS URL ending in /v1", 400)
+        return base_url
 
     @staticmethod
     def _parse_extra(raw: str) -> dict:
@@ -1955,6 +1986,30 @@ class AdminModelMgr:
         except (TypeError, json.JSONDecodeError):
             return {}
         return value if isinstance(value, dict) else {}
+
+    @classmethod
+    def _provider_credentials(
+        cls,
+        provider_name: str,
+        api_key: Any,
+        base_url: str,
+        provider_config: dict[str, Any] | None = None,
+    ) -> str:
+        if provider_name != "MinerU":
+            return str(api_key or "")
+        config = provider_config or {}
+        credentials = {
+            "mineru_apiserver": base_url,
+            "mineru_api_key": str(api_key or ""),
+            "mineru_output_dir": str(config.get("mineru_output_dir") or ""),
+            "mineru_backend": str(config.get("mineru_backend") or "pipeline"),
+            "mineru_delete_output": "1" if config.get("mineru_delete_output", True) else "0",
+        }
+        if credentials["mineru_backend"] == "vlm-http-client":
+            credentials["mineru_server_url"] = str(config.get("mineru_server_url") or "")
+            if not credentials["mineru_server_url"]:
+                raise AdminException("MinerU server URL is required for the vlm-http-client backend", 400)
+        return json.dumps(credentials, ensure_ascii=False)
 
     @classmethod
     def _validate_access(cls, visibility: str, workspace_ids: list[str]) -> tuple[str, list[str]]:
@@ -1976,11 +2031,64 @@ class AdminModelMgr:
         return visibility, workspace_ids
 
     @classmethod
-    def _validate_model_type(cls, model_types: list[str]) -> str:
+    def _validate_model_types(cls, model_types: list[str]) -> list[str]:
         model_types = list(dict.fromkeys(model_types or []))
-        if len(model_types) != 1 or model_types[0] not in cls.MODEL_TYPES:
-            raise AdminException("Exactly one valid model type is required", 400)
-        return model_types[0]
+        if any(model_type not in cls.MODEL_TYPES for model_type in model_types):
+            raise AdminException("Invalid model type", 400)
+        return model_types
+
+    @classmethod
+    async def verify_model(cls, data: dict[str, Any]) -> dict[str, Any]:
+        from api.apps.services.provider_api_service import MODEL_VERIFICATION_TIMEOUT_SECONDS, verify_api_key
+
+        provider_name = str(data.get("provider_name") or "").strip()
+        model_name = str(data.get("model_name") or "").strip()
+        model_types = cls._validate_model_types(data.get("model_types") or [])
+        if provider_name not in cls.PROVIDERS:
+            raise AdminException("Unsupported model provider", 400)
+        if not model_name:
+            raise AdminException("model_name is required", 400)
+
+        base_url = cls._validate_base_url(provider_name, data.get("base_url"))
+        api_key = cls._provider_credentials(
+            provider_name,
+            data.get("api_key"),
+            base_url,
+            data.get("provider_config"),
+        )
+        model_info = []
+        if provider_name != "MinerU":
+            model_info = [
+                {
+                    "model_name": model_name,
+                    "model_type": [
+                        {"image2text": "vision", "speech2text": "asr"}.get(model_type, model_type)
+                        for model_type in model_types
+                    ],
+                    "max_tokens": max(int(data.get("max_tokens") or 0), 0),
+                    "extra": {
+                        "is_tools": "is_tools" in (data.get("features") or []),
+                    },
+                }
+            ]
+
+        try:
+            valid, message, results = await asyncio.wait_for(
+                verify_api_key(
+                    provider_name,
+                    api_key,
+                    base_url,
+                    model_info=model_info,
+                ),
+                timeout=MODEL_VERIFICATION_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            return {
+                "valid": False,
+                "message": f"Verification timed out after {MODEL_VERIFICATION_TIMEOUT_SECONDS} seconds.",
+                "results": {},
+            }
+        return {"valid": valid, "message": message.strip(), "results": results}
 
     @classmethod
     def list_workspaces(cls) -> list[dict[str, Any]]:
@@ -2030,6 +2138,20 @@ class AdminModelMgr:
             )
             instance_extra = cls._parse_extra(instance.extra)
             model_extra = cls._parse_extra(model.extra)
+            provider_config = {}
+            api_key = instance.api_key
+            base_url = instance_extra.get("base_url", "")
+            if provider.provider_name == "MinerU":
+                credentials = cls._parse_extra(instance.api_key)
+                api_key = credentials.get("mineru_api_key", "")
+                base_url = credentials.get("mineru_apiserver", base_url)
+                provider_config = {
+                    "mineru_output_dir": credentials.get("mineru_output_dir", ""),
+                    "mineru_backend": credentials.get("mineru_backend", "pipeline"),
+                    "mineru_server_url": credentials.get("mineru_server_url", ""),
+                    "mineru_delete_output": str(credentials.get("mineru_delete_output", "1")) != "0",
+                }
+            provider_config["vision"] = bool(model_extra.get("vision", False))
             target_ids = (entry.get("workspace_ids") or []) if entry else [provider.tenant_id]
             rows.append(
                 {
@@ -2042,10 +2164,12 @@ class AdminModelMgr:
                     "owner_workspace": owner_workspace,
                     "instance_name": instance.instance_name,
                     "instance_id": instance.id,
-                    "api_key": instance.api_key,
-                    "base_url": instance_extra.get("base_url", ""),
+                    "api_key": api_key,
+                    "base_url": base_url,
+                    "provider_config": provider_config,
                     "model_types": get_model_type_human(model.model_type),
-                    "max_tokens": int(model_extra.get("max_tokens") or 8192),
+                    "features": ["is_tools"] if model_extra.get("is_tools") else [],
+                    "max_tokens": int(model_extra.get("max_tokens", 0)),
                     "status": model.status,
                     "source": "shared" if entry else "private",
                     "visibility": entry.get("visibility", "all") if entry else "private",
@@ -2063,7 +2187,7 @@ class AdminModelMgr:
         provider_name = str(data.get("provider_name") or "").strip()
         instance_name = str(data.get("instance_name") or "").strip()
         model_name = str(data.get("model_name") or "").strip()
-        model_type = cls._validate_model_type(data.get("model_types") or [])
+        model_types = cls._validate_model_types(data.get("model_types") or [])
         if provider_name not in cls.PROVIDERS:
             raise AdminException("Unsupported model provider", 400)
         if not instance_name or not model_name:
@@ -2079,8 +2203,13 @@ class AdminModelMgr:
             provider = TenantModelProviderService.get_by_tenant_id_and_provider_name(actor_id, provider_name)
 
         instance = TenantModelInstanceService.get_by_provider_id_and_instance_name(provider.id, instance_name)
-        api_key = str(data.get("api_key") or "")
-        base_url = str(data.get("base_url") or "").strip()
+        base_url = cls._validate_base_url(provider_name, data.get("base_url"))
+        api_key = cls._provider_credentials(
+            provider_name,
+            data.get("api_key"),
+            base_url,
+            data.get("provider_config"),
+        )
         if instance and TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
             provider.id,
             instance.id,
@@ -2107,9 +2236,15 @@ class AdminModelMgr:
             model_name=model_name,
             provider_id=provider.id,
             instance_id=instance.id,
-            model_type=calculate_model_type([model_type]),
+            model_type=calculate_model_type(model_types),
             status=ActiveStatusEnum.ACTIVE.value,
-            extra=json.dumps({"max_tokens": max(int(data.get("max_tokens") or 8192), 1)}),
+            extra=json.dumps(
+                {
+                    "max_tokens": max(int(data.get("max_tokens") or 0), 0),
+                    "vision": bool((data.get("provider_config") or {}).get("vision", False)),
+                    "is_tools": "is_tools" in (data.get("features") or []),
+                }
+            ),
         )
         model = TenantModelService.get_by_provider_id_and_instance_id_and_model_name(
             provider.id,
@@ -2133,15 +2268,21 @@ class AdminModelMgr:
 
         updates = {}
         if "model_types" in data:
-            model_type = cls._validate_model_type(data.get("model_types") or [])
-            updates["model_type"] = calculate_model_type([model_type])
+            model_types = cls._validate_model_types(data.get("model_types") or [])
+            updates["model_type"] = calculate_model_type(model_types)
         if "status" in data:
             if data["status"] not in {ActiveStatusEnum.ACTIVE.value, ActiveStatusEnum.INACTIVE.value}:
                 raise AdminException("Invalid model status", 400)
             updates["status"] = data["status"]
         model_extra = cls._parse_extra(model.extra)
         if "max_tokens" in data:
-            model_extra["max_tokens"] = max(int(data.get("max_tokens") or 8192), 1)
+            model_extra["max_tokens"] = max(int(data.get("max_tokens") or 0), 0)
+            updates["extra"] = json.dumps(model_extra)
+        if "provider_config" in data:
+            model_extra["vision"] = bool((data.get("provider_config") or {}).get("vision", False))
+            updates["extra"] = json.dumps(model_extra)
+        if "features" in data:
+            model_extra["is_tools"] = "is_tools" in (data.get("features") or [])
             updates["extra"] = json.dumps(model_extra)
         if updates:
             TenantModelService.update_model(model_id, updates)
@@ -2151,10 +2292,29 @@ class AdminModelMgr:
             raise AdminException("Model instance not found", 404)
         instance_updates = {}
         if "api_key" in data:
-            instance_updates["api_key"] = str(data.get("api_key") or "")
+            ok, provider = TenantModelProviderService.get_by_id(model.provider_id)
+            if not ok:
+                raise AdminException("Model provider not found", 404)
+            current_base_url = cls._parse_extra(instance.extra).get("base_url", "")
+            target_base_url = cls._validate_base_url(
+                provider.provider_name,
+                data.get("base_url", current_base_url),
+            )
+            instance_updates["api_key"] = cls._provider_credentials(
+                provider.provider_name,
+                data.get("api_key"),
+                target_base_url,
+                data.get("provider_config"),
+            )
         if "base_url" in data:
+            ok, provider = TenantModelProviderService.get_by_id(model.provider_id)
+            if not ok:
+                raise AdminException("Model provider not found", 404)
             instance_extra = cls._parse_extra(instance.extra)
-            instance_extra["base_url"] = str(data.get("base_url") or "").strip()
+            instance_extra["base_url"] = cls._validate_base_url(
+                provider.provider_name,
+                data.get("base_url"),
+            )
             instance_updates["extra"] = json.dumps(instance_extra)
         if instance_updates:
             TenantModelInstanceService.update_by_id(instance.id, instance_updates)

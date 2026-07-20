@@ -123,6 +123,7 @@ const {
   adminQuotas,
   adminQuota,
   adminManagedModels,
+  adminVerifyManagedModel,
   adminManagedModel,
   adminModelWorkspaces,
 
@@ -173,11 +174,13 @@ export const listUsers = () =>
 
 export const createUser = (
   email: string,
+  nickname: string,
   password: string,
   departmentId?: string,
 ) =>
   request.post<ResponseData<boolean>>(adminCreateUser, {
     username: email,
+    nickname,
     password,
     department_id: departmentId || null,
   });
@@ -441,6 +444,11 @@ export const listModelWorkspaces = () =>
 export const createManagedModel = (data: AdminService.ManagedModelInput) =>
   request.post<ResponseData<AdminService.ManagedModel>>(
     adminManagedModels,
+    data,
+  );
+export const verifyManagedModel = (data: AdminService.ManagedModelInput) =>
+  request.post<ResponseData<AdminService.ManagedModelVerification>>(
+    adminVerifyManagedModel,
     data,
   );
 export const updateManagedModel = (

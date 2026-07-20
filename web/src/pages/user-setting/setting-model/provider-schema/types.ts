@@ -92,6 +92,7 @@ export interface FieldConfig {
    * the value; the message is shown when the bound is violated.
    */
   validation?: {
+    pattern?: RegExp;
     min?: number;
     max?: number;
     message?: string;

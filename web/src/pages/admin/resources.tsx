@@ -277,6 +277,317 @@ function getRawFileDisplayType(
   return 'binary' as const;
 }
 
+function DatasetConfiguration({
+  dataset,
+}: {
+  dataset: AdminService.DatasetResourceDetail;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-5">
+      <section className="space-y-3">
+        <div className="text-sm font-medium">
+          {t(
+            'admin.resourceManagementPage.datasetDetail.retrievalConfiguration',
+          )}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <DetailInformationCard
+            icon={Activity}
+            label={t(
+              'admin.resourceManagementPage.datasetDetail.similarityThreshold',
+            )}
+            value={dataset.similarity_threshold ?? '-'}
+          />
+          <DetailInformationCard
+            icon={Activity}
+            label={t('admin.resourceManagementPage.datasetDetail.vectorWeight')}
+            value={dataset.vector_similarity_weight ?? '-'}
+          />
+          <DetailInformationCard
+            icon={Workflow}
+            label={t('admin.resourceManagementPage.datasetDetail.dataFlow')}
+            value={dataset.pipeline_id || '-'}
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="text-sm font-medium">
+          {t('admin.resourceManagementPage.datasetDetail.parserConfiguration')}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Object.entries(dataset.parser_config ?? {}).map(([key, value]) => (
+            <DetailInformationCard
+              key={key}
+              icon={Settings2}
+              label={t(
+                `admin.resourceManagementPage.datasetDetail.parserFields.${key}`,
+                { defaultValue: key },
+              )}
+              value={formatDetailValue(value)}
+            />
+          ))}
+          {!Object.keys(dataset.parser_config ?? {}).length && (
+            <div className="col-span-full py-6 text-center text-sm text-text-secondary">
+              {t('common.noData')}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+type DatasetDocumentTableProps = {
+  dataset: AdminService.DatasetResourceDetail;
+  documents: AdminService.DatasetDocumentDetail[];
+  loading: boolean;
+  sort: SortState;
+  setSort: Dispatch<SetStateAction<SortState>>;
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number, pageSize: number) => void;
+  onPreview: (resource: AdminService.ManagedResourceItem) => void;
+  onDownload: (resource: AdminService.ManagedResourceItem) => void;
+};
+
+function DatasetDocumentTable({
+  dataset,
+  documents,
+  loading,
+  sort,
+  setSort,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPreview,
+  onDownload,
+}: DatasetDocumentTableProps) {
+  const { t } = useTranslation();
+  const toggleSort = (key: string) =>
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  const sortButton = (label: string, key: string) => (
+    <Button variant="ghost" onClick={() => toggleSort(key)}>
+      {label}
+      {getSortIcon(sort.key === key ? sort.direction : false)}
+    </Button>
+  );
+  const fileResource = (document: AdminService.DatasetDocumentDetail) =>
+    document.file_id
+      ? ({
+          id: document.file_id,
+          resource_type: 'file',
+          name: document.name,
+          workspace_id: dataset.workspace_id,
+          workspace_name: dataset.workspace_name,
+          workspace_type: dataset.workspace_type,
+          creator_id: document.creator_id,
+          creator_name: document.creator_name,
+          permission: dataset.permission,
+          create_date: document.create_date,
+          update_date: document.update_date,
+          size: document.size,
+          file_type: document.file_type,
+          source_type: document.source_type,
+          deletable: false,
+        } satisfies AdminService.ManagedResourceItem)
+      : undefined;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <FileText className="size-4 text-text-secondary" />
+        {t('admin.resourceManagementPage.datasetDetail.files')}
+      </div>
+      <Table
+        rootClassName="max-w-full [contain:inline-size]"
+        className="min-w-[1080px]"
+      >
+        <TableHeader>
+          <TableRow>
+            <TableHead>
+              {sortButton(t('admin.knowledgeMonitoring.fileName'), 'name')}
+            </TableHead>
+            <TableHead>
+              {sortButton(
+                t('admin.resourceManagementPage.fileType'),
+                'file_type',
+              )}
+            </TableHead>
+            <TableHead className="text-center">
+              {sortButton(t('admin.knowledgeMonitoring.fileSize'), 'size')}
+            </TableHead>
+            <TableHead>
+              {sortButton(
+                t('admin.knowledgeMonitoring.parseStatus'),
+                'parse_status',
+              )}
+            </TableHead>
+            <TableHead className="text-center">
+              {sortButton(
+                t('admin.knowledgeMonitoring.chunkCount'),
+                'chunk_num',
+              )}
+            </TableHead>
+            <TableHead className="text-center">
+              {sortButton(t('admin.tokenNum'), 'token_num')}
+            </TableHead>
+            <TableHead className="text-center">
+              {sortButton(
+                t('admin.resourceManagementPage.datasetDetail.progress'),
+                'progress',
+              )}
+            </TableHead>
+            <TableHead>
+              {sortButton(t('admin.createTime'), 'create_date')}
+            </TableHead>
+            <TableHead className="text-center">{t('admin.actions')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className={loading ? 'opacity-60' : undefined}>
+          {documents.length ? (
+            documents.map((document) => {
+              const resource = fileResource(document);
+              return (
+                <TableRow key={document.id}>
+                  <TableCell>
+                    <div className="max-w-56 truncate font-medium">
+                      {document.name || '-'}
+                    </div>
+                    <div className="max-w-56 truncate font-mono text-xs text-text-secondary">
+                      {document.id}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {document.suffix || document.file_type || '-'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <StorageSize bytes={document.size ?? 0} />
+                  </TableCell>
+                  <TableCell>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Badge
+                            variant={
+                              document.parse_status === 'failed'
+                                ? 'destructive'
+                                : document.parse_status === 'completed'
+                                  ? 'success'
+                                  : 'secondary'
+                            }
+                          >
+                            {t(
+                              `admin.resourceManagementPage.datasetDetail.status.${document.parse_status}`,
+                            )}
+                          </Badge>
+                        </span>
+                      </TooltipTrigger>
+                      {document.progress_msg && (
+                        <TooltipContent className="max-w-sm">
+                          {document.progress_msg}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {document.chunk_num ?? 0}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {document.token_num ?? 0}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {Math.max(
+                      0,
+                      Math.min(100, (document.progress ?? 0) * 100),
+                    ).toFixed(0)}
+                    %
+                  </TableCell>
+                  <TableCell>
+                    {formatDate(document.create_date) || '-'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              disabled={!resource}
+                              onClick={() => resource && onPreview(resource)}
+                            >
+                              <Eye className="size-4" />
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {resource
+                            ? t('admin.resourceManagementPage.previewFile', {
+                                name: document.name,
+                              })
+                            : t(
+                                'admin.resourceManagementPage.originalFileUnavailable',
+                              )}
+                        </TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              disabled={!resource}
+                              onClick={() => resource && onDownload(resource)}
+                            >
+                              <ArrowDownToLine className="size-4" />
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {resource
+                            ? t('admin.resourceManagementPage.downloadFile', {
+                                name: document.name,
+                              })
+                            : t(
+                                'admin.resourceManagementPage.originalFileUnavailable',
+                              )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          ) : (
+            <TableRow>
+              <TableCell
+                colSpan={9}
+                className="h-40 text-center text-text-secondary"
+              >
+                {t('common.noData')}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+      <RAGFlowPagination
+        total={total}
+        current={page}
+        pageSize={pageSize}
+        onChange={onPageChange}
+      />
+    </section>
+  );
+}
+
 export default function AdminResources() {
   const { t } = useTranslation();
   const { resourceView } = useParams<{ resourceView: string }>();
@@ -1487,8 +1798,10 @@ export default function AdminResources() {
                     <AdminDetailTabsTrigger value="overview">
                       {t('admin.resourceManagementPage.datasetDetail.overview')}
                     </AdminDetailTabsTrigger>
-                    <AdminDetailTabsTrigger value="files">
-                      {t('admin.resourceManagementPage.datasetDetail.files')}
+                    <AdminDetailTabsTrigger value="configuration">
+                      {t(
+                        'admin.resourceManagementPage.datasetDetail.configuration',
+                      )}
                     </AdminDetailTabsTrigger>
                   </TabsList>
 
@@ -1610,75 +1923,24 @@ export default function AdminResources() {
                           </div>
                         </section>
 
-                        <details
-                          open
-                          className="rounded-lg border-0.5 border-border-button bg-bg-input"
-                        >
-                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                            {t(
-                              'admin.resourceManagementPage.datasetDetail.retrievalConfiguration',
-                            )}
-                          </summary>
-                          <div className="grid gap-3 border-t border-border-button p-4 sm:grid-cols-2 lg:grid-cols-3">
-                            <DetailInformationCard
-                              icon={Activity}
-                              label={t(
-                                'admin.resourceManagementPage.datasetDetail.similarityThreshold',
-                              )}
-                              value={
-                                datasetDetail.dataset.similarity_threshold ??
-                                '-'
-                              }
-                            />
-                            <DetailInformationCard
-                              icon={Activity}
-                              label={t(
-                                'admin.resourceManagementPage.datasetDetail.vectorWeight',
-                              )}
-                              value={
-                                datasetDetail.dataset
-                                  .vector_similarity_weight ?? '-'
-                              }
-                            />
-                            <DetailInformationCard
-                              icon={Workflow}
-                              label={t(
-                                'admin.resourceManagementPage.datasetDetail.dataFlow',
-                              )}
-                              value={datasetDetail.dataset.pipeline_id || '-'}
-                            />
-                          </div>
-                        </details>
-
-                        <details className="rounded-lg border-0.5 border-border-button bg-bg-input">
-                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                            {t(
-                              'admin.resourceManagementPage.datasetDetail.parserConfiguration',
-                            )}
-                          </summary>
-                          <div className="grid gap-3 border-t border-border-button p-4 sm:grid-cols-2">
-                            {Object.entries(
-                              datasetDetail.dataset.parser_config ?? {},
-                            ).map(([key, value]) => (
-                              <DetailInformationCard
-                                key={key}
-                                icon={Settings2}
-                                label={t(
-                                  `admin.resourceManagementPage.datasetDetail.parserFields.${key}`,
-                                  { defaultValue: key },
-                                )}
-                                value={formatDetailValue(value)}
-                              />
-                            ))}
-                            {!Object.keys(
-                              datasetDetail.dataset.parser_config ?? {},
-                            ).length && (
-                              <div className="col-span-full py-6 text-center text-sm text-text-secondary">
-                                {t('common.noData')}
-                              </div>
-                            )}
-                          </div>
-                        </details>
+                        <DatasetDocumentTable
+                          dataset={datasetDetail.dataset}
+                          documents={sortedDatasetDocuments}
+                          loading={datasetDetailFetching}
+                          sort={datasetDocumentSort}
+                          setSort={setDatasetDocumentSort}
+                          page={datasetDocumentPage}
+                          pageSize={datasetDocumentPageSize}
+                          total={datasetDetail.document_total ?? 0}
+                          onPageChange={(nextPage, nextPageSize) => {
+                            setDatasetDocumentPage(nextPage);
+                            setDatasetDocumentPageSize(nextPageSize);
+                          }}
+                          onPreview={setPreviewingFile}
+                          onDownload={(resource) =>
+                            downloadMutation.mutate(resource)
+                          }
+                        />
                       </>
                     ) : (
                       <div className="py-20 text-center text-sm text-text-secondary">
@@ -1687,174 +1949,16 @@ export default function AdminResources() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="files" className="mt-0 space-y-4">
-                    <div className="overflow-x-auto">
-                      <Table
-                        rootClassName="max-w-full [contain:inline-size]"
-                        className="min-w-[980px]"
-                      >
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>
-                              {sortButton(
-                                t('admin.knowledgeMonitoring.fileName'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'name',
-                              )}
-                            </TableHead>
-                            <TableHead>
-                              {sortButton(
-                                t('admin.resourceManagementPage.fileType'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'file_type',
-                              )}
-                            </TableHead>
-                            <TableHead className="text-center">
-                              {sortButton(
-                                t('admin.knowledgeMonitoring.fileSize'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'size',
-                              )}
-                            </TableHead>
-                            <TableHead>
-                              {sortButton(
-                                t('admin.knowledgeMonitoring.parseStatus'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'parse_status',
-                              )}
-                            </TableHead>
-                            <TableHead className="text-center">
-                              {sortButton(
-                                t('admin.knowledgeMonitoring.chunkCount'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'chunk_num',
-                              )}
-                            </TableHead>
-                            <TableHead className="text-center">
-                              {sortButton(
-                                t('admin.tokenNum'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'token_num',
-                              )}
-                            </TableHead>
-                            <TableHead className="text-center">
-                              {sortButton(
-                                t(
-                                  'admin.resourceManagementPage.datasetDetail.progress',
-                                ),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'progress',
-                              )}
-                            </TableHead>
-                            <TableHead>
-                              {sortButton(
-                                t('admin.createTime'),
-                                datasetDocumentSort,
-                                setDatasetDocumentSort,
-                                'create_date',
-                              )}
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody
-                          className={
-                            datasetDetailFetching ? 'opacity-60' : undefined
-                          }
-                        >
-                          {sortedDatasetDocuments.length ? (
-                            sortedDatasetDocuments.map((document) => (
-                              <TableRow key={document.id}>
-                                <TableCell>
-                                  <div className="max-w-56 truncate font-medium">
-                                    {document.name || '-'}
-                                  </div>
-                                  <div className="max-w-56 truncate font-mono text-xs text-text-secondary">
-                                    {document.id}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  {document.suffix || document.file_type || '-'}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  <StorageSize bytes={document.size ?? 0} />
-                                </TableCell>
-                                <TableCell>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="inline-flex">
-                                        <Badge
-                                          variant={
-                                            document.parse_status === 'failed'
-                                              ? 'destructive'
-                                              : document.parse_status ===
-                                                  'completed'
-                                                ? 'success'
-                                                : 'secondary'
-                                          }
-                                        >
-                                          {t(
-                                            `admin.resourceManagementPage.datasetDetail.status.${document.parse_status}`,
-                                          )}
-                                        </Badge>
-                                      </span>
-                                    </TooltipTrigger>
-                                    {document.progress_msg && (
-                                      <TooltipContent className="max-w-sm">
-                                        {document.progress_msg}
-                                      </TooltipContent>
-                                    )}
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {document.chunk_num ?? 0}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {document.token_num ?? 0}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {Math.max(
-                                    0,
-                                    Math.min(
-                                      100,
-                                      (document.progress ?? 0) * 100,
-                                    ),
-                                  ).toFixed(0)}
-                                  %
-                                </TableCell>
-                                <TableCell>
-                                  {formatDate(document.create_date) || '-'}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell
-                                colSpan={8}
-                                className="h-40 text-center text-text-secondary"
-                              >
-                                {t('common.noData')}
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <RAGFlowPagination
-                      total={datasetDetail?.document_total ?? 0}
-                      current={datasetDocumentPage}
-                      pageSize={datasetDocumentPageSize}
-                      onChange={(nextPage, nextPageSize) => {
-                        setDatasetDocumentPage(nextPage);
-                        setDatasetDocumentPageSize(nextPageSize);
-                      }}
-                    />
+                  <TabsContent value="configuration" className="mt-0 space-y-4">
+                    {datasetDetail ? (
+                      <DatasetConfiguration dataset={datasetDetail.dataset} />
+                    ) : (
+                      <div className="py-20 text-center text-sm text-text-secondary">
+                        {datasetDetailFetching
+                          ? t('common.loading')
+                          : t('common.noData')}
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               ) : selectedStandardResource ? (

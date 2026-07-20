@@ -247,6 +247,8 @@ export function TreeSelect({
         className="p-0 w-auto min-w-[var(--radix-popover-trigger-width)]"
         align="start"
         sideOffset={4}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
       >
         {showSearch && (
           <div className="flex items-center border-b px-3 py-2">

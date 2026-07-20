@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from api.db.services.resource_reference_service import ResourceReferenceService
+from common.constants import TaskStatus
 from common.exceptions import ResourceInUseException
 
 
@@ -252,3 +253,68 @@ def test_model_reference_scanner_reports_chat_using_model_id(monkeypatch):
             "resource_name": "Team chat",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("run_status", "expected_resource_ids"),
+    [
+        (TaskStatus.DONE.value, []),
+        (TaskStatus.RUNNING.value, ["document-1"]),
+    ],
+)
+def test_model_reference_scanner_ignores_completed_document_history(
+    monkeypatch,
+    run_status,
+    expected_resource_ids,
+):
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Tenant.get_or_none",
+        lambda *_args, **_kwargs: None,
+    )
+    dataset = SimpleNamespace(
+        id="dataset-1",
+        name="Documents",
+        embd_id="",
+        tenant_embd_id=None,
+        parser_config={},
+    )
+    document = SimpleNamespace(
+        id="document-1",
+        name="manual.pdf",
+        kb_id=dataset.id,
+        parser_config={"layout_recognize": "mineru@default@MinerU"},
+        run=run_status,
+    )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Knowledgebase.select",
+        lambda *_args: _FakeQuery([dataset]),
+    )
+    monkeypatch.setattr(
+        "api.db.services.resource_reference_service.Document.select",
+        lambda *_args: _FakeQuery([document]),
+    )
+    for model_name in [
+        "Dialog",
+        "Search",
+        "Memory",
+        "CompilationTemplate",
+        "TenantModelGroupMapping",
+        "TenantModelGroup",
+        "UserCanvas",
+        "UserCanvasVersion",
+        "API4Conversation",
+    ]:
+        monkeypatch.setattr(
+            f"api.db.services.resource_reference_service.{model_name}.select",
+            lambda *_args: _FakeQuery(),
+        )
+
+    references = ResourceReferenceService._model_references(
+        {
+            "resource_id": "model-1",
+            "workspace_id": "team-1",
+            "identifiers": ["model-1", "mineru@default@MinerU"],
+        }
+    )
+
+    assert [reference["resource_id"] for reference in references] == expected_resource_ids

@@ -94,7 +94,21 @@ export const LocalLlmConfigs: Record<string, ProviderConfig> = {
     ['chat', 'embedding', 'rerank', 'image2text'],
     undefined,
     false,
-    undefined,
+    [
+      {
+        name: 'base_url',
+        label: 'addLlmBaseUrl',
+        type: 'inputSelect',
+        required: true,
+        placeholder: 'openAICompatibleBaseUrlPlaceholder',
+        tooltip: 'openAICompatibleBaseUrlTip',
+        shouldRender: 'hideWhenInstanceExists',
+        validation: {
+          pattern: /^https?:\/\/[^/?#]+(?:\/[^?#]*)?\/v1\/?$/,
+          message: 'openAICompatibleBaseUrlMessage',
+        },
+      },
+    ],
     'https://platform.openai.com/docs/models/gpt-4',
   ),
   [LLMFactory.RAGcon]: buildLocalConfig(

@@ -4,9 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
+  Bot,
   Clock3,
   Hash,
   MessageSquare,
+  Settings2,
+  ShieldCheck,
   Timer,
   UserRound,
 } from 'lucide-react';
@@ -48,6 +51,12 @@ function sourceLabel(
   t: (key: string) => string,
 ) {
   return t(`admin.resourceManagementPage.chatSessions.sources.${source}`);
+}
+
+function messageContent(content: unknown) {
+  if (typeof content === 'string') return content || '-';
+  if (content == null) return '-';
+  return JSON.stringify(content, null, 2);
 }
 
 export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
@@ -286,48 +295,81 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
                   />
                 </div>
                 <section className="space-y-3">
-                  <div className="text-sm font-medium">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <MessageSquare className="size-4 text-text-secondary" />
                     {t(
                       'admin.resourceManagementPage.chatSessions.messageTimeline',
                     )}
                   </div>
-                  <div className="space-y-3">
-                    {detail.messages.map((message, index) => (
-                      <div
-                        key={message.id || index}
-                        className="rounded-lg border-0.5 border-border-button bg-bg-input p-4"
-                      >
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <Badge
-                            variant={
-                              message.role === 'user' ? 'default' : 'secondary'
-                            }
+                  <div className="space-y-4 rounded-xl border-0.5 border-border-button bg-bg-card p-4">
+                    {detail.messages.map((message, index) => {
+                      const isUser = message.role === 'user';
+                      const isAssistant = message.role === 'assistant';
+                      const isSystem = message.role === 'system';
+                      const RoleIcon = isUser
+                        ? UserRound
+                        : isAssistant
+                          ? Bot
+                          : isSystem
+                            ? ShieldCheck
+                            : Settings2;
+                      return (
+                        <div
+                          key={message.id || index}
+                          className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+                        >
+                          {!isUser && (
+                            <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full border border-border-button bg-bg-input">
+                              <RoleIcon className="size-4 text-text-secondary" />
+                            </div>
+                          )}
+                          <div
+                            className={`min-w-0 max-w-[82%] rounded-2xl border-0.5 px-4 py-3 ${
+                              isUser
+                                ? 'border-accent-primary/30 bg-accent-primary/10'
+                                : 'border-border-button bg-bg-input'
+                            }`}
                           >
-                            {message.role}
-                          </Badge>
-                          {message.created_at && (
-                            <span className="text-xs text-text-secondary">
-                              {formatDate(message.created_at * 1000)}
-                            </span>
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                              <span className="text-xs font-medium text-text-secondary">
+                                {t(
+                                  `admin.resourceManagementPage.chatSessions.roles.${message.role}`,
+                                  { defaultValue: message.role },
+                                )}
+                              </span>
+                              {message.created_at && (
+                                <span className="text-xs text-text-secondary">
+                                  {formatDate(message.created_at * 1000)}
+                                </span>
+                              )}
+                            </div>
+                            <pre className="overflow-x-auto whitespace-pre-wrap break-words font-sans text-sm leading-6">
+                              {messageContent(message.content)}
+                            </pre>
+                          </div>
+                          {isUser && (
+                            <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-primary/10">
+                              <RoleIcon className="size-4 text-accent-primary" />
+                            </div>
                           )}
                         </div>
-                        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6">
-                          {message.content || '-'}
-                        </pre>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
                 {detail.references.length > 0 && (
                   <section className="space-y-3">
-                    <div className="text-sm font-medium">
-                      {t(
-                        'admin.resourceManagementPage.chatSessions.references',
-                      )}
-                    </div>
-                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-bg-input p-4 text-xs">
-                      {JSON.stringify(detail.references, null, 2)}
-                    </pre>
+                    <details className="rounded-lg border-0.5 border-border-button bg-bg-input">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                        {t(
+                          'admin.resourceManagementPage.chatSessions.references',
+                        )}{' '}
+                        ({detail.references.length})
+                      </summary>
+                      <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all border-t border-border-button p-4 text-xs">
+                        {JSON.stringify(detail.references, null, 2)}
+                      </pre>
+                    </details>
                   </section>
                 )}
               </>

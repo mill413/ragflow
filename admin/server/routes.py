@@ -107,13 +107,14 @@ def create_user():
             return error_response("Username and password are required", 400)
 
         username = data["username"]
+        nickname = data.get("nickname", "")
         password = data["password"]
         role = data.get("role", "user")
         department_id = data.get("department_id")
         if department_id:
             OrganizationMgr.ensure_department_exists(department_id)
 
-        res = UserMgr.create_user(username, password, role)
+        res = UserMgr.create_user(username, nickname, password, role)
         if res["success"]:
             user_info = res["user_info"]
             OrganizationMgr.set_user_department(user_info["id"], department_id)
@@ -726,6 +727,21 @@ def create_managed_model():
         return error_response(str(e), 400)
     except Exception as e:
         logging.exception("Failed to create managed model")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/models/verify", methods=["POST"])
+@login_required
+@check_admin_auth
+def verify_managed_model():
+    try:
+        return success_response(asyncio.run(AdminModelMgr.verify_model(request.get_json() or {})))
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except (TypeError, ValueError) as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to verify managed model")
         return error_response(str(e), 500)
 
 

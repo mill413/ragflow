@@ -447,6 +447,7 @@ export default {
   adminQuota: (scopeType: string, scopeId: string) =>
     `${restAPIv1}/admin/quotas/${scopeType}/${scopeId}`,
   adminManagedModels: `${restAPIv1}/admin/models`,
+  adminVerifyManagedModel: `${restAPIv1}/admin/models/verify`,
   adminManagedModel: (modelId: string) =>
     `${restAPIv1}/admin/models/${modelId}`,
   adminModelWorkspaces: `${restAPIv1}/admin/models/workspaces`,

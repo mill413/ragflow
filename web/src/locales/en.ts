@@ -1883,6 +1883,12 @@ Example: Virtual Hosted Style`,
       modelTypeMessage: 'Please input your model type!',
       addLlmBaseUrl: 'Base url',
       baseUrlNameMessage: 'Please input your base url!',
+      openAICompatibleBaseUrlPlaceholder:
+        'For example: http://192.168.1.10:8000/v1',
+      openAICompatibleBaseUrlTip:
+        'The OpenAI-compatible base URL must include the version path and end in /v1.',
+      openAICompatibleBaseUrlMessage:
+        'Enter a valid HTTP or HTTPS URL ending in /v1!',
       paddleocr: {
         apiUrl: 'PaddleOCR API URL',
         apiUrlPlaceholder:
@@ -3638,6 +3644,7 @@ Important structured information may include: names, dates, locations, events, k
         openInRagflow: 'Open {{name}} in RAGFlow',
         previewFile: 'Preview {{name}}',
         downloadFile: 'Download {{name}}',
+        originalFileUnavailable: 'The linked original file is unavailable',
         rawFileLoadFailed: 'Unable to read the original file content',
         binaryFile: 'Binary file',
         binaryFileDescription:
@@ -3646,6 +3653,7 @@ Important structured information may include: names, dates, locations, events, k
           'This folder or file is managed by the system or its source resource and cannot be deleted here',
         datasetDetail: {
           overview: 'Overview',
+          configuration: 'Configuration',
           files: 'Files',
           description: 'Description',
           embeddingModel: 'Embedding model',
@@ -3768,6 +3776,12 @@ Important structured information may include: names, dates, locations, events, k
           error: 'Error',
           messageTimeline: 'Message timeline',
           references: 'Knowledge base references',
+          roles: {
+            user: 'User',
+            assistant: 'Assistant',
+            system: 'System',
+            tool: 'Tool',
+          },
           sources: {
             web: 'Web',
             chatbot: 'Shared and embedded API',
@@ -3790,11 +3804,13 @@ Important structured information may include: names, dates, locations, events, k
         sharedSource: 'Admin shared',
         privateSource: 'Workspace private',
         ownerWorkspace: 'Owner workspace',
+        systemShared: 'System shared',
         privateVisibility: 'Owner workspace only',
         monitorOnly: 'Monitoring only',
         provider: 'Provider',
         instance: 'Instance name',
         modelName: 'Model name',
+        modelUid: 'Model UID',
         modelTypes: 'Model types',
         endpoint: 'Base URL',
         apiKey: 'API key',
@@ -3808,9 +3824,13 @@ Important structured information may include: names, dates, locations, events, k
         selectWorkspaces: 'Select workspaces that can use this model',
         defaultVisibilityTip:
           'Models created in the admin console are visible to all workspaces by default.',
-        instanceConfigTip:
-          'Models with the same instance name under one provider share the base URL and API key. Updating them affects other models in that instance.',
         save: 'Save model',
+        verify: 'Verify',
+        verifySucceeded: 'Model service verified successfully',
+        verifyFailed: 'Model service verification failed',
+        verifyTimeout: 'Model service verification timed out (30 seconds)',
+        verifyRequired:
+          'Enter the model and instance names and select a model type first',
         saved: 'Model configuration saved',
         deleted: 'Model deleted',
         deleteModel: 'Delete model',
@@ -3923,6 +3943,7 @@ Important structured information may include: names, dates, locations, events, k
       email: 'Email',
       name: 'Name',
       nickname: 'Nickname',
+      nicknameTooLong: 'Nickname must not exceed 100 characters',
       department: 'Department',
       noDepartment: 'No department',
       departmentDescription:

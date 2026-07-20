@@ -37,7 +37,7 @@ from api.db.db_models import (
     UserCanvas,
     UserCanvasVersion,
 )
-from common.constants import StatusEnum
+from common.constants import StatusEnum, TaskStatus
 from common.exceptions import ResourceInUseException
 
 
@@ -349,11 +349,22 @@ class ResourceReferenceService:
 
         dataset_by_id = {dataset.id: dataset for dataset in datasets}
         if dataset_by_id:
-            documents = Document.select(Document.id, Document.name, Document.kb_id, Document.parser_config).where(
-                Document.kb_id.in_(list(dataset_by_id)),
-                Document.status == StatusEnum.VALID.value,
+            documents = Document.select(
+                Document.id,
+                Document.name,
+                Document.kb_id,
+                Document.parser_config,
+                Document.run,
+            ).where(
+                Document.kb_id.in_(list(dataset_by_id)), Document.status == StatusEnum.VALID.value
             )
             for document in documents:
+                # A completed parse is execution history, not a live model
+                # dependency. The dataset configuration above remains the
+                # source of truth and still prevents deletion when it uses
+                # this model.
+                if str(document.run) == TaskStatus.DONE.value:
+                    continue
                 dataset = dataset_by_id.get(document.kb_id)
                 name = f"{dataset.name} / {document.name}" if dataset else document.name
                 add_if_referenced("document", document.id, name, document.parser_config)

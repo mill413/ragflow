@@ -196,6 +196,7 @@ declare namespace AdminService {
     api_key: string;
     base_url: string;
     model_types: string[];
+    features?: string[];
     max_tokens: number;
     status: 'active' | 'inactive';
     create_date: string;
@@ -227,6 +228,7 @@ declare namespace AdminService {
 
   export type DatasetDocumentDetail = {
     id: string;
+    file_id?: string;
     name: string;
     creator_id?: string;
     creator_name?: string;
@@ -371,6 +373,7 @@ declare namespace AdminService {
     api_key: string;
     base_url: string;
     model_types: string[];
+    features?: string[];
     max_tokens: number;
     status: 'active' | 'inactive';
     source: 'shared' | 'private';
@@ -380,6 +383,13 @@ declare namespace AdminService {
     created_by: string;
     create_date: string;
     update_date: string;
+    provider_config?: {
+      vision?: boolean;
+      mineru_output_dir?: string;
+      mineru_backend?: string;
+      mineru_server_url?: string;
+      mineru_delete_output?: boolean;
+    };
   };
 
   export type ManagedModelInput = {
@@ -389,10 +399,24 @@ declare namespace AdminService {
     api_key: string;
     base_url: string;
     model_types: string[];
+    features?: string[];
     max_tokens: number;
     status?: 'active' | 'inactive';
     visibility: 'all' | 'selected';
     workspace_ids: string[];
+    provider_config?: {
+      vision?: boolean;
+      mineru_output_dir?: string;
+      mineru_backend?: string;
+      mineru_server_url?: string;
+      mineru_delete_output?: boolean;
+    };
+  };
+
+  export type ManagedModelVerification = {
+    valid: boolean;
+    message: string;
+    results: Record<string, number>;
   };
 
   export type TaskExecutorHeartbeatItem = {

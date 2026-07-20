@@ -17,6 +17,7 @@ import os
 import json
 import logging
 import asyncio
+from urllib.parse import urlparse
 
 from common.constants import LLMType, ActiveStatusEnum, ModelVerifyStatusEnum
 from common.settings import FACTORY_LLM_INFOS
@@ -28,6 +29,19 @@ from api.db.services.tenant_model_service import TenantModelService
 from api.db.services.resource_reference_service import ResourceReferenceService
 from api.utils.model_utils import get_model_type_human, calculate_model_type
 from rag.llm import ChatModel, CvModel, EmbeddingModel, ModelMeta, OcrModel, RerankModel, Seq2txtModel, TTSModel
+
+MODEL_VERIFICATION_TIMEOUT_SECONDS = 30
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    current: BaseException | None = error
+    while current is not None:
+        name = type(current).__name__.lower()
+        text = str(current).lower()
+        if isinstance(current, TimeoutError) or "timeout" in name or "timed out" in text:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 def _to_int(v, default=500):
@@ -51,6 +65,22 @@ def _normalize_provider_base_url(provider_name: str, base_url: str | None):
     if not base_url.endswith("/v1"):
         base_url += "/v1"
     return base_url
+
+
+def _provider_base_url_error(provider_name: str, base_url: str | None) -> str | None:
+    if provider_name != "OpenAI-API-Compatible":
+        return None
+    normalized = str(base_url or "").strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not parsed.path.endswith("/v1")
+        or parsed.query
+        or parsed.fragment
+    ):
+        return "OpenAI-compatible base URL must be a valid HTTP or HTTPS URL ending in /v1"
+    return None
 
 
 def _normalize_provider_api_key(provider_name: str, api_key: str | dict | None):
@@ -299,6 +329,9 @@ async def update_provider_instance(
 
     provider_name = provider_obj.provider_name
 
+    if error := _provider_base_url_error(provider_name, base_url):
+        return False, error
+
     # Find the instance
     instance_obj = None
     if instance_id_or_name:
@@ -467,6 +500,9 @@ async def create_provider_instance(tenant_id: str, provider_id_or_name: str, ins
 
     provider_name = provider_obj.provider_name
 
+    if error := _provider_base_url_error(provider_name, base_url):
+        return False, error
+
     base_url = _normalize_provider_base_url(provider_name, base_url)
     api_key = _normalize_provider_api_key(provider_name, api_key)
 
@@ -622,6 +658,9 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
         _, provider_obj = TenantModelProviderService.get_by_id(provider_id_or_name)
     provider_name = provider_obj.provider_name if provider_obj else provider_id_or_name
 
+    if error := _provider_base_url_error(provider_name, base_url):
+        return False, error, {}
+
     base_url = _normalize_provider_base_url(provider_name, base_url)
     api_key = _normalize_provider_api_key(provider_name, api_key)
 
@@ -649,12 +688,17 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
     else:
         factory_llms = factory_info[0]["llm"]
         if not factory_llms:
+            # OpenAI-compatible providers do not have a built-in catalogue.
+            # An instance may be saved before its user-defined models are
+            # added, so there is nothing meaningful to probe at this stage.
+            if provider_name == "OpenAI-API-Compatible":
+                return True, "No model configured; connectivity verification skipped", {}
             return False, f"No models found for provider '{provider_id_or_name}'", {}
 
     model_verify_result = {}
     # test if api key works
     chat_passed, embd_passed, rerank_passed, ocr_passed, tts_passed, asr_passed, vlm_passed = False, False, False, False, False, False, False
-    timeout_seconds = int(os.environ.get("LLM_TIMEOUT_SECONDS", 10))
+    timeout_seconds = MODEL_VERIFICATION_TIMEOUT_SECONDS
     extra = {"provider": provider_name}
     msg = ""
     if provider_name == "BaiduYiyan":
@@ -678,14 +722,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                     raise Exception("Fail")
                 embd_passed = True
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
-            except Exception as e:
-                logging.exception(
-                    "Fail to access embedding model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
-                msg += f"\nFail to access embedding model({llm['llm_name']}) using this api key." + str(e)
+            except TimeoutError:
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for embedding model({llm['llm_name']})."
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for embedding model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access embedding model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access embedding model({llm['llm_name']}) using this api key." + str(e)
         elif not chat_passed and LLMType.CHAT.value in model_types:
             assert provider_name in ChatModel, f"Chat model from {provider_name} is not supported yet."
             mdl = ChatModel[provider_name](api_key_str, llm["llm_name"], base_url=base_url, **extra)
@@ -708,14 +758,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                 else:
                     model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
                     raise Exception("No valid response received")
-            except Exception as e:
-                logging.exception(
-                    "Fail to access chat model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']}) using this api key." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for chat model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for chat model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access chat model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']}) using this api key." + str(e)
         elif not rerank_passed and LLMType.RERANK.value in model_types:
             if provider_name not in RerankModel:
                 unsupported_msg = f"Rerank model from {provider_name} is not supported yet."
@@ -733,14 +789,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                 rerank_passed = True
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
                 logging.debug(f"passed model rerank {llm['llm_name']}")
-            except Exception as e:
-                logging.exception(
-                    "Fail to access rerank model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']}) using this api key." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for rerank model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for rerank model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access rerank model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']}) using this api key." + str(e)
         elif not ocr_passed and LLMType.OCR.value in model_types:
             assert provider_name in OcrModel, f"OCR model from {provider_name} is not supported yet."
             mdl = OcrModel[provider_name](key=api_key_str, model_name=llm["llm_name"], base_url=base_url)
@@ -753,14 +815,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                     raise RuntimeError(reason or "Model not available")
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
                 ocr_passed = True
-            except Exception as e:
-                logging.exception(
-                    "Fail to access OCR model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for OCR model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for OCR model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access OCR model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
         elif not tts_passed and LLMType.TTS.value in model_types:
             assert provider_name in TTSModel, f"TTS model from {provider_name} is not supported yet."
             mdl = TTSModel[provider_name](key=api_key_str, model_name=llm["llm_name"], base_url=base_url)
@@ -776,14 +844,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                 )
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
                 tts_passed = True
-            except Exception as e:
-                logging.exception(
-                    "Fail to access TTS model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for TTS model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for TTS model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access TTS model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
         elif not vlm_passed and LLMType.VISION.value in model_types:
             if provider_name not in CvModel:
                 unsupported_msg = f"Image to text model from {provider_name} is not supported yet."
@@ -803,14 +877,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                     raise Exception(m)
                 vlm_passed = True
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
-            except Exception as e:
-                logging.exception(
-                    "Fail to access vision model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for vision model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for vision model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access vision model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
         elif not asr_passed and LLMType.ASR.value in model_types:
             if provider_name not in Seq2txtModel:
                 unsupported_msg = f"Speech model from {provider_name} is not supported yet."
@@ -827,14 +907,20 @@ async def verify_api_key(provider_id_or_name: str, api_key: str | dict, base_url
                     raise RuntimeError(reason or "Model not available")
                 asr_passed = True
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.SUCCESS.value
-            except Exception as e:
-                logging.exception(
-                    "Fail to access ASR model for provider=%s model=%s",
-                    provider_name,
-                    llm["llm_name"],
-                )
+            except TimeoutError:
                 model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
-                msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
+                msg += f"\nVerification timed out after {timeout_seconds} seconds for ASR model({llm['llm_name']})."
+            except Exception as e:
+                model_verify_result[llm["llm_name"]] = ModelVerifyStatusEnum.FAIL.value
+                if _is_timeout_error(e):
+                    msg += f"\nVerification timed out after {timeout_seconds} seconds for ASR model({llm['llm_name']})."
+                else:
+                    logging.exception(
+                        "Fail to access ASR model for provider=%s model=%s",
+                        provider_name,
+                        llm["llm_name"],
+                    )
+                    msg += f"\nFail to access model({provider_name}/{llm['llm_name']})." + str(e)
         if any([embd_passed, chat_passed, rerank_passed, ocr_passed, tts_passed, vlm_passed, asr_passed]):
             msg = ""
             break
