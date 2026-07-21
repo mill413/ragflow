@@ -18,7 +18,7 @@ ingestion pipeline 是把一份 DSL 编译成 eino 图后完整执行（`Pipelin
 
 > cross-cutting concerns belong in the framework body (`realComponentBody`), not inside each component's `Invoke`.
 
-即 progress / resume 不应回到 `Parser` 等组件内部（否则每个组件都依赖 `dao`，且违反单一闸口原则）。
+即 progress / resume 不应回到 `Parser` 等组件之中（否则每个组件都依赖 `dao`，且违反单一闸口原则）。
 
 ---
 
@@ -71,23 +71,23 @@ ingestion pipeline 是把一份 DSL 编译成 eino 图后完整执行（`Pipelin
 compiled, err := canvas.Compile(ctx, p.canvas,
     canvas.WithCheckPointStore(dao.NewRedisCheckPointStore(ttl)), // 复用 checkpoint_store.go
     canvas.WithStateSerializer(canvas.CanvasStateSerializer{}),  // state_serializer.go（JSON）
-    canvas.WithInterruptAfterNonTerminalCpn(),                  // 无参；canvas.Compile 内部算出非终态节点并 interrupt
+    canvas.WithInterruptAfterNonTerminalCpn(),                  // 无参；canvas.Compile 自行算出非终态节点并 interrupt
     canvas.WithCheckPointID(p.taskID),                           // 稳定 id = taskID（需新增选项，见 §6）
 )
 ```
 
-- `WithInterruptAfterNonTerminalCpn()`（**无参**，用户建议）：调用方不再需要计算 / 传入 `nonTerminalCpnIDs`。`canvas.Compile` 在内部直接根据 `Canvas` 结构算出「非终态节点 id」（见 §4.1.a），并对它们注册 `WithInterruptAfterNodes`。这样接线从调用方下沉到 `Compile`，避免「算错集合 / 传 allCpnIDs」类错误（见 §4.1.a），也让 `UserFillUp` 排除（§4.2.b）由同一处统一处理。
+- `WithInterruptAfterNonTerminalCpn()`（**无参**，用户建议）：调用方不再需要计算 / 传入 `nonTerminalCpnIDs`。`canvas.Compile` 直接根据 `Canvas` 结构算出「非终态节点 id」（见 §4.1.a），并对它们注册 `WithInterruptAfterNodes`。这样接线从调用方下沉到 `Compile`，避免「算错集合 / 传 allCpnIDs」类错误（见 §4.1.a），也让 `UserFillUp` 排除（§4.2.b）由同一处统一处理。
 
 #### 4.1.a 为什么不能用 `allCpnIDs`（用户发现 2）
 `WithInterruptAfter(allCpnIDs)` 会在**每个**节点（含终态/输出节点）执行后再插入一次 eino interrupt。终态节点的 `Invoke` 返回即代表整图完成；若把它纳入，eino 会在它执行后再 pause 一次，导致 orchestrator 多一轮无意义的 `ResumeWithData` 才真正结束，且可能让 `Invoke` 返回 interrupt 错误而非完成结果，打乱 §4.2 的 `err==nil → break` 判定。
 
-正确做法：**只对「有下游」的非终态节点 interrupt**；终态节点正常退出 → `err==nil` → 循环 break，整图一次完成。该集合由 `canvas.Compile` 内部计算（出度 > 0 的中间节点 = `Canvas.Components` 中不是 `Canvas.Outputs` 的节点），调用方用无参 `WithInterruptAfterNonTerminalCpn()` 即可，无需也无法传错集合。
+正确做法：**只对「有下游」的非终态节点 interrupt**；终态节点正常退出 → `err==nil` → 循环 break，整图一次完成。该集合由 `canvas.Compile` 自行计算（出度 > 0 的中间节点 = `Canvas.Components` 中不是 `Canvas.Outputs` 的节点），调用方用无参 `WithInterruptAfterNonTerminalCpn()` 即可，无需也无法传错集合。
 - `WithCheckPointID`：目前 `CompileOptions` **没有**该字段，需新增（映射 `compose.WithCheckPointID`），使 checkpoint key 稳定为 `agent:cp:{taskID}`，重跑同一个 task 才命中同一份 checkpoint。
 
 ### 4.2 运行期：进程内循环 + 跨进程恢复（统一在 `Pipeline.Run`）
 
 ```go
-// Pipeline.Run 内部
+// Pipeline.Run 执行过程
 for {
     // 崩溃恢复优先（用户建议）：每轮首要动作先判断是否有遗留中断。
     // 上一进程在「命中 interrupt → 持久化 interrupt id」之后、消费它之前崩溃，
@@ -122,7 +122,7 @@ ingestion 当前无交互节点，但若将来 DSL 增加 `UserFillUp`（如人�
 - **方案 A（推荐，编译期禁止）**：`canvas.Compile` 增加 `InterruptAfterNonTerminalCpn` 与 `UserFillUp` 的互斥校验——ingestion 走该选项时，若 DSL 含 `UserFillUp` 节点直接编译失败，返回明确错误。
 - **方案 B（运行期过滤）**：`canvas.Compile` 在计算 `nonTerminalCpnIDs`（供 `WithInterruptAfterNonTerminalCpn` 使用）时显式剔除 `UserFillUp` 类节点，且不对其注册 after-node interrupt；其余节点的 interrupt 才走续跑路径。
 
-**共存原理（Question：`WithInterruptAfter` 与用户导致的 interrupt 能否共存？）**：两者都是 eino 的**同一套 interrupt 原语**，仅靠 **interrupt id** 区分，由 `IsInterruptError` 统一捕获、`ExtractInterruptContexts` / `RootInterruptID` 取出对应 id。`WithInterruptAfterNodes` 是「编排级」pause（节点跑完由框架插入，resume 传 `nil`）；`compose.Interrupt`（UserFillUp 内部调用）是「节点级」pause（节点自己发令、等待用户数据，resume 传用户数据）。它们**可以共存于同一图**——只要同一个节点不被两种机制重复注册。ingestion 通过 §4.2.b 把 UserFillUp 排除出 `nonTerminalCpnIDs`，使其仅保留自身 `compose.Interrupt` 作为该节点的唯一 interrupt 源；其余节点走 after-node interrupt。该共存行为需在 eino v0.9.12 上 spike 确认（见新增 R7），但原理上无冲突。
+**共存原理（Question：`WithInterruptAfter` 与用户导致的 interrupt 能否共存？）**：两者都是 eino 的**同一套 interrupt 原语**，仅靠 **interrupt id** 区分，由 `IsInterruptError` 统一捕获、`ExtractInterruptContexts` / `RootInterruptID` 取出对应 id。`WithInterruptAfterNodes` 是「编排级」pause（节点跑完由框架插入，resume 传 `nil`）；`compose.Interrupt`（由 UserFillUp 调用）是「节点级」pause（节点自己发令、等待用户数据，resume 传用户数据）。它们**可以共存于同一图**——只要同一个节点不被两种机制重复注册。ingestion 通过 §4.2.b 把 UserFillUp 排除出 `nonTerminalCpnIDs`，使其仅保留自身 `compose.Interrupt` 作为该节点的唯一 interrupt 源；其余节点走 after-node interrupt。该共存行为需在 eino v0.9.12 上 spike 确认（见新增 R7），但原理上无冲突。
 
 本期 ingestion DSL 保证无 `UserFillUp`，两条守卫任选其一落地即可消除 R6 歧义。
 
@@ -260,7 +260,7 @@ type pipelineProgressEvent struct {
 
 ### 6.b R3 不通过的回退（M2）
 若 eino v0.9.12 不支持「全图 interrupt-after-node + ResumeWithData」：
-- 降级为「**只在 DAG 节点上 interrupt**」（Loop/Parallel 内部不 interrupt，整段作为原子单元），或
+- 降级为「**只在 DAG 节点上 interrupt**」（Loop/Parallel 中不 interrupt，整段作为原子单元），或
 - 回退到路线 A 的**轻量版**（仅 progress/log，无 resume）。
 
 > ✅ **R3 已于 2026-07-09 通过**（见 §6 R3 行 + `internal/agent/workflowx/r3_interrupt_test.go`），M2 回退路径**当前不需要**；§8 第 3 步的 resume 循环可按原计划安全推进。
@@ -272,7 +272,7 @@ type pipelineProgressEvent struct {
 **续跑走 B，观测走轻量 task_log**：
 
 1. `ProgressCallback` 升级为结构化事件（序号 + 进入/退出 + 退出带输出），`taskLogProgressCallback` 写轻量 `ingestion_task_log`（sink 不存全量 output，见 §5.3）。
-2. `Pipeline.Run` 接 eino interrupt/checkpoint：编译期 `WithInterruptAfterNonTerminalCpn()`（无参）+ `WithCheckPointStore` + `WithCheckPointID(taskID)`；运行期内部 resume 循环（循环顶部先判断遗留中断并恢复）；`RunTracker` 状态机驱动跨调用恢复与失效。
+2. `Pipeline.Run` 接 eino interrupt/checkpoint：编译期 `WithInterruptAfterNonTerminalCpn()`（无参）+ `WithCheckPointStore` + `WithCheckPointID(taskID)`；运行期执行 resume 循环（循环顶部先判断遗留中断并恢复）；`RunTracker` 状态机驱动跨调用恢复与失效。
 3. 组件（`Parser` 等）**完全不改**、不依赖 `dao`；续跑由框架闸口 + Redis checkpoint 统一负责。
 
 理由：B 复用仓库已建好的 eino 底座（功能完整，仅缺 ingest 用持久化），最省事且对图拓扑正确性最稳；A 的「自研缓存 + 闸口跳过」仅在「无 Redis、必须 DB 无关」的极端约束下才值得。
@@ -309,7 +309,7 @@ type pipelineProgressEvent struct {
      - `CompileOptions` 新增 `CheckPointID string` 字段 + `WithCheckPointID(id)` 选项（仅把 id 记到选项里）；
      - `Compile` 把 `cfg.CheckPointID` 存进返回的 `CompiledCanvas.CheckPointID`（该字段早已存在却从未赋值）；
      - **运行期接线（真正的 `compose.WithCheckPointID`）留到 step 3**：`pipeline.go` 在 `compiled.Workflow.Invoke(runCtx, current, compose.WithCheckPointID(compiled.CheckPointID))` 时传。service 层 `agent.go:1041` 早已自行维护 `cpID=runID` 并 `compose.WithCheckPointID(cpID)`，不受本改动影响（它不读 `compiled.CheckPointID`）。
-   - **无参 `WithInterruptAfterNonTerminalCpn()`（建议1）已实现**：`CompileOptions` 新增 `InterruptAfterNonTerminal bool` + 无参 `WithInterruptAfterNonTerminalCpn()`；`Compile` 内部调用 `computeNonTerminalCpnIDs(c)` 算出「出度>0 的中间节点」（非终态），与调用方传入的 `InterruptAfter` 合并去重后统一 `compose.WithInterruptAfterNodes(...)`。选择规则：**排除终态节点**（无 `Downstream`，避免 Invoke 返回 interrupt 而非完成、并省一轮无意义 ResumeWithData）、**排除 `UserFillUp` 节点**（§4.2.b，它自带 `compose.Interrupt`，不与之重复注册）。`Canvas` 无 `Outputs` 字段，故「非终态」以 `len(Downstream)>0` 为准（与 §4.1.a 出度>0 等价）。
+   - **无参 `WithInterruptAfterNonTerminalCpn()`（建议1）已实现**：`CompileOptions` 新增 `InterruptAfterNonTerminal bool` + 无参 `WithInterruptAfterNonTerminalCpn()`；`Compile` 调用 `computeNonTerminalCpnIDs(c)` 算出「出度>0 的中间节点」（非终态），与调用方传入的 `InterruptAfter` 合并去重后统一 `compose.WithInterruptAfterNodes(...)`。选择规则：**排除终态节点**（无 `Downstream`，避免 Invoke 返回 interrupt 而非完成、并省一轮无意义 ResumeWithData）、**排除 `UserFillUp` 节点**（§4.2.b，它自带 `compose.Interrupt`，不与之重复注册）。`Canvas` 无 `Outputs` 字段，故「非终态」以 `len(Downstream)>0` 为准（与 §4.1.a 出度>0 等价）。
    - **⚠️ 接线约束**：`WithInterruptAfterNonTerminalCpn()` 一旦被 `pipeline.go` 调用而**尚无 step 3 的 resume 循环**，`Invoke` 会在第一个非终态节点暂停并返回 interrupt 错误，直接破坏 ingestion。故 step 2 **只动 `compile.go` + 单测**，`pipeline.go` 的真正接线（compile 选项 + `Invoke` 传 `compose.WithCheckPointID` + resume 循环）整体归入 **step 3**（R3 gate 之后）。
    - **单测**：`compile_test.go` 新增 `TestWithCheckPointID_OptionSetsField`、`TestWithInterruptAfterNonTerminalCpn_OptionSetsField`、`TestComputeNonTerminalCpnIDs`（断言 `n1,n2` 命中、`n3/n4` 终态排除、`uf` UserFillUp 排除）、`TestCompile_PropagatesCheckPointID`（编译成功则断言 `CompiledCanvas.CheckPointID==task-9`，编译失败则 skip，与现有 compile_test 忽略编译错误的约定一致）。
 
@@ -345,7 +345,7 @@ type pipelineProgressEvent struct {
     - 6 个文件全部在 `agent runtime / canvas / ingestion` 内，**无 SDK / 外部调用方** → 第 1 步无需对外征询（用户发现 2 担心的「先通知外部」仅当存在外部调用方才需，本次不存在）。
     - 真正工作量在 `helpers_test.go` 的 14 处测试回归 + 8 处生产调用方改造；采用 §8 第 1b 步的向后兼容适配器降低风险。
   - `internal/agent/canvas/node_body.go`（发结构化事件；`node_body.go:187` 把 `TrackProgress` 第一参数由 `componentClass` 改为 `cpnID`，见 §5.1）。
-  - `internal/agent/canvas/compile.go`（加 `CheckPointID` 选项 + `WithCheckPointID`；新增**无参** `WithInterruptAfterNonTerminalCpn()` —— `Compile` 内部计算非终态节点 id（出度>0，§4.1.a）并对它们注册 `WithInterruptAfterNodes`，同时按 §4.2.b 排除 `UserFillUp` 节点 / 或与其互斥校验）。
+  - `internal/agent/canvas/compile.go`（加 `CheckPointID` 选项 + `WithCheckPointID`；新增**无参** `WithInterruptAfterNonTerminalCpn()` —— `Compile` 自行计算非终态节点 id（出度>0，§4.1.a）并对它们注册 `WithInterruptAfterNodes`，同时按 §4.2.b 排除 `UserFillUp` 节点 / 或与其互斥校验）。
   - `internal/agent/canvas/run_tracker.go`（新增 `AttachInterrupt` / `GetInterruptID` / `ClearInterruptID`，同 hash 字段）。
   - `internal/ingestion/pipeline/pipeline.go`（`Run` resume 循环——**循环顶部先 `GetInterruptID` 恢复崩溃遗留中断**、命中后 `AttachInterrupt` 持久化；升级 `taskLogProgressCallback` + `ComponentIndexMap` 注入，§4.2/§5.1；`UserFillUp` 过滤已下沉到 `compile.go`，此处不再计算 `nonTerminalCpnIDs`，§4.2.b）。
   - `internal/dao`（新增 `IngestionTaskLogDAO` 结构化写入方法 / schema 迁移，S1）。
@@ -376,7 +376,7 @@ type pipelineProgressEvent struct {
 | 发现2 | `helpers.go` 影响面实为 42 处匹配（6 文件），非「少量」 | — | §9 以全仓 grep 复核：生产可执行调用方仅 pipeline.go+node_body.go(8)；file.go/tokenizer.go 仅 doc；helpers_test.go 14 为测试回归主成本；无外部调用方；§8 第 1 步加 1a 影响面清点 + 1b 向后兼容渐进迁移 |
 | 问答1 | `WithInterruptAfter` 与 UserFillUp 的 interrupt 能否共存 | — | §4.2.b 新增「共存原理」：同一 eino interrupt 原语按 id 区分，不重复注册同一节点即可共存；ingestion 排除 UserFillUp 出 nonTerminalCpnIDs；新增 R7 spike |
 | 问答2 | `WithInterruptAfter` 不应传 allCpnIDs | — | §4.1 改为 `nonTerminalCpnIDs`（出度>0 的中间节点），新增 §4.1.a 解释终态节点不应 interrupt 的原因 |
-| 建议1 | `WithInterruptAfter(nonTerminalCpnIDs)` 参数化 → 无参 | — | §4.1 / §4.1.a 改为无参 `WithInterruptAfterNonTerminalCpn()`；`Canvas.Components` 出度>0 的节点集合由 `canvas.Compile` **内部**计算，调用方无需也不能传错；`UserFillUp` 排除（§4.2.b）一并下沉到 `Compile`。§7/§8-3/§9 同步更新 |
+| 建议1 | `WithInterruptAfter(nonTerminalCpnIDs)` 参数化 → 无参 | — | §4.1 / §4.1.a 改为无参 `WithInterruptAfterNonTerminalCpn()`；`Canvas.Components` 出度>0 的节点集合由 `canvas.Compile` **自行**计算，调用方无需也不能传错；`UserFillUp` 排除（§4.2.b）一并下沉到 `Compile`。§7/§8-3/§9 同步更新 |
 | 建议2 | `Pipeline.Run` 的 for 循环应先判断 interrupt 是否存在 | — | §4.2 循环顶部新增「`GetInterruptID` 读遗留中断 → `ResumeWithData` 恢复 → `ClearInterruptID`」作为每轮首要动作；底部命中 interrupt 只 `AttachInterrupt` 持久化、不内联 resume（避免同一 ctx 重复 resume）。§4.3 状态机只做 keep/delete，`running` 的恢复入口收敛到循环顶部一处，杜绝与 §4.2 两处 resume 漂移 |
 | 决策 | 选择路线 B | — | 路线 B（eino interrupt-after-node + Redis checkpoint）正式定为方案；§5/§8 的 progress 改进对 B 同样必做（原本标注 A/B 兼容，现仅服务于 B） |
 | 决策 | `ProgressEvent` 不再存储 `Output` | — | §5 开头、`§5.1` 类型定义、`§5.3` 落库策略、`§8 第1c 步` 全部改为事件与 sink **均不携带/不落库 Output**；理由：resume 由 eino checkpoint 负责，progress 仅观测，不需要 output（同时彻底消解原 M5 矛盾） |
@@ -384,7 +384,7 @@ type pipelineProgressEvent struct {
 | 决策 | schema 与前端取数契约（Q2/Q3） | — | §8 第0步补：沿用 `ingestion_task_log` 表、`checkpoint` JSON 改为 `{index,phase,component,message}`；`ingestion_task` 新增加法列 `component_total`；新增 `GET .../logs`（`id ASC`）+ `GET .../progress`（`{total,done,failed,running,percent,status}` 服务端聚合）端点契约 |
 | 决策 | `ingestion_task_log.checkpoint` 拆成独立列 | — | §8 第0步 / §5.3 / §8-1c：`checkpoint` LONGTEXT(JSON) 按 key 拆为 `component_index`(INT) / `phase`(TINYINT) / `component`(VARCHAR,建议索引) / `message`(TEXT) 四列，删除 `checkpoint` 列；`AggregateProgress` 改为纯 SQL `GROUP BY phase,component`（无需解析 JSON）；旧 `Create`(写 JSONMap) 路径废弃，无需 `CreateStructured` 双写 |
 | 决策 | §8 第1步 结构化 progress 事件（干净硬切，非渐进迁移） | — | §8 第1步 / §5.1：`ProgressCallback` 改为 `func(ProgressEvent)`（新增 `ProgressPhase` 枚举 0/1/2 + `ProgressEvent{Phase,Component,Err}`，不携带 Output/时间戳）；`TrackProgress(cpnID,cb,fn)` 发 enter/exit/error 事件；`node_body.go` 第一参数 `componentClass`→`cpnID`；`pipeline.go` sink 消费 `ProgressEvent` 并由 `componentIndexMap()`（排序 cpnID 确定性序号）填 `ComponentIndex`+写 `Component`/`Phase`；未保留 1b 适配器（按 AGENTS.md 单路径原则）；`AggregateProgress` 的 `GROUP BY component` 在 1c 后已生效 |
-| 决策 | §8 第2步 `CompileOptions.CheckPointID` + 无参 `WithInterruptAfterNonTerminalCpn()` | — | §8 第2步 / §4.1.a / §4.2.b：①**API 事实修正**——`compose.WithCheckPointID` 是运行期 `compose.Option`（非 `GraphCompileOption`），无法在 `Compile` 内直接 append；故 `WithCheckPointID(id)` 仅记到 `CompileOptions.CheckPointID`，`Compile` 存进 `CompiledCanvas.CheckPointID`，**真正 `compose.WithCheckPointID` 在 `Invoke` 侧接线留 step 3**；service 层 `agent.go:1041` 自行维护 `cpID=runID`，不受影响。②无参 `WithInterruptAfterNonTerminalCpn()` → `Compile` 内部 `computeNonTerminalCpnIDs(c)` 算「出度>0 的中间节点」（排除终态与 `UserFillUp`），与调用方 `InterruptAfter` 合并去重后统一 `compose.WithInterruptAfterNodes`。③**接线约束**：该选项未接入 `pipeline.go`（无 step 3 resume 循环会破坏 ingestion），整体接线归 step 3。④单测覆盖选项 setter + `computeNonTerminalCpnIDs` + 容错传播 |
+| 决策 | §8 第2步 `CompileOptions.CheckPointID` + 无参 `WithInterruptAfterNonTerminalCpn()` | — | §8 第2步 / §4.1.a / §4.2.b：①**API 事实修正**——`compose.WithCheckPointID` 是运行期 `compose.Option`（非 `GraphCompileOption`），无法在 `Compile` 中直接 append；故 `WithCheckPointID(id)` 仅记到 `CompileOptions.CheckPointID`，`Compile` 存进 `CompiledCanvas.CheckPointID`，**真正 `compose.WithCheckPointID` 在 `Invoke` 侧接线留 step 3**；service 层 `agent.go:1041` 自行维护 `cpID=runID`，不受影响。②无参 `WithInterruptAfterNonTerminalCpn()` → `Compile` 调用 `computeNonTerminalCpnIDs(c)` 算「出度>0 的中间节点」（排除终态与 `UserFillUp`），与调用方 `InterruptAfter` 合并去重后统一 `compose.WithInterruptAfterNodes`。③**接线约束**：该选项未接入 `pipeline.go`（无 step 3 resume 循环会破坏 ingestion），整体接线归 step 3。④单测覆盖选项 setter + `computeNonTerminalCpnIDs` + 容错传播 |
 | 决策 | §6 R3 spike 结论（P0 gate 已通过） | — | R3 / DAG+Loop+Parallel / `WithInterruptAfterNodes`+`ResumeWithData`：①新增 `internal/agent/workflowx/r3_interrupt_test.go` 五个 eino 集成用例（DAG 链 A→B→C、`A→loop(B→C)→D` 中断在 A、`A→loop→D` 中断在 loop 节点本身、`A→parallel(B)→D`、以及跨进程「重编译图+同 CheckPointID」恢复），全部 `bash build.sh --test ./internal/agent/workflowx/...` 通过（2026-07-09）；②核心结论：已完成的节点 resume 后**不重跑**（节点 counter 恒为 1），Loop/Parallel 正确重入或跳过，**无需 M2 回退**，§8 第 3 步按原计划推进；③关键实现约束：after-node interrupt 仅在**有状态图**（`WithGenLocalState`，与 `canvas.BuildWorkflow`/`CanvasState` 一致）下才被包成 `*interruptError` 并被 `ExtractInterruptInfo` 识别；无状态图返回裸 `*core.InterruptSignal`（`ExtractInterruptInfo`→nil）。自定义 state 类型须 `compose.RegisterSerializableType[T]`（仿 `runtime.CanvasState`），否则 checkpoint marshal 报 `unknown type` |
 | 决策 | §8 第3步+第4步（M3）实现：Pipeline.Run resume 循环 + interrupt id 持久化 | — | ①`internal/ingestion/pipeline/pipeline.go`：`Run` 改为 `resolveStore()`/`resolveTracker()`（注入优先，否则 `redis.Get()` 解析）→ 有 store 才进 resumable 路径（编译接 `WithCheckPointStore`+`WithCheckPointID(p.taskID)`+`WithInterruptAfterNonTerminalCpn()`），`for` 循环（`maxResumeRounds=1000`）顶部恢复中断（RunTracker `GetInterruptID` 跨进程 > `localInterruptID` 进程内兜底），命中仅 `AttachInterrupt` 持久化、下轮顶部 `ResumeWithData` 恢复（不内联 resume）；`RunTracker.Start/MarkSucceeded/MarkFailed/MarkCancelled` 接入；`cancelled` 分支按 §4.3.b 调 `cleanupCheckpoint` 删 eino checkpoint+`ClearInterruptID`；无 store 降级 `runPlain` 单次 Invoke；`NewPipelineFromDSL` 加 `...PipelineOption`（`WithCheckPointStore`/`WithRunTracker` 注入）。②`internal/agent/canvas/run_tracker.go` 加 `AttachInterrupt/GetInterruptID/ClearInterruptID`（同 hash `interrupt_id` 字段）。③测试：`pipeline_test.go` 加 `TestPipelineRunResumableAutoResumes`（注入 in-memory store，断言每节点恰好执行 1 次）；`bash build.sh --test ./internal/ingestion/pipeline/... ./internal/agent/canvas/...` 全绿（2026-07-09） |
 | 决策 | §8 第5步（M4+S3）实现：可见降级 + UserFillUp 守卫 | — | ①**M4（§6.a 方案 A 可见拒绝）**：`internal/ingestion/pipeline/pipeline.go` 加 `requireResume bool` 字段 + `WithRequireResume()` 选项 + `var ErrResumeUnavailable = errors.New("resume unavailable: no checkpoint store (Redis down or not configured)")` sentinel；`Run` 在 `resolveStore()` 后、`Compile` 前检查 `requireResume && store==nil` → 返回 `fmt.Errorf("pipeline: Run: %w", ErrResumeUnavailable)`，由调用方 `errors.Is` 识别并拒绝入队（而非静默 `runPlain`）。默认不置 `requireResume` 保持静默降级（覆盖无 Redis 的单元/headless 测试）；生产 ingestion 接线时启用 `WithRequireResume()` 即「Redis 不可用 → 拒绝启动」强信号。②**S3（§4.2.b 方案 A 编译期硬拒）**：`internal/agent/canvas/compile.go` 在 `BuildWorkflow` 前加护栏——`cfg.InterruptAfterNonTerminal && len(AutoDiscoverUserFillUpIDs(c))>0` → 返回 `"...WithInterruptAfterNonTerminalCpn forbids UserFillUp nodes ... would be mis-resumed with nil data"`；理由：`UserFillUp` 自发包 `compose.Interrupt`，`runResumable` 全捕获并以 `nil` 续跑会静默跳过人工交互，硬拒不使其发生；与 step 2 的 `computeNonTerminalCpnIDs` 过滤（方案 B）构成双层守卫。③测试：`pipeline_test.go` 加 `TestPipelineRun_RequireResumeRejectsWithoutStore`；`compile_test.go` 加 `TestCompile_RejectsUserFillUpInResumeMode`；`bash build.sh --test ./internal/ingestion/pipeline/... ./internal/agent/canvas/...` 全绿（2026-07-09） |

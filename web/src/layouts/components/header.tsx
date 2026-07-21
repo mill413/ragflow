@@ -178,9 +178,7 @@ export function Header({
                 variant="ghost"
                 size="icon"
                 className="size-8"
-                to="https://ragflow.io/docs/dev/category/user-guides"
-                target="_blank"
-                rel="noreferrer noopener"
+                to={Routes.Help}
                 aria-label={t('header.help')}
                 data-onboarding-target="help"
               >
