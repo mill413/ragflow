@@ -25,7 +25,6 @@ from api.db.services.document_service import DocumentService
 from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.knowledgebase_service import KnowledgebaseService
-from api.db.services.langfuse_service import TenantLangfuseService
 from api.db.services.file_service import FileService
 from api.db.services.mcp_server_service import MCPServerService
 from api.db.services.search_service import SearchService
@@ -199,11 +198,6 @@ def delete_user_data(user_id: str) -> dict:
                 # step1.1.7 delete search
                 search_delete_res = SearchService.delete_by_tenant_id(usr.id)
                 done_msg += f"- Deleted {search_delete_res} search records.\n"
-            # step1.2 delete tenant_langfuse
-            # llm_delete_res = TenantLLMService.delete_by_tenant_id(tenant_id)
-            # done_msg += f"- Deleted {llm_delete_res} tenant-LLM records.\n"
-            langfuse_delete_res = TenantLangfuseService.delete_ty_tenant_id(tenant_id)
-            done_msg += f"- Deleted {langfuse_delete_res} langfuse records.\n"
             try:
                 metadata_index_name = DocMetadataService._get_doc_meta_index_name(tenant_id)
                 settings.docStoreConn.delete_idx(metadata_index_name, "")

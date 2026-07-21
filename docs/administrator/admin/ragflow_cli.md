@@ -352,7 +352,6 @@ Drop user: example@ragflow.io
 Successfully deleted user. Details:
 Start to delete owned tenant.
 - Deleted 2 tenant-LLM records.
-- Deleted 0 langfuse records.
 - Deleted 1 tenant.
 - Deleted 1 user-tenant records.
 - Deleted 1 user.

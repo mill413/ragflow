@@ -101,7 +101,6 @@ Released on June 17, 2026.
 
 - **Model providers**: Allows users to modify the model type of existing model configurations. [#16029](https://github.com/infiniflow/ragflow/pull/16029)
 - **Chat channels**: Enables users to deploy RAGFlow assistants as chatbots within external messaging platforms like Discord and Feishu. [#15850](https://github.com/infiniflow/ragflow/pull/15850)
-- **Observability**: Groups multi-turn chat traces by session within Langfuse to facilitate conversation debugging and replay. [#15679](https://github.com/infiniflow/ragflow/pull/15679)
 
 ### i18n
 
@@ -225,7 +224,6 @@ Released on May 20, 2026.
 - Agent: top_k passing issues [#14760](https://github.com/infiniflow/ragflow/pull/14760)
 - Chat file attachment loss. [#13993](https://github.com/infiniflow/ragflow/pull/13993)
 - IMAP synchronization process crashed when multiple email addresses or quoted commas were detected in "From" header. [#14963](https://github.com/infiniflow/ragflow/issues/14963)[#14964](https://github.com/infiniflow/ragflow/issues/14964)[#15006](https://github.com/infiniflow/ragflow/pull/15006)
-- Langfuse integration failed to track token consumption. [#9837](https://github.com/infiniflow/ragflow/issues/9837)[#13294](https://github.com/infiniflow/ragflow/pull/13294)
 - Enhances the stability and fault tolerance of the reranking module by implementing network timeouts, crash-prevention safeguards, and specific provider bug fixes. [#14264](https://github.com/infiniflow/ragflow/pull/14264)
 - Increases minimum supported Nginx to 1.31.0. [#14928](https://github.com/infiniflow/ragflow/issues/14928)[#15007](https://github.com/infiniflow/ragflow/pull/15007)
 

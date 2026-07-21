@@ -278,7 +278,6 @@ export default {
   createSystemToken: `${restAPIv1}/system/tokens`,
   removeSystemToken: `${restAPIv1}/system/tokens`,
   getSystemConfig: `${restAPIv1}/system/config`,
-  setLangfuseConfig: `${restAPIv1}/langfuse/api-key`,
 
   // flow
   listAgentTemplate: `${restAPIv1}/agents/templates`,

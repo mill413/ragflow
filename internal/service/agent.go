@@ -1052,7 +1052,7 @@ func (s *AgentService) buildRunFunc(canvasID string, versionRow *entity.UserCanv
 		// Install a per-run token usage sink so every LLM call inside
 		// this turn records its token usage (the sink is read at the end
 		// and emitted in workflow_finished). Mirrors Python's
-		// Canvas.run() installing token_usage_sink + langfuse_run_attrs.
+		// Canvas.run() installing token_usage_sink.
 		ctx = tokenizer.WithRunUsage(ctx)
 
 		// Extract the event channel + metadata injected by Runner.Run.
@@ -1060,15 +1060,6 @@ func (s *AgentService) buildRunFunc(canvasID string, versionRow *entity.UserCanv
 		messageID, _ := root["__message_id__"].(string)
 		taskID, _ := root["__task_id__"].(string)
 		sessionID, _ := root["__session_id__"].(string)
-		userID, _ := root["user_id"].(string)
-
-		// Install per-run Langfuse correlation attrs so LLM calls inside
-		// this turn are grouped by session/user. Mirrors Python's
-		// Canvas.run() setting langfuse_run_attrs.
-		ctx = tokenizer.WithRunAttrs(ctx, &tokenizer.RunAttrs{
-			SessionID: sessionID,
-			UserID:    userID,
-		})
 
 		// Helper to build an SSE event with metadata.
 		emit := func(typ, data string) {

@@ -6,7 +6,7 @@ on:
       - release
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -22,13 +22,22 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v6
 
-      - name: Set image name
+      - name: Set release metadata
         shell: bash
-        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> "${GITHUB_ENV}"
-
-      - name: Set build version metadata
-        shell: bash
-        run: echo "GIT_COMMIT=${GITHUB_SHA::9}" >> "${GITHUB_ENV}"
+        run: |
+          RAGFLOW_VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1)"
+          GIT_COMMIT="${GITHUB_SHA::9}"
+          if [[ -z "${RAGFLOW_VERSION}" ]]; then
+            echo "Unable to read the RAGFlow version from pyproject.toml" >&2
+            exit 1
+          fi
+          {
+            echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "GIT_COMMIT=${GIT_COMMIT}"
+            echo "RELEASE_VERSION=${RAGFLOW_VERSION}.${GIT_COMMIT}"
+            echo "RELEASE_TAG=v${RAGFLOW_VERSION}.${GIT_COMMIT}"
+            echo "IMAGE_ARCHIVE=ragflow-${RAGFLOW_VERSION}.${GIT_COMMIT}.tar.gz"
+          } >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,7 +56,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
-            type=sha,prefix=sha-
+            type=raw,value=${{ env.RELEASE_VERSION }}
 
       - name: Build and publish image
         uses: docker/build-push-action@v6
@@ -61,3 +70,28 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Export image archive
+        shell: bash
+        run: |
+          docker pull "${IMAGE_NAME}:${RELEASE_VERSION}"
+          docker save "${IMAGE_NAME}:${RELEASE_VERSION}" | gzip -1 > "${IMAGE_ARCHIVE}"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" \
+              "${IMAGE_ARCHIVE}" \
+              --clobber
+            gh release edit "${RELEASE_TAG}" --latest
+          else
+            gh release create "${RELEASE_TAG}" \
+              "${IMAGE_ARCHIVE}" \
+              --target "${GITHUB_SHA}" \
+              --title "RAGFlow ${RELEASE_VERSION}" \
+              --notes "Docker image: ${IMAGE_NAME}:${RELEASE_VERSION}" \
+              --latest
+          fi

@@ -28,7 +28,7 @@ import (
 // recordUsageFromResponse records one chat call's token usage to both
 // cm.LastUsage and the context-level run sink (if installed). Callers
 // should invoke this after each ChatWithMessages / ChatStreamlyWithSender
-// call so the canvas-layer aggregator and Langfuse both see the split.
+// call so the canvas-layer aggregator sees the split.
 func recordUsageFromResponse(ctx context.Context, cm *ChatModel) {
 	if cm == nil {
 		return

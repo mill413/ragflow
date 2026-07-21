@@ -29,7 +29,6 @@ type Phase string
 
 const (
 	PhaseCheckLLM        Phase = "check_llm"
-	PhaseCheckLangfuse   Phase = "check_langfuse"
 	PhaseBindModels      Phase = "bind_models"
 	PhaseQueryRefinement Phase = "query_refinement"
 	PhaseRetrieval       Phase = "retrieval"
@@ -39,7 +38,6 @@ const (
 // allPhases ordered for Markdown() display.
 var allPhases = []Phase{
 	PhaseCheckLLM,
-	PhaseCheckLangfuse,
 	PhaseBindModels,
 	PhaseQueryRefinement,
 	PhaseRetrieval,
@@ -153,8 +151,6 @@ func displayName(p Phase) string {
 	switch p {
 	case PhaseCheckLLM:
 		return "Check LLM"
-	case PhaseCheckLangfuse:
-		return "Check Langfuse tracer"
 	case PhaseBindModels:
 		return "Bind models"
 	case PhaseQueryRefinement:

@@ -39,7 +39,7 @@ from common.constants import LLMType
 from common.llm_request_context import set_llm_request_context, reset_llm_request_context
 from common.exceptions import TaskCanceledException
 from common.misc_utils import get_uuid, hash_str2int
-from common.token_utils import token_usage_sink, langfuse_run_attrs
+from common.token_utils import token_usage_sink
 from rag.prompts.generator import chunks_format
 from rag.utils.redis_conn import REDIS_CONN
 from rag.utils.tts_cache import synthesize_with_cache
@@ -431,24 +431,16 @@ class Canvas(Graph):
                     self.globals[k] = ""
 
     async def run(self, **kwargs):
-        # Install a fresh per-run token usage sink and Langfuse correlation context,
-        # and guarantee both are torn down when the run ends (even on early return or
-        # exception) so later LLM calls in the same task never inherit a previous
-        # run's sink or session/user attributes.
+        # Install a fresh per-run token usage sink and guarantee it is torn down
+        # when the run ends so later LLM calls never inherit a previous run's usage.
         self._run_token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0}
-        _lf_attrs = {}
         _user_id = kwargs.get("user_id")
-        if _user_id:
-            _lf_attrs["user_id"] = str(_user_id)[:200]
         _session_id = kwargs.get("session_id") or self._id
-        if _session_id:
-            _lf_attrs["session_id"] = str(_session_id)[:200]
         sink_token = token_usage_sink.set(self._run_token_usage)
-        attrs_token = langfuse_run_attrs.set(_lf_attrs)
         # Forward the originating session/user to upstream LLM providers (as the
         # OpenAI `user` field) for the duration of this run, and reset afterwards so
         # the value never leaks to later calls in the same task. Reuse the same
-        # session/user already derived above so both integrations stay consistent.
+        # session/user already derived above so the request metadata stays consistent.
         _req_ctx_token = set_llm_request_context(
             session_id=_session_id,
             user_id=_user_id,
@@ -464,11 +456,6 @@ class Canvas(Graph):
             except ValueError:
                 logging.debug("Failed to reset token usage ContextVar", exc_info=True)
                 token_usage_sink.set(None)
-            try:
-                langfuse_run_attrs.reset(attrs_token)
-            except ValueError:
-                logging.debug("Failed to reset Langfuse run attributes ContextVar", exc_info=True)
-                langfuse_run_attrs.set(None)
             reset_llm_request_context(_req_ctx_token)
 
     async def _run_impl(self, **kwargs):
@@ -565,7 +552,7 @@ class Canvas(Graph):
                         return
                     # run_in_executor does not carry context variables into the worker
                     # thread; copy the current context so the LLM request context (the
-                    # `user` forwarding), token usage sink, and Langfuse attributes set
+                    # `user` forwarding) and token usage sink set
                     # by run() remain visible to sync components.
                     bound_call = partial(sync_fn, **(call_kwargs or {}))
                     call_ctx = contextvars.copy_context()

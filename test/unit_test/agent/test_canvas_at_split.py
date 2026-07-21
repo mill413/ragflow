@@ -136,7 +136,6 @@ def _load_canvas_module(monkeypatch):
     _stub_module(
         "common.token_utils",
         token_usage_sink=lambda *_a, **_kw: None,
-        langfuse_run_attrs=lambda *_a, **_kw: {},
     )
     _stub_module("common.connection_utils", timeout=lambda *_a, **_kw: lambda fn: fn)
     _stub_module("common.exceptions", TaskCanceledException=type("TaskCanceledException", (Exception,), {}))

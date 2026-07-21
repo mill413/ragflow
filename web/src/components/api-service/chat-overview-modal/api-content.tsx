@@ -1,14 +1,16 @@
 import { useIsDarkTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { useSetModalState, useTranslate } from '@/hooks/common-hooks';
-import { LangfuseCard } from '@/pages/user-setting/setting-model/langfuse';
 import apiDoc from '@parent/docs/references/http_api_reference.md?raw';
 import MarkdownPreview from '@uiw/react-markdown-preview';
 import ChatApiKeyModal from '../chat-api-key-modal';
 import BackendServiceApi from './backend-service-api';
+import { convertMarkdownAdmonitions } from './markdown-admonition';
 import MarkdownToc from './markdown-toc';
 
-const apiDocContent = apiDoc.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+const apiDocContent = convertMarkdownAdmonitions(
+  apiDoc.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ''),
+);
 
 const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
   const { t } = useTranslate('setting');
@@ -55,7 +57,6 @@ const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
           />
         )}
       </section>
-      <LangfuseCard></LangfuseCard>
       {apiKeyVisible && (
         <ChatApiKeyModal
           hideModal={hideApiKeyModal}

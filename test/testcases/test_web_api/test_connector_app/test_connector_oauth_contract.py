@@ -19,7 +19,6 @@ import requests
 from configs import HOST_ADDRESS, VERSION
 
 LLM_API_KEY_URL = f"{HOST_ADDRESS}/{VERSION}/llm/set_api_key"
-LANGFUSE_API_KEY_URL = f"{HOST_ADDRESS}/api/{VERSION}/langfuse/api-key"
 
 pytestmark = pytest.mark.p3
 
@@ -41,21 +40,6 @@ def _assert_unauthorized_response(res, *, allow_405=False):
             f"content_type={content_type}"
         )
     _assert_unauthorized(payload)
-
-
-def test_langfuse_api_key_requires_auth():
-    res = requests.post(LANGFUSE_API_KEY_URL, json={})
-    _assert_unauthorized_response(res)
-
-
-def test_langfuse_api_key_requires_auth_get():
-    res = requests.get(LANGFUSE_API_KEY_URL)
-    _assert_unauthorized_response(res, allow_405=True)
-
-
-def test_langfuse_api_key_requires_auth_put():
-    res = requests.put(LANGFUSE_API_KEY_URL, json={})
-    _assert_unauthorized_response(res, allow_405=True)
 
 
 def test_llm_set_api_key_requires_auth():

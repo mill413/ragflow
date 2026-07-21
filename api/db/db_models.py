@@ -821,19 +821,6 @@ class TenantLLM(DataBaseModel):
         indexes = ((("tenant_id", "llm_factory", "llm_name"), True),)
 
 
-class TenantLangfuse(DataBaseModel):
-    tenant_id = CharField(max_length=32, null=False, primary_key=True)
-    secret_key = CharField(max_length=2048, null=False, help_text="SECRET KEY")
-    public_key = CharField(max_length=2048, null=False, help_text="PUBLIC KEY")
-    host = CharField(max_length=128, null=False, help_text="HOST")
-
-    def __str__(self):
-        return "Langfuse host" + self.host
-
-    class Meta:
-        db_table = "tenant_langfuse"
-
-
 class Knowledgebase(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
     avatar = TextField(null=True, help_text="avatar base64 string")

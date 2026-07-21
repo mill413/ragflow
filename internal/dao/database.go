@@ -131,7 +131,6 @@ func InitDB(migrateDB bool) error {
 		&entity.UserCanvasVersion{},
 		&entity.LLMFactories{},
 		&entity.LLM{},
-		&entity.TenantLangfuse{},
 		&entity.SystemSettings{},
 		&entity.Connector{},
 		&entity.Connector2Kb{},

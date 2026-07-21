@@ -25,7 +25,6 @@
 //
 // This mirrors Python's common.token_utils:
 //   - token_usage_sink ContextVar → context.Context + runUsageKey
-//   - langfuse_run_attrs ContextVar → context.Context + runAttrsKey
 //   - record_run_token_usage() → RecordRunTokenUsage(ctx, ...)
 //   - usage_from_response() → UsageFromMap(raw)
 package tokenizer
@@ -38,7 +37,6 @@ import (
 
 // Context key types — unexported to prevent direct external access.
 type runUsageKeyType struct{}
-type runAttrsKeyType struct{}
 
 // RunUsage is the mutable per-run token usage accumulator installed on
 // the context by the service layer at the start of a canvas turn.
@@ -83,13 +81,6 @@ func (u *RunUsage) Snapshot() (prompt, completion, total, calls int) {
 	return u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.Calls
 }
 
-// RunAttrs holds per-run Langfuse correlating attributes (session_id,
-// user_id) installed on the context by the service layer.
-type RunAttrs struct {
-	SessionID string
-	UserID    string
-}
-
 // WithRunUsage installs a fresh RunUsage sink on ctx. Should be called
 // once at the start of a canvas turn.
 func WithRunUsage(ctx context.Context) context.Context {
@@ -102,24 +93,6 @@ func GetRunUsage(ctx context.Context) *RunUsage {
 	if v := ctx.Value(runUsageKeyType{}); v != nil {
 		if sink, ok := v.(*RunUsage); ok {
 			return sink
-		}
-	}
-	return nil
-}
-
-// WithRunAttrs installs Langfuse correlation attributes on ctx.
-func WithRunAttrs(ctx context.Context, attrs *RunAttrs) context.Context {
-	if attrs == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, runAttrsKeyType{}, attrs)
-}
-
-// GetRunAttrs retrieves the per-run Langfuse attributes from ctx.
-func GetRunAttrs(ctx context.Context) *RunAttrs {
-	if v := ctx.Value(runAttrsKeyType{}); v != nil {
-		if attrs, ok := v.(*RunAttrs); ok {
-			return attrs
 		}
 	}
 	return nil
