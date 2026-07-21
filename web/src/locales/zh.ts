@@ -149,6 +149,22 @@ export default {
       dataset: '知识库',
       memories: '记忆',
       help: '帮助',
+      onboarding: {
+        ariaLabel: '新手引导',
+        progress: '第 {{current}} 步，共 {{total}} 步',
+        workspaceTitle: '切换工作空间',
+        workspaceDescription:
+          '在这里切换全部、个人或团队工作空间，页面内容会随当前选择进行筛选。',
+        helpTitle: '查看帮助文档',
+        helpDescription: '遇到使用问题时，可以从这里打开 RAGFlow 帮助文档。',
+        profileTitle: '进入个人中心',
+        profileDescription:
+          '在个人中心管理个人资料、团队、模型提供商、数据源以及其他工作空间配置。',
+        skip: '跳过引导',
+        previous: '上一步',
+        next: '下一步',
+        finish: '完成',
+      },
     },
     homePage: {
       workspaceQuota: {

@@ -35,6 +35,7 @@ import { DesktopNavbar, MobileNavbar } from './global-navbar';
 import { MobileMenuFooter } from './mobile-menu-footer';
 import ThemeButton from './theme-button';
 import { useHeaderNavLayout } from './use-header-nav-layout';
+import { HeaderOnboardingTour } from './header-onboarding-tour';
 
 import { supportedLanguages } from '@/locales/config';
 import { useWorkspace } from '@/hooks/use-workspace';
@@ -48,9 +49,8 @@ export function Header({
   const { t } = useTranslation();
   const changeLanguage = useChangeLanguage();
 
-  const {
-    data: { language = 'en', avatar, nickname },
-  } = useFetchUserInfo();
+  const { data: userInfo } = useFetchUserInfo();
+  const { language = 'en', avatar, nickname } = userInfo;
 
   const { data: tenantData } = useListTenant();
   const { data: teamInvitations } = useListTeamInvitations();
@@ -122,6 +122,7 @@ export function Header({
           <Select value={workspaceId} onValueChange={setWorkspaceId}>
             <SelectTrigger
               aria-label={t('setting.workspace')}
+              data-onboarding-target="workspace"
               className={cn(
                 'h-9 border-border-default bg-bg-input text-sm',
                 isCompact ? 'w-36' : 'w-48',
@@ -180,6 +181,8 @@ export function Header({
                 to="https://ragflow.io/docs/dev/category/user-guides"
                 target="_blank"
                 rel="noreferrer noopener"
+                aria-label={t('header.help')}
+                data-onboarding-target="help"
               >
                 <LucideCircleHelp className="size-[1em]" />
               </Button>
@@ -197,6 +200,7 @@ export function Header({
               !isCompact && 'ms-3',
             )}
             data-testid="settings-entrypoint"
+            data-onboarding-target="profile"
           >
             <RAGFlowAvatar
               name={nickname}
@@ -238,6 +242,8 @@ export function Header({
           </div>
         </div>
       </div>
+
+      <HeaderOnboardingTour enabled={!isCompact} userId={userInfo.id} />
     </>
   );
 }

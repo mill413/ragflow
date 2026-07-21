@@ -158,6 +158,23 @@ export default {
       dataset: 'Dataset',
       memories: 'Memory',
       help: 'Help',
+      onboarding: {
+        ariaLabel: 'Getting started',
+        progress: 'Step {{current}} of {{total}}',
+        workspaceTitle: 'Switch workspaces',
+        workspaceDescription:
+          'Switch between all, personal, and team workspaces. Page content is filtered by your current selection.',
+        helpTitle: 'Open the help documentation',
+        helpDescription:
+          'Open the RAGFlow documentation here whenever you need help.',
+        profileTitle: 'Open your profile settings',
+        profileDescription:
+          'Manage your profile, teams, model providers, data sources, and other workspace settings here.',
+        skip: 'Skip tour',
+        previous: 'Previous',
+        next: 'Next',
+        finish: 'Finish',
+      },
     },
     homePage: {
       workspaceQuota: {
