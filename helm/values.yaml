@@ -9,40 +9,45 @@ global:
   repo: ""
   # Global image pull secrets for all pods
   imagePullSecrets: []
+  # Schedule all chart pods onto nodes matching these labels.
+  # Example:
+  # nodeSelector:
+  #   kubernetes.io/arch: amd64
+  nodeSelector: {}
+  # Schedule all chart pods onto the exact node name shown by
+  # `kubectl get nodes`. When set, this takes precedence over nodeSelector.
+  nodeName: ""
 
 env:
-  # The type of doc engine to use.
-  # Available options:
-  # - `elasticsearch` (default)
-  # - `infinity` (https://github.com/infiniflow/infinity)
-  # - `opensearch` (https://github.com/opensearch-project/OpenSearch)
-  # DOC_ENGINE: elasticsearch
-  DOC_ENGINE: infinity
-  # DOC_ENGINE: opensearch
+  # RAGFlow runtime settings. Keep these defaults aligned with docker/docker-compose.yml.
+  API_PROXY_SCHEME: python
+  ALLOW_ANY_HOST: "0"
+  REGISTER_ENABLED: "1"
+  USE_DOCLING: "false"
+  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
+  THREAD_POOL_MAX_WORKERS: "128"
+  DISABLE_PASSWORD_LOGIN: "false"
 
   # The version of Elasticsearch.
   STACK_VERSION: "8.11.3"
 
+  # The username and password for Elasticsearch.
+  ES_USER: elastic
   # The password for Elasticsearch
   ELASTIC_PASSWORD: infini_rag_flow_helm
 
-  # The password for OpenSearch.
-  # At least one uppercase letter, one lowercase letter, one digit, and one special character
-  OPENSEARCH_PASSWORD: infini_rag_flow_OS_01
-
-  # The password for MySQL
+  # MySQL connection settings.
+  MYSQL_USER: root
   MYSQL_PASSWORD: infini_rag_flow_helm
-  # The database of the MySQL service to use
   MYSQL_DBNAME: rag_flow
+  MYSQL_MAX_PACKET: "1073741824"
   # External MySQL host (only required when mysql.enabled=false)
   # MYSQL_HOST: ""
   # External MySQL port (defaults to 3306 if not set)
   # MYSQL_PORT: "3306"
-  # External MySQL user (only when mysql.enabled=false), default is root if omitted
-  # MYSQL_USER: "root"
 
   # The username for MinIO.
-  MINIO_ROOT_USER: rag_flow
+  MINIO_USER: rag_flow
   # The password for MinIO
   MINIO_PASSWORD: infini_rag_flow_helm
   # External MinIO host
@@ -80,6 +85,30 @@ ragflow:
     tag: v0.26.4
     pullPolicy: IfNotPresent
     pullSecrets: []
+  # Arguments passed to docker/entrypoint.sh. These defaults match
+  # docker/docker-compose.yml.
+  args:
+    - --enable-adminserver
+    - --init-model-provider-tables
+    - --workers=1
+  # Other supported arguments:
+  # - --disable-webserver
+  # - --disable-taskexecutor
+  # - --disable-datasync
+  # - --enable-mcpserver
+  # - --init-superuser
+  # - --consumer-no-beg=0
+  # - --consumer-no-end=4
+  # - --host-id=ragflow-node-1
+  # - --mcp-host=0.0.0.0
+  # - --mcp-port=9382
+  # - --mcp-base-url=http://127.0.0.1:9380
+  # - --mcp-mode=self-host
+  # - --mcp-host-api-key=ragflow-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  # - --mcp-script-path=/ragflow/mcp/server/server.py
+  # - --no-transport-sse-enabled
+  # - --no-transport-streamable-http-enabled
+  # - --no-json-response
   # Optional service configuration overrides
   # to be written to local.service_conf.yaml
   # inside the RAGFlow container
@@ -107,34 +136,17 @@ ragflow:
     strategy:
     resources:
   service:
-    # Use LoadBalancer to expose the web interface externally
-    type: ClusterIP
+    type: NodePort
+    # Used only when type is NodePort. Leave empty for automatic allocation.
+    nodePort:
   admin:
     # Enable Admin Service
     enabled: true
     # Admin Service port configuration
     port: 9381
-    # Admin Service type
-    serviceType: ClusterIP
   api:
     service:
       enabled: true
-      type: ClusterIP
-
-infinity:
-  image:
-    repository: infiniflow/infinity
-    tag: v0.7.0
-    pullPolicy: IfNotPresent
-    pullSecrets: []
-  storage:
-    className:
-    capacity: 5Gi
-  deployment:
-    strategy:
-    resources:
-  service:
-    type: ClusterIP
 
 elasticsearch:
   image:
@@ -154,6 +166,9 @@ elasticsearch:
   storage:
     className:
     capacity: 20Gi
+    # Optional absolute node path for a static HostPath PV.
+    # Leave empty to use dynamic provisioning from the cluster.
+    hostPath: ""
   deployment:
     strategy:
     resources:
@@ -161,34 +176,9 @@ elasticsearch:
         cpu: "4"
         memory: "16Gi"
   service:
-    type: ClusterIP
-
-opensearch:
-  image:
-    repository: opensearchproject/opensearch
-    tag: 2.19.1
-    pullPolicy: IfNotPresent
-    pullSecrets: []
-  initContainers:
-    alpine:
-      repository: alpine
-      tag: latest
-      pullPolicy: IfNotPresent
-    busybox:
-      repository: busybox
-      tag: latest
-      pullPolicy: IfNotPresent
-  storage:
-    className:
-    capacity: 20Gi
-  deployment:
-    strategy:
-    resources:
-      requests:
-        cpu: "4"
-        memory: "16Gi"
-  service:
-    type: ClusterIP
+    type: NodePort
+    # Used only when type is NodePort.
+    nodePort:
 
 minio:
   enabled: true
@@ -200,11 +190,18 @@ minio:
   storage:
     className:
     capacity: 5Gi
+    # Optional absolute node path for a static HostPath PV.
+    # Leave empty to use dynamic provisioning from the cluster.
+    hostPath: ""
   deployment:
     strategy:
     resources:
   service:
-    type: ClusterIP
+    type: NodePort
+    # Used only when type is NodePort.
+    nodePorts:
+      s3:
+      console:
 
 mysql:
   enabled: true
@@ -216,11 +213,16 @@ mysql:
   storage:
     className:
     capacity: 5Gi
+    # Optional absolute node path for a static HostPath PV.
+    # Leave empty to use dynamic provisioning from the cluster.
+    hostPath: ""
   deployment:
     strategy:
     resources:
   service:
-    type: ClusterIP
+    type: NodePort
+    # Used only when type is NodePort.
+    nodePort:
 
 redis:
   enabled: true
@@ -232,6 +234,9 @@ redis:
   storage:
     className:
     capacity: 5Gi
+    # Optional absolute node path for a static HostPath PV.
+    # Leave empty to use dynamic provisioning from the cluster.
+    hostPath: ""
   persistence:
     enabled: true
     # Set's the retention policy for the persistent storage (only available in k8s 1.32 or later)
@@ -242,10 +247,6 @@ redis:
   deployment:
     strategy:
     resources:
-  service:
-    type: ClusterIP
-
-
 # This block is for setting up web service ingress. For more information, see:
 # https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:

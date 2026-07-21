@@ -1,4 +1,29 @@
 {{- if .Values.minio.enabled }}
+{{- if .Values.minio.storage.hostPath }}
+{{- if not (hasPrefix "/" .Values.minio.storage.hostPath) }}
+{{- fail "minio.storage.hostPath must be an absolute path" }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-minio-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    {{- include "ragflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  capacity:
+    storage: {{ .Values.minio.storage.capacity }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: {{ .Values.minio.storage.hostPath | quote }}
+    type: DirectoryOrCreate
+{{- end }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -10,8 +35,13 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: minio
 spec:
+  {{- if .Values.minio.storage.hostPath }}
+  storageClassName: ""
+  volumeName: {{ printf "%s-minio-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  {{- else }}
   {{- with .Values.minio.storage.className }}
   storageClassName: {{ . }}
+  {{- end }}
   {{- end }}
   accessModes:
     - ReadWriteOnce
@@ -44,6 +74,14 @@ spec:
         {{- include "ragflow.labels" . | nindent 8 }}
         app.kubernetes.io/component: minio
     spec:
+      {{- with .Values.global.nodeName }}
+      nodeName: {{ . | quote }}
+      {{- else }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- if or .Values.global.imagePullSecrets .Values.minio.image.pullSecrets }}
       imagePullSecrets:
         {{- with .Values.global.imagePullSecrets }}
@@ -99,9 +137,15 @@ spec:
       protocol: TCP
       port: 9000
       targetPort: s3
+      {{- if and (eq .Values.minio.service.type "NodePort") .Values.minio.service.nodePorts.s3 }}
+      nodePort: {{ .Values.minio.service.nodePorts.s3 }}
+      {{- end }}
     - name: console
       protocol: TCP
       port: 9001
       targetPort: console
+      {{- if and (eq .Values.minio.service.type "NodePort") .Values.minio.service.nodePorts.console }}
+      nodePort: {{ .Values.minio.service.nodePorts.console }}
+      {{- end }}
   type: {{ .Values.minio.service.type }}
 {{- end }}

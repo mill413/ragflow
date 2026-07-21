@@ -26,6 +26,14 @@ spec:
         checksum/config-env: {{ include (print $.Template.BasePath "/env.yaml") . | sha256sum }}
         checksum/config-ragflow: {{ include (print $.Template.BasePath "/ragflow_config.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.global.nodeName }}
+      nodeName: {{ . | quote }}
+      {{- else }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- if or .Values.global.imagePullSecrets .Values.ragflow.image.pullSecrets }}
       imagePullSecrets:
         {{- with .Values.global.imagePullSecrets }}
@@ -41,9 +49,9 @@ spec:
         {{- with .Values.ragflow.image.pullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
-        {{- if .Values.ragflow.admin.enabled }}
+        {{- with .Values.ragflow.args }}
         args:
-          - "--enable-adminserver"
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         ports:
           - containerPort: 80
@@ -105,6 +113,9 @@ spec:
       port: 80
       targetPort: http
       name: http
+      {{- if and (eq .Values.ragflow.service.type "NodePort") .Values.ragflow.service.nodePort }}
+      nodePort: {{ .Values.ragflow.service.nodePort }}
+      {{- end }}
   type: {{ .Values.ragflow.service.type }}
 ---
 {{- if .Values.ragflow.api.service.enabled }}
@@ -124,7 +135,7 @@ spec:
       port: 80
       targetPort: http-api
       name: http-api
-  type: {{ .Values.ragflow.api.service.type }}
+  type: ClusterIP
 {{- end }}
 
 {{- if .Values.ragflow.admin.enabled }}
@@ -145,5 +156,5 @@ spec:
       port: {{ .Values.ragflow.admin.port }}
       targetPort: admin
       name: admin
-  type: {{ .Values.ragflow.admin.serviceType }}
+  type: ClusterIP
 {{- end }}

@@ -1,4 +1,29 @@
 {{- if .Values.mysql.enabled }}
+{{- if .Values.mysql.storage.hostPath }}
+{{- if not (hasPrefix "/" .Values.mysql.storage.hostPath) }}
+{{- fail "mysql.storage.hostPath must be an absolute path" }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-mysql-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    {{- include "ragflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mysql
+spec:
+  capacity:
+    storage: {{ .Values.mysql.storage.capacity }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: {{ .Values.mysql.storage.hostPath | quote }}
+    type: DirectoryOrCreate
+{{- end }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -10,8 +35,13 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: mysql
 spec:
+  {{- if .Values.mysql.storage.hostPath }}
+  storageClassName: ""
+  volumeName: {{ printf "%s-mysql-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  {{- else }}
   {{- with .Values.mysql.storage.className }}
   storageClassName: {{ . }}
+  {{- end }}
   {{- end }}
   accessModes:
     - ReadWriteOnce
@@ -45,6 +75,14 @@ spec:
         checksum/config-mysql: {{ include (print $.Template.BasePath "/mysql-config.yaml") . | sha256sum }}
         checksum/config-env: {{ include (print $.Template.BasePath "/env.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.global.nodeName }}
+      nodeName: {{ . | quote }}
+      {{- else }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- if or .Values.global.imagePullSecrets .Values.mysql.image.pullSecrets }}
       imagePullSecrets:
         {{- with .Values.global.imagePullSecrets }}
@@ -108,5 +146,8 @@ spec:
     - protocol: TCP
       port: 3306
       targetPort: mysql
+      {{- if and (eq .Values.mysql.service.type "NodePort") .Values.mysql.service.nodePort }}
+      nodePort: {{ .Values.mysql.service.nodePort }}
+      {{- end }}
   type: {{ .Values.mysql.service.type }}
 {{- end }}

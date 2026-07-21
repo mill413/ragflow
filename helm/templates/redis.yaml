@@ -1,4 +1,29 @@
 {{- if .Values.redis.enabled }}
+{{- if and .Values.redis.persistence.enabled .Values.redis.storage.hostPath }}
+{{- if not (hasPrefix "/" .Values.redis.storage.hostPath) }}
+{{- fail "redis.storage.hostPath must be an absolute path" }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-redis-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  annotations:
+    "helm.sh/resource-policy": keep
+  labels:
+    {{- include "ragflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  capacity:
+    storage: {{ .Values.redis.storage.capacity }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: {{ .Values.redis.storage.hostPath | quote }}
+    type: DirectoryOrCreate
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -41,6 +66,14 @@ spec:
       annotations:
         checksum/config-env: {{ include (print $.Template.BasePath "/env.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.global.nodeName }}
+      nodeName: {{ . | quote }}
+      {{- else }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- if or .Values.global.imagePullSecrets .Values.redis.image.pullSecrets }}
       imagePullSecrets:
         {{- with .Values.global.imagePullSecrets }}
@@ -95,8 +128,13 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
+        {{- if .Values.redis.storage.hostPath }}
+        storageClassName: ""
+        volumeName: {{ printf "%s-redis-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+        {{- else }}
         {{- with .Values.redis.storage.className }}
         storageClassName: {{ . }}
+        {{- end }}
         {{- end }}
         resources:
           requests:
@@ -118,6 +156,7 @@ spec:
   selector:
     {{- include "ragflow.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: redis
+  type: ClusterIP
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
