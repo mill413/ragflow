@@ -17,7 +17,6 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -264,15 +263,6 @@ func (s *OpenAIChatService) OpenAIChatCompletions(c *gin.Context, userID, chatID
 	completionID := fmt.Sprintf("chatcmpl-%s", openaiReq.ChatID)
 
 	ctx := c.Request.Context()
-	lfClient := LangfuseClientFromTenant(ctx, dialog.TenantID, userID, openaiReq.ChatID, openaiReq.Model)
-	if lfClient != nil {
-		ctx = context.WithValue(ctx, langfuseCtxKey, lfClient)
-		defer func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			_ = lfClient.Shutdown(shutdownCtx)
-		}()
-	}
 
 	filteredMessages := s.filterMessages(openaiReq.Messages)
 

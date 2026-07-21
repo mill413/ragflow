@@ -64,7 +64,7 @@ type ChatResponse struct {
 }
 
 // ChatUsage holds token usage split for one LLM call. Consumed by
-// LLMBundle for accurate Langfuse reporting and run aggregation.
+// LLMBundle for accurate run aggregation.
 // Mirrors Python's common.token_utils.usage_from_response() split.
 type ChatUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
@@ -262,8 +262,8 @@ type ChatModel struct {
 	APIConfig   *APIConfig
 	ToolConfig  *ToolConfig
 	// LastUsage holds the token usage (prompt/completion/total) of the most
-	// recent chat call. Consumed by callers for accurate Langfuse reporting
-	// and per-run token aggregation. Reset before each call.
+	// recent chat call. Consumed by callers for per-run token aggregation.
+	// Reset before each call.
 	LastUsage *ChatUsage
 }
 

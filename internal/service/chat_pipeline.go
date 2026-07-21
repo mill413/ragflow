@@ -103,9 +103,7 @@ type AsyncChatResult struct {
 //	│    No KBs & no web search → AsyncChatSolo (LLM-only)  │
 //	├───────────────────────────────────────────────────────┤
 //	│ 2. Resolve LLM model config + max_tokens              │
-//	│ 3. Langfuse trace setup                               │
-//	├───────────────────────────────────────────────────────┤
-//	│ 4. Bind Models: getModels() → embd, rerank, chat, tts │
+//	│ 3. Bind Models: getModels() → embd, rerank, chat, tts │
 //	│    + BindTools (toolcall session)                     │
 //	├───────────────────────────────────────────────────────┤
 //	│ 5. Extract questions, attachments, image_files        │
@@ -141,7 +139,7 @@ type AsyncChatResult struct {
 //	├───────────────────────────────────────────────────────┤
 //	│ 11. Drive LLM (stream / non-stream)                   │
 //	│     + answer decoration (citations, references,       │
-//	│       timing stats, Langfuse trace, TTS synthesis)    │
+//	│       timing stats and TTS synthesis)                 │
 //	└───────────────────────────────────────────────────────┘
 //
 // Parameters:
@@ -221,26 +219,6 @@ func (s *ChatPipelineService) AsyncChat(
 			}
 		}
 		timer.Exit(common.PhaseCheckLLM)
-
-		// === Phase 3: Langfuse Trace Setup ===
-		common.Info("Phase 3: Setup Langfuse Trace")
-		timer.Enter(common.PhaseCheckLangfuse)
-		var langfuseTraceID string
-		if lfClient, ok := ctx.Value(langfuseCtxKey).(*LangfuseClient); ok && lfClient != nil {
-			langfuseTraceID = fmt.Sprintf("trace-%d", time.Now().UnixNano())
-			_ = lfClient.PostTrace(ctx, LangfuseTrace{
-				ID:        langfuseTraceID,
-				Name:      "openai_chat",
-				UserID:    chat.TenantID,
-				SessionID: chat.ID,
-				Metadata: map[string]interface{}{
-					"stream":   stream,
-					"kb_count": len(chat.KBIDs),
-				},
-				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-			})
-		}
-		timer.Exit(common.PhaseCheckLangfuse)
 
 		// === Phase 4: Bind Models (embedding, rerank, chat, TTS) + ToolCall ===
 		common.Info("Phase 4: Bind Models (embedding, rerank, chat, TTS)")
@@ -993,7 +971,7 @@ func (s *ChatPipelineService) AsyncChat(
 		// === Phase 11: Drive LLM + Decorate Answer ===
 		// Stream path: accumulate deltas → per-delta TTS → decorate final.
 		// Non-stream path: one-shot chat → decorate (includes TTS).
-		// Answer decoration: citation markers, references, timing stats, Langfuse.
+		// Answer decoration: citation markers, references, and timing stats.
 		common.Info("Phase 11: Drive LLM + Decorate Answer",
 			zap.Bool("stream", stream),
 			zap.Int("llm_messages_count", len(llmMessages)))
@@ -1007,41 +985,6 @@ func (s *ChatPipelineService) AsyncChat(
 			return
 		}
 		chatMessages := s.buildChatMessages(prompt+prompt4citation, llmMessages[1:])
-
-		// Langfuse generation start observation.
-		var langfuseGenerationID string
-		if langfuseTraceID != "" {
-			if lfClient, ok := ctx.Value(langfuseCtxKey).(*LangfuseClient); ok && lfClient != nil {
-				langfuseGenerationID = fmt.Sprintf("gen-%s", langfuseTraceID)
-				modelName := ""
-				if llmModelConfig != nil {
-					if mn, ok := llmModelConfig["llm_name"].(string); ok {
-						modelName = mn
-					}
-				}
-				// PostGeneration creates a start-observation span.
-				// Error is non-fatal; end-observation fires regardless.
-				genInput := map[string]interface{}{
-					"prompt":          prompt,
-					"prompt4citation": prompt4citation,
-					"messages":        chatMessages,
-				}
-				if err := lfClient.PostGeneration(ctx, LangfuseGeneration{
-					ID:        langfuseGenerationID,
-					TraceID:   langfuseTraceID,
-					Name:      "chat",
-					Model:     modelName,
-					StartTime: time.Now().UTC().Format(time.RFC3339Nano),
-					Input:     genInput,
-				}); err != nil {
-					common.Warn("Langfuse start observation (PostGeneration) failed; continuing without start-side tracing",
-						zap.String("langfuse_trace_id", langfuseTraceID),
-						zap.Error(err))
-					// Keep langfuseGenerationID set so the end
-					// Keep langfuseGenerationID set so end-observation fires.
-				}
-			}
-		}
 
 		// Stream path: per-delta callbacks, accumulate answer.
 		// Non-stream path: one-shot synchronous answer.
@@ -1237,7 +1180,7 @@ func (s *ChatPipelineService) AsyncChat(
 			visibleAnswer := s.extractVisibleAnswer(thinkState.fullText)
 
 			// Pass nil for ttsModel — audio was already produced per-delta.
-			final := s.decorateAnswer(ctx, visibleAnswer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, nil, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
+			final := s.decorateAnswer(ctx, visibleAnswer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, nil, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
 			final.Final = true
 			final.AudioBinary = nil
 			timer.Exit(common.PhaseGenerateAnswer)
@@ -1280,7 +1223,7 @@ func (s *ChatPipelineService) AsyncChat(
 			common.Debug("User: " + userContent + "|Assistant: " + answer)
 
 			// Synthesize TTS for the full answer (non-stream, one-shot).
-			final := s.decorateAnswer(ctx, answer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, ttsModel, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
+			final := s.decorateAnswer(ctx, answer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, ttsModel, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
 			final.Final = true
 			timer.Exit(common.PhaseGenerateAnswer)
 			out <- final
@@ -2654,7 +2597,7 @@ func (e *embeddingModelEmbedder) Encode(texts []string) ([][]float64, error) {
 }
 
 // decorateAnswer applies citation insertion, reference construction,
-// timing stats, token accounting, TTS, and Langfuse generation end to
+// timing stats, token accounting, and TTS to
 // the final answer.
 //
 // P1: the `timer` parameter carries the per-phase durations emitted in the
@@ -2672,8 +2615,6 @@ func (s *ChatPipelineService) decorateAnswer(
 	vectorSimilarityWeight float64,
 	quote bool,
 	ttsModel *modelModule.ChatModel,
-	langfuseTraceID string,
-	llmModelConfig map[string]interface{},
 	tenantID string,
 	tenantIDs []string,
 	hasKnowledges bool,
@@ -2843,38 +2784,6 @@ func (s *ChatPipelineService) decorateAnswer(
 	// TTS synthesis for the final answer.
 	audioBinary := s.synthesizeTTS(ttsModel, think+ans)
 
-	// Langfuse generation end observation.
-	if langfuseTraceID != "" {
-		if lfClient, ok := ctx.Value(langfuseCtxKey).(*LangfuseClient); ok && lfClient != nil {
-			// Mirrors dialog_service.py:853-854. Python extracts
-			// everything from `### Query:` onwards (the time-elapsed
-			// + token-usage block) and replaces \n with "  \n" for
-			// markdown line breaks.
-			langfuseOutput := langfuseExtractTimeElapsed(timeStats)
-			usage := &LangfuseUsage{
-				PromptTokens:     usedTokenCount,
-				CompletionTokens: tkNum,
-				TotalTokens:      usedTokenCount + tkNum,
-			}
-			modelName := ""
-			if llmModelConfig != nil {
-				if mn, ok := llmModelConfig["llm_name"].(string); ok {
-					modelName = mn
-				}
-			}
-			_ = lfClient.PostGeneration(ctx, LangfuseGeneration{
-				ID:        fmt.Sprintf("gen-%s", langfuseTraceID),
-				TraceID:   langfuseTraceID,
-				Name:      "chat",
-				Model:     modelName,
-				StartTime: time.Now().UTC().Format(time.RFC3339Nano),
-				EndTime:   time.Now().UTC().Format(time.RFC3339Nano),
-				Output:    langfuseOutput,
-				Usage:     usage,
-			})
-		}
-	}
-
 	return AsyncChatResult{
 		Answer:      think + ans,
 		Reference:   refs,
@@ -2888,22 +2797,6 @@ func (s *ChatPipelineService) decorateAnswer(
 		CreatedAt: float64(finishChatTs.Unix()),
 		Final:     false, // caller sets Final = true
 	}
-}
-
-// langfuseExtractTimeElapsed extracts the time-elapsed + token-usage
-// block from the prompt and applies the \n → "  \n" substitution.
-// Mirrors dialog_service.py:853-854:
-//
-//	langfuse_output = "\n" + re.sub(r"^.*?(### Query:.*)", r"\1", prompt, flags=re.DOTALL)
-//	langfuse_output = {"time_elapsed:": re.sub(r"\n", "  \n", langfuse_output), ...}
-func langfuseExtractTimeElapsed(prompt string) string {
-	const marker = "### Query:"
-	idx := strings.Index(prompt, marker)
-	if idx < 0 {
-		// Fallback: return the whole prompt with \n substitution.
-		return strings.ReplaceAll(prompt, "\n", "  \n")
-	}
-	return strings.ReplaceAll(prompt[idx:], "\n", "  \n")
 }
 
 // extractVisibleAnswer mirrors Python's _extract_visible_answer.

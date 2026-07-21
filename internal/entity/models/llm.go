@@ -151,8 +151,8 @@ func (m *EinoChatModel) Generate(ctx context.Context, msgs []*schema.Message, op
 	if err != nil {
 		return nil, fmt.Errorf("models: EinoChatModel.Generate(%s): %w", *m.inner.ModelName, err)
 	}
-	// Record the per-call token usage so the canvas-level aggregator (and
-	// Langfuse) can compute the run total. Mirrors Python's
+	// Record the per-call token usage so the canvas-level aggregator can
+	// compute the run total. Mirrors Python's
 	// LLMBundle._report_usage() / self.mdl.last_usage pattern.
 	if resp != nil && resp.Usage != nil {
 		m.inner.LastUsage = &ChatUsage{

@@ -3243,25 +3243,6 @@ wheels = [
 ]
 
 [[package]]
-name = "langfuse"
-version = "4.7.1"
-source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
-dependencies = [
-    { name = "backoff" },
-    { name = "httpx" },
-    { name = "opentelemetry-api" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-sdk" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "wrapt" },
-]
-sdist = { url = "https://mirrors.aliyun.com/pypi/packages/2c/74/a6f1a99893ee6d1a69439ae7eb92f8fe8806103492dc26531d5942dbd3bf/langfuse-4.7.1.tar.gz", hash = "sha256:f9e262eceedb353b191c1da1f8452d1e8ebf52297ca20e160cda0206608e3a40" }
-wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/9f/9a/bd3368f46b6c72ee2068b80536826b02ae86df53eff1c79941344503098f/langfuse-4.7.1-py3-none-any.whl", hash = "sha256:a4e59c81ad5e5b16a65d3849f4923ebc3ad6e67ec803ada83d50c0cb66149490" },
-]
-
-[[package]]
 name = "langgraph"
 version = "1.2.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
@@ -8073,7 +8054,6 @@ dependencies = [
     { name = "infinity-sdk" },
     { name = "jira" },
     { name = "json-repair" },
-    { name = "langfuse" },
     { name = "langgraph" },
     { name = "lark-oapi" },
     { name = "line-bot-sdk" },
@@ -8229,7 +8209,6 @@ requires-dist = [
     { name = "infinity-sdk", specifier = "==0.7.0" },
     { name = "jira", specifier = "==3.10.5" },
     { name = "json-repair", specifier = "==0.60.1" },
-    { name = "langfuse", specifier = ">=4.0.1" },
     { name = "langgraph", specifier = "==1.2.0" },
     { name = "lark-oapi", specifier = ">=1.2.0" },
     { name = "line-bot-sdk", specifier = ">=3.0.0" },

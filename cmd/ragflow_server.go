@@ -690,7 +690,6 @@ func startServer(config *server.Config) {
 	tenantService := service.NewTenantService()
 	chatService := service.NewChatService()
 	chatChannelService := service.NewChatChannelService()
-	langfuseService := service.NewLangfuseService()
 	chatSessionService := service.NewChatSessionService()
 	openaiChatService := service.NewOpenAIChatService()
 	systemService := service.NewSystemService()
@@ -719,7 +718,6 @@ func startServer(config *server.Config) {
 	llmHandler := handler.NewLLMHandler(llmService, userService)
 	chatHandler := handler.NewChatHandler(chatService, userService)
 	chatChannelHandler := handler.NewChatChannelHandler(chatChannelService)
-	langfuseHandler := handler.NewLangfuseHandler(langfuseService)
 	chatSessionHandler := handler.NewChatSessionHandler(chatSessionService, userService)
 	openaiChatHandler := handler.NewOpenAIChatHandler(openaiChatService)
 	connectorHandler := handler.NewConnectorHandler(connectorService, userService)
@@ -818,7 +816,6 @@ func startServer(config *server.Config) {
 		llmHandler,
 		chatHandler,
 		chatChannelHandler,
-		langfuseHandler,
 		chatSessionHandler,
 		connectorHandler,
 		searchHandler,

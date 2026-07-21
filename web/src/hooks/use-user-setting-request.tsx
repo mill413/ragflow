@@ -2,13 +2,11 @@ import message from '@/components/ui/message';
 import { ResponseGetType } from '@/interfaces/database/base';
 import { IToken } from '@/interfaces/database/chat';
 import { ITenantInfo } from '@/interfaces/database/dataset';
-import { ILangfuseConfig } from '@/interfaces/database/system';
 import {
   ITenant,
   ITenantUser,
   IUserInfo,
 } from '@/interfaces/database/user-setting';
-import { ISetLangfuseConfigRequestBody } from '@/interfaces/request/system';
 import { IWorkspace } from '@/interfaces/database/workspace';
 import { DEFAULT_LANGUAGE_CODE, supportedLanguages } from '@/locales/config';
 import kbService from '@/services/knowledge-service';
@@ -55,10 +53,7 @@ export const enum UserSettingApiAction {
   UpdateTeam = 'updateTeam',
   DeleteTeam = 'deleteTeam',
   UpdateTeamMember = 'updateTeamMember',
-  SetLangfuseConfig = 'setLangfuseConfig',
-  DeleteLangfuseConfig = 'deleteLangfuseConfig',
   ListPipelines = 'listPipelines',
-  FetchLangfuseConfig = 'fetchLangfuseConfig',
 }
 
 export const useFetchUserInfo = (): ResponseGetType<IUserInfo> => {
@@ -597,58 +592,4 @@ export const useUpdateTeamMember = (tenantId?: string) => {
     updateTeamMember: mutation.mutateAsync,
     loading: mutation.isPending,
   };
-};
-
-export const useSetLangfuseConfig = () => {
-  const { t } = useTranslation();
-  const {
-    data,
-    isPending: loading,
-    mutateAsync,
-  } = useMutation({
-    mutationKey: [UserSettingApiAction.SetLangfuseConfig],
-    mutationFn: async (params: ISetLangfuseConfigRequestBody) => {
-      const { data } = await userService.setLangfuseConfig(params);
-      if (data.code === 0) {
-        message.success(t('message.operated'));
-      }
-      return data?.code;
-    },
-  });
-
-  return { data, loading, setLangfuseConfig: mutateAsync };
-};
-
-export const useDeleteLangfuseConfig = () => {
-  const { t } = useTranslation();
-  const {
-    data,
-    isPending: loading,
-    mutateAsync,
-  } = useMutation({
-    mutationKey: [UserSettingApiAction.DeleteLangfuseConfig],
-    mutationFn: async () => {
-      const { data } = await userService.deleteLangfuseConfig();
-      if (data.code === 0) {
-        message.success(t('message.deleted'));
-      }
-      return data?.code;
-    },
-  });
-
-  return { data, loading, deleteLangfuseConfig: mutateAsync };
-};
-
-export const useFetchLangfuseConfig = () => {
-  const { data, isFetching: loading } = useQuery<ILangfuseConfig>({
-    queryKey: [UserSettingApiAction.FetchLangfuseConfig],
-    gcTime: 0,
-    queryFn: async () => {
-      const { data } = await userService.getLangfuseConfig();
-
-      return data?.data;
-    },
-  });
-
-  return { data, loading };
 };

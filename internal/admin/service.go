@@ -478,7 +478,6 @@ func (s *Service) GetUserDetails(username string) (map[string]interface{}, error
 type DeleteUserResult struct {
 	Username        string   `json:"username"`
 	TenantLLMCount  int      `json:"tenant_llm_count"`
-	LangfuseCount   int      `json:"langfuse_count"`
 	MetadataTable   string   `json:"metadata_table"`
 	TenantCount     int      `json:"tenant_count"`
 	UserTenantCount int      `json:"user_tenant_count"`
@@ -629,9 +628,6 @@ func (s *Service) DeleteUser(username string) (*DeleteUserResult, error) {
 		tx.Model(&entity.TenantLLM{}).Where("tenant_id = ?", ownedTenantID).Count(&tenantLLMCount)
 		result.TenantLLMCount = int(tenantLLMCount)
 		result.DeletedDetails = append(result.DeletedDetails, fmt.Sprintf("- Deleted %d tenant-LLM records.", tenantLLMCount))
-
-		result.LangfuseCount = 0
-		result.DeletedDetails = append(result.DeletedDetails, fmt.Sprintf("- Deleted %d langfuse records.", result.LangfuseCount))
 
 		metadataTableName := fmt.Sprintf("ragflow_doc_meta_%s", ownedTenantID[:32])
 		result.MetadataTable = metadataTableName
