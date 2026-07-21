@@ -1,211 +1,311 @@
 ---
 sidebar_position: 4
 slug: /http_api_reference
-sidebar_custom_props: {
-  categoryIcon: LucideGlobe
+sidebar_custom_props: { categoryIcon: LucideGlobe }
+---
+
+# HTTP API 参考
+
+本文档适用于当前基于 RAGFlow `0.26.4` 的二次开发版本，介绍可供外部程序调用的 RESTful API。除特别说明外，接口路径均以 `/api/v1` 开头，请求和响应使用 JSON。
+
+## 请求地址
+
+将示例中的 `{address}` 替换为实际部署地址：
+
+```text
+http://{address}/api/v1
+```
+
+如果服务通过 HTTPS 或反向代理发布，请使用对外提供的完整地址。
+
+## 身份认证
+
+在个人中心的 **API** 页面创建 API Token。创建时需要选择 Token 所属的工作空间；Token 与该工作空间绑定，只能访问同一工作空间中的资源，不能跨个人或团队工作空间使用。
+
+通过 `Authorization` 请求头携带 Token：
+
+```http
+Authorization: Bearer <API_TOKEN>
+```
+
+示例：
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/datasets' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+除 `Bearer` 格式外，服务端目前也兼容直接在 `Authorization` 请求头中传入 Token，但新接入应统一使用标准的 `Bearer` 格式。
+
+## 工作空间范围
+
+- 个人 Token 只能访问对应的个人工作空间。
+- 团队 Token 只能访问对应的团队工作空间。
+- 创建团队 Token 需要具备该团队共享资源的管理权限。
+- 请求参数或请求体中的 `workspace_id`、`tenant_id`、`owner_tenant_id` 如果与 Token 所属工作空间不一致，服务端将拒绝请求。
+- 资源 ID 对应的资源不在 Token 所属工作空间时，即使 ID 有效，也不能通过该 Token 访问。
+
+## 通用响应结构
+
+大多数接口返回以下结构：
+
+```json
+{
+  "code": 0,
+  "data": {},
+  "message": ""
 }
----
-# HTTP API
+```
 
-A complete reference for RAGFlow's RESTful API. Before proceeding, please ensure you [have your RAGFlow API key ready for authentication](https://ragflow.io/docs/dev/acquire_ragflow_api_key).
+| 字段      | 类型           | 说明                                                      |
+| --------- | -------------- | --------------------------------------------------------- |
+| `code`    | `integer`      | 业务状态码，`0` 表示成功，其他值表示失败或非完成状态      |
+| `data`    | 任意 JSON 类型 | 接口返回的数据；失败时可能为 `false`、`null` 或错误上下文 |
+| `message` | `string`       | 状态说明或错误信息                                        |
 
----
+下载、预览、流式对话和健康检查等接口可能返回文件流、SSE 数据或专用结构，应以对应章节的说明为准。
 
-## ERROR CODES
-
----
-
-| Code | Message               | Description                |
-|------|-----------------------|----------------------------|
-| 400  | Bad Request           | Invalid request parameters |
-| 401  | Unauthorized          | Unauthorized access        |
-| 403  | Forbidden             | Access denied              |
-| 404  | Not Found             | Resource not found         |
-| 500  | Internal Server Error | Server internal error      |
-| 1001 | Invalid Chunk ID      | Invalid Chunk ID           |
-| 1002 | Chunk Update Failed   | Chunk update failed        |
+> 调用方应优先检查响应体中的 `code`，不能只根据 HTTP 状态码判断业务是否成功。部分业务校验失败仍可能使用 HTTP `200` 返回，并通过响应体中的非零 `code` 表示错误。
 
 ---
+## 错误码
 
-## Deprecated API Aliases
+接口的业务状态通过响应体中的 `code` 字段表示。HTTP 状态码通常用于表示认证失败、路由不存在等协议层错误，但并非所有业务错误都会映射为对应的 HTTP 状态码。
 
-The following v0.24.0 REST API paths are deprecated. They remain available through the backward compatibility layer, but new integrations should use the replacement endpoints.
+### 业务状态码
 
-| Deprecated endpoint | Replacement endpoint |
-|---------------------|----------------------|
-| **POST** `/api/v1/chats_openai/{chat_id}/chat/completions` | **POST** `/api/v1/openai/{chat_id}/chat/completions` |
-| **PUT** `/api/v1/chats/{chat_id}/sessions/{session_id}` | **PATCH** `/api/v1/chats/{chat_id}/sessions/{session_id}` |
-| **POST** `/api/v1/chats/{chat_id}/completions` | **POST** `/api/v1/chat/completions` |
-| **POST** `/api/v1/sessions/related_questions` | **POST** `/api/v1/chat/recommandation` |
-| **PUT** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` | **PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` |
-| **GET** `/v1/system/healthz` | **GET** `/api/v1/system/healthz` |
-| **POST** `/v1/document/upload_info` | **POST** `/api/v1/documents/upload` |
-| **POST** `/api/v1/file/upload` | **POST** `/api/v1/files` |
-| **POST** `/api/v1/file/create` | **POST** `/api/v1/files` |
-| **GET** `/api/v1/file/list` | **GET** `/api/v1/files` |
-| **GET** `/api/v1/file/root_folder` | **GET** `/api/v1/files` |
-| **GET** `/api/v1/file/parent_folder` | **GET** `/api/v1/files/{file_id}/parent` |
-| **GET** `/api/v1/file/all_parent_folder` | **GET** `/api/v1/files/{file_id}/ancestors` |
-| **POST** `/api/v1/file/rm` | **DELETE** `/api/v1/files` |
-| **POST** `/api/v1/file/rename` | **POST** `/api/v1/files/move` |
-| **GET** `/api/v1/file/get/{file_id}` | **GET** `/api/v1/files/{file_id}` |
-| **POST** `/api/v1/file/mv` | **POST** `/api/v1/files/move` |
-| **POST** `/api/v1/file/convert` | **POST** `/api/v1/files/link-to-datasets` |
+| `code` | 名称                   | 说明                                             |
+| -----: | ---------------------- | ------------------------------------------------ |
+|    `0` | `SUCCESS`              | 请求成功                                         |
+|   `10` | `NOT_EFFECTIVE`        | 操作未生效，或当前状态不允许执行该操作           |
+|  `100` | `EXCEPTION_ERROR`      | 请求处理过程中发生异常                           |
+|  `101` | `ARGUMENT_ERROR`       | 请求参数缺失、格式错误或取值无效                 |
+|  `102` | `DATA_ERROR`           | 目标数据不存在、数据状态异常或业务数据校验失败   |
+|  `103` | `OPERATING_ERROR`      | 业务操作执行失败                                 |
+|  `105` | `CONNECTION_ERROR`     | 依赖服务、模型服务或外部连接不可用               |
+|  `106` | `RUNNING`              | 任务仍在运行，尚未产生最终结果                   |
+|  `108` | `PERMISSION_ERROR`     | 当前账号不具备所需权限                           |
+|  `109` | `AUTHENTICATION_ERROR` | 身份、Token 或资源访问校验失败                   |
+|  `400` | `BAD_REQUEST`          | 请求内容不合法                                   |
+|  `401` | `UNAUTHORIZED`         | 未提供认证信息，或认证信息无效                   |
+|  `403` | `FORBIDDEN`            | 已完成身份认证，但无权访问目标工作空间或资源     |
+|  `404` | `NOT_FOUND`            | 接口路径或目标资源不存在                         |
+|  `409` | `CONFLICT`             | 当前操作与资源状态冲突，例如资源仍被其他对象引用 |
+|  `500` | `SERVER_ERROR`         | 服务端处理失败                                   |
+
+原文中的 `1001` 和 `1002` 不属于当前版本的统一状态码定义，因此不再作为通用错误码列出。具体接口仍可能在 `message` 或 `data` 中返回更详细的错误原因。
+
+### 错误响应示例
+
+```json
+{
+  "code": 403,
+  "data": null,
+  "message": "API token cannot access another workspace."
+}
+```
+
+### 调用方处理建议
+
+1. 首先判断 HTTP 请求是否成功到达服务端。
+2. 对 JSON 响应继续检查 `code` 是否为 `0`。
+3. 对 `106` 等非最终状态按照对应接口约定继续轮询。
+4. 将 `message` 用于日志和故障定位，不要依赖完整英文文本编写业务分支。
+5. 遇到 `401` 或 `109` 时检查 Token；遇到 `403` 或 `108` 时检查 Token 所属工作空间及资源权限。
+
+---
+## 已废弃的 API 别名
+
+当前版本仍注册以下历史接口，以便已有调用逐步迁移。兼容层接收这些旧路径并在服务端记录警告日志，但不保证旧接口与替代接口长期保持完全一致，因此不应继续用于新接入。
+
+### 聊天与智能体
+
+| 已废弃接口                                                   | 替代接口                                                  | 迁移说明                             |
+| ------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------ |
+| **POST** `/api/v1/chats/{chat_id}/completions`               | **POST** `/api/v1/chat/completions`                       | 使用当前聊天补全接口                 |
+| **POST** `/api/v1/chats_openai/{chat_id}/chat/completions`   | **POST** `/api/v1/openai/{chat_id}/chat/completions`      | 使用当前 OpenAI 兼容接口             |
+| **POST** `/api/v1/agents/{agent_id}/completions`             | **POST** `/api/v1/agents/chat/completions`                | 使用当前智能体补全接口               |
+| **POST** `/api/v1/agents_openai/{agent_id}/chat/completions` | **POST** `/api/v1/agents/chat/completions`                | 请求中设置 `openai-compatible: true` |
+| **PUT** `/api/v1/chats/{chat_id}/sessions/{session_id}`      | **PATCH** `/api/v1/chats/{chat_id}/sessions/{session_id}` | 请求体保持不变，修改 HTTP 方法       |
+| **POST** `/api/v1/sessions/related_questions`                | **POST** `/api/v1/chat/recommendation`                    | 使用当前相关问题生成接口             |
+
+### 知识库、索引与文档
+
+| 已废弃接口                                                                        | 替代接口                                                                            | 迁移说明                  |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------- |
+| **GET** `/api/v1/datasets/{dataset_id}/knowledge_graph`                           | **GET** `/api/v1/datasets/{dataset_id}/graph`                                       | 获取知识图谱              |
+| **DELETE** `/api/v1/datasets/{dataset_id}/knowledge_graph`                        | **DELETE** `/api/v1/datasets/{dataset_id}/graph`                                    | 删除知识图谱              |
+| **POST** `/api/v1/datasets/{dataset_id}/run_graphrag`                             | **POST** `/api/v1/datasets/{dataset_id}/index?type=graph`                           | 启动知识图谱构建          |
+| **GET** `/api/v1/datasets/{dataset_id}/trace_graphrag`                            | **GET** `/api/v1/datasets/{dataset_id}/index?type=graph`                            | 查询知识图谱构建状态      |
+| **POST** `/api/v1/datasets/{dataset_id}/run_raptor`                               | **POST** `/api/v1/datasets/{dataset_id}/index?type=raptor`                          | 启动 RAPTOR 构建          |
+| **GET** `/api/v1/datasets/{dataset_id}/trace_raptor`                              | **GET** `/api/v1/datasets/{dataset_id}/index?type=raptor`                           | 查询 RAPTOR 构建状态      |
+| **PUT** `/api/v1/datasets/{dataset_id}/documents/{document_id}`                   | **PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}`                   | 修改 HTTP 方法            |
+| **PUT** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` | **PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` | 修改 HTTP 方法            |
+| **POST** `/api/v1/file/upload_info`                                               | **POST** `/api/v1/documents/upload`                                                 | 使用当前文档上传信息接口  |
+| **POST** `/v1/document/upload_info`                                               | **POST** `/api/v1/documents/upload`                                                 | 同时迁移到 `/api/v1` 前缀 |
+| **GET** `/api/v1/document/get/{document_id}`                                      | **GET** `/api/v1/documents/{document_id}/preview`                                   | 使用当前文档预览接口      |
+| **GET** `/api/v1/document/download/{document_id}`                                 | **GET** `/api/v1/agents/attachments/{document_id}/download`                         | 使用当前附件下载接口      |
+| **GET** `/v1/document/download/{attachment_id}`                                   | **GET** `/api/v1/agents/attachments/{attachment_id}/download`                       | 同时迁移到 `/api/v1` 前缀 |
+
+### 文件管理
+
+| 已废弃接口                                                 | 替代接口                                    | 迁移说明                            |
+| ---------------------------------------------------------- | ------------------------------------------- | ----------------------------------- |
+| **POST** `/api/v1/file/upload`                             | **POST** `/api/v1/files`                    | 使用 `multipart/form-data` 上传文件 |
+| **POST** `/api/v1/file/create`                             | **POST** `/api/v1/files`                    | 通过请求体区分创建文件夹和上传文件  |
+| **GET** `/api/v1/file/list`                                | **GET** `/api/v1/files`                     | 查询参数迁移到新接口                |
+| **GET** `/api/v1/file/root_folder`                         | **GET** `/api/v1/files`                     | 使用合适的 `parent_id` 查询根目录   |
+| **GET** `/api/v1/file/parent_folder?file_id={file_id}`     | **GET** `/api/v1/files/{file_id}/parent`    | 将 `file_id` 从查询参数移到路径参数 |
+| **GET** `/api/v1/file/all_parent_folder?file_id={file_id}` | **GET** `/api/v1/files/{file_id}/ancestors` | 将 `file_id` 从查询参数移到路径参数 |
+| **GET** `/api/v1/file/get/{file_id}`                       | **GET** `/api/v1/files/{file_id}`           | 使用当前文件获取接口                |
+| **POST** `/api/v1/file/rm`                                 | **DELETE** `/api/v1/files`                  | 请求体使用 `ids` 指定待删除文件     |
+| **POST** `/api/v1/file/mv`                                 | **POST** `/api/v1/files/move`               | 使用 `src_file_ids` 和目标目录参数  |
+| **POST** `/api/v1/file/rename`                             | **POST** `/api/v1/files/move`               | 使用 `src_file_ids` 和 `new_name`   |
+| **POST** `/api/v1/file/convert`                            | **POST** `/api/v1/files/link-to-datasets`   | 将文件关联到知识库并转换为文档      |
+
+### 系统接口
+
+| 已废弃接口                   | 替代接口                         | 迁移说明                    |
+| ---------------------------- | -------------------------------- | --------------------------- |
+| **GET** `/v1/system/healthz` | **GET** `/api/v1/system/healthz` | 迁移到统一的 `/api/v1` 前缀 |
+
+> 兼容接口只用于迁移现有调用。后续版本可能删除这些别名，客户端应尽快切换到替代接口。
+
+---
+## OpenAI 兼容 API
+
+本章介绍如何使用 OpenAI Chat Completions 兼容格式调用聊天应用和智能体。请求仍由 RAGFlow 处理，并受 API Token 所属工作空间及资源权限约束。
 
 ---
 
-## OpenAI-Compatible API
-
----
-
-### Create chat completion
+### 创建聊天补全
 
 **POST** `/api/v1/openai/{chat_id}/chat/completions`
 
-Creates a model response for a given chat conversation.
+调用指定聊天应用生成回复。请求与响应采用 OpenAI Chat Completions 兼容格式。
 
-:::caution DEPRECATED
-`POST /api/v1/chats_openai/{chat_id}/chat/completions` is deprecated. Use this endpoint instead.
+:::caution 已废弃的地址
+`POST /api/v1/chats_openai/{chat_id}/chat/completions` 已废弃，请改用本节所述地址。
 :::
 
-This API follows the same request and response format as OpenAI's API. It allows you to interact with the model in a manner similar to how you would with [OpenAI's API](https://platform.openai.com/docs/api-reference/chat/create).
+#### 请求
 
-#### Request
+- 方法：`POST`
+- 地址：`/api/v1/openai/{chat_id}/chat/completions`
+- 请求头：
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <YOUR_API_KEY>`
 
-- Method: POST
-- URL: `/api/v1/openai/{chat_id}/chat/completions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"model"`: `string`
-  - `"messages"`: `object list`
-  - `"stream"`: `boolean`
-  - `"extra_body"`: `object` (optional)
-
-##### Request example
+请求示例：
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/openai/{chat_id}/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-        "model": "glm-4-flash@ZHIPU-AI",
-        "messages": [{"role": "user", "content": "Say this is a test!"}],
-        "stream": true,
-        "extra_body": {
-          "reference": true,
-          "reference_metadata": {
-            "include": true,
-            "fields": ["author", "year", "source"]
-          },
-          "metadata_condition": {
-            "logic": "and",
-            "conditions": [
-              {
-                "name": "author",
-                "comparison_operator": "is",
-                "value": "bob"
-              }
-            ]
+  --url http://{address}/api/v1/openai/{chat_id}/chat/completions \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "model": "model",
+    "messages": [
+      {"role": "user", "content": "请概括知识库中的产品说明。"}
+    ],
+    "stream": true,
+    "extra_body": {
+      "reference": true,
+      "reference_metadata": {
+        "include": true,
+        "fields": ["author", "year", "source"]
+      },
+      "metadata_condition": {
+        "logic": "and",
+        "conditions": [
+          {
+            "name": "author",
+            "comparison_operator": "is",
+            "value": "张三"
           }
-        }
-      }'
+        ]
+      }
+    }
+  }'
 ```
 
-##### Request Parameters
+#### 路径参数
 
-- `chat_id` (*Path parameter*) `string`, *Required*
-  Existing chat assistant ID. The request will use that chat assistant's knowledge and settings.
+- `chat_id`：`string`，必填。聊天应用 ID。调用者必须有权访问该聊天应用。
 
-- `model` (*Body parameter*) `string`, *Required*
-  The model used to generate the response. When `chat_id` is provided, you may also use the legacy placeholder value `"model"` to keep using the chat assistant's configured model.
+#### 请求体参数
 
-- `messages` (*Body parameter*) `list[object]`, *Required*
-  A list of historical chat messages used to generate the response. This must contain at least one message with the `user` role.
+- `model`：`string`，必填。用于生成回复的模型。传入 `"model"` 时沿用聊天应用配置的模型；传入具体模型标识时，该模型必须可供聊天应用所属工作空间使用。
+- `messages`：`array<object>`，必填。对话消息列表，至少包含一条消息，最后一条消息必须为 `user` 角色。
+  - `role`：`string`。支持 `system`、`user` 和 `assistant`。
+  - `content`：`string | array`。字符串，或由 OpenAI 文本内容片段组成的数组。当前接口会忽略非文本内容片段。
+- `stream`：`boolean`，可选。为 `true` 时返回 SSE 流；默认为非流式响应。
+- `session_id`：`string`，可选。继续已有的 OpenAI 兼容会话。也可以通过 `extra_body.session_id` 传入。
+- `user`：`string`，可选。调用方的外部用户标识，用于隔离同一聊天应用下的会话。
+- `extra_body`：`object`，可选。RAGFlow 扩展参数：
+  - `reference`：`boolean`。是否在最终响应中包含引用分块。
+  - `session_id`：`string`。继续已有会话，与顶层 `session_id` 等效。
+  - `user_id`：`string`。外部用户标识；未设置顶层 `user` 时生效。
+  - `reference_metadata`：`object`。引用分块的元数据配置。
+    - `include`：`boolean`。是否包含文档元数据。
+    - `fields`：`array<string>`。允许返回的元数据字段；省略时返回全部字段，空数组表示不返回任何元数据字段。
+  - `metadata_condition`：`object`。对检索结果应用的元数据过滤条件。
+    - `logic`：`string`。条件间的逻辑关系，如 `and` 或 `or`。
+    - `conditions`：`array<object>`。具体过滤条件。
 
-- `stream` (*Body parameter*) `boolean`
-  Whether to receive the response as a stream. Set this to `false` explicitly if you prefer to receive the entire response in one go instead of as a stream.
+请求还可以携带兼容的生成参数，例如 `temperature`、`top_p`、`presence_penalty`、`frequency_penalty` 和 `max_tokens`。这些参数仅影响本次请求，不修改聊天应用的持久化配置。
 
-- `extra_body` (*Body parameter*) `object`
-  Extra request parameters:
-  - `reference`: `boolean` - include reference in the final chunk (stream) or in the final message (non-stream).
-  - `reference_metadata`: `object` - include document metadata in each reference chunk.
-    - `include`: `boolean` - enable document metadata in reference chunks.
-    - `fields`: `list[string]` - optional allowlist of metadata keys. Omit to include all. Use an empty list to include none.
-  - `metadata_condition`: `object` - metadata filter conditions applied to retrieval results.
+#### 流式响应
 
-#### Response
+响应类型为 `text/event-stream`。每个事件以 `data:` 开头，最后以 `data:[DONE]` 结束：
 
-Stream:
+```text
+data:{"id":"chatcmpl-<chat_id>","object":"chat.completion.chunk","created":1755084508,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":"这是"},"finish_reason":null}],"usage":null}
 
-```json
-data:{
-    "id": "chatcmpl-3b0397f277f511f0b47f729e3aa55728",
-    "choices": [
-        {
-            "delta": {
-                "content": "Hello! It seems like you're just greeting me. If you have a specific",
-                "role": "assistant",
-                "function_call": null,
-                "tool_calls": null,
-                "reasoning_content": null
-            },
-            "finish_reason": null,
-            "index": 0,
-            "logprobs": null
-        }
-    ],
-    "created": 1755084508,
-    "model": "model",
-    "object": "chat.completion.chunk",
-    "system_fingerprint": "",
-    "usage": null
-}
+data:{"id":"chatcmpl-<chat_id>","object":"chat.completion.chunk","created":1755084508,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":"回复内容。"},"finish_reason":null}],"usage":null}
 
-data:{"id": "chatcmpl-3b0397f277f511f0b47f729e3aa55728", "choices": [{"delta": {"content": " question or need information, feel free to ask, and I'll do my best", "role": "assistant", "function_call": null, "tool_calls": null, "reasoning_content": null}, "finish_reason": null, "index": 0, "logprobs": null}], "created": 1755084508, "model": "model", "object": "chat.completion.chunk", "system_fingerprint": "", "usage": null}
-
-data:{"id": "chatcmpl-3b0397f277f511f0b47f729e3aa55728", "choices": [{"delta": {"content": " to assist you based on the knowledge base provided.", "role": "assistant", "function_call": null, "tool_calls": null, "reasoning_content": null}, "finish_reason": null, "index": 0, "logprobs": null}], "created": 1755084508, "model": "model", "object": "chat.completion.chunk", "system_fingerprint": "", "usage": null}
-
-data:{"id": "chatcmpl-3b0397f277f511f0b47f729e3aa55728", "choices": [{"delta": {"content": null, "role": "assistant", "function_call": null, "tool_calls": null, "reasoning_content": null}, "finish_reason": "stop", "index": 0, "logprobs": null}], "created": 1755084508, "model": "model", "object": "chat.completion.chunk", "system_fingerprint": "", "usage": {"prompt_tokens": 5, "completion_tokens": 188, "total_tokens": 193}}
+data:{"id":"chatcmpl-<chat_id>","object":"chat.completion.chunk","created":1755084508,"model":"model","choices":[{"index":0,"delta":{"role":"assistant","content":null},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":6,"total_tokens":18}}
 
 data:[DONE]
 ```
 
-Non-stream:
+当 `extra_body.reference` 为 `true` 时，最后一个数据块的 `choices[0].delta` 还会包含：
+
+- `reference`：引用分块列表。
+- `final_content`：完整回复文本。
+
+#### 非流式响应
 
 ```json
 {
-    "choices": [
-        {
-            "finish_reason": "stop",
-            "index": 0,
-            "logprobs": null,
-            "message": {
-                "content": "Hello! I'm your smart assistant. What can I do for you?",
-                "role": "assistant"
-            }
-        }
-    ],
-    "created": 1755084403,
-    "id": "chatcmpl-3b0397f277f511f0b47f729e3aa55728",
-    "model": "model",
-    "object": "chat.completion",
-    "usage": {
-        "completion_tokens": 55,
-        "completion_tokens_details": {
-            "accepted_prediction_tokens": 55,
-            "reasoning_tokens": 5,
-            "rejected_prediction_tokens": 0
-        },
-        "prompt_tokens": 5,
-        "total_tokens": 60
+  "id": "chatcmpl-<chat_id>",
+  "object": "chat.completion",
+  "created": 1755084403,
+  "model": "model",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "这是根据知识库生成的回复。"
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
     }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 10,
+    "total_tokens": 22
+  },
+  "session_id": "<session_id>"
 }
 ```
 
-Failure:
+当 `extra_body.reference` 为 `true` 时，引用信息位于 `choices[0].message.reference`。
+
+#### 失败响应示例
 
 ```json
 {
@@ -214,304 +314,138 @@ Failure:
 }
 ```
 
+常见失败原因包括：聊天应用不存在或无权访问、模型不可用、消息列表为空、最后一条消息不是用户消息，以及 `session_id` 不属于当前聊天应用或外部用户。
+
 ---
 
-### Create agent completion
+### 创建智能体补全
 
-**POST** `/api/v1/agents_openai/{agent_id}/chat/completions`
+**POST** `/api/v1/agents/chat/completions`
 
-Creates a model response for a given chat conversation.
+以 OpenAI Chat Completions 兼容格式运行指定智能体。
 
-This API follows the same request and response format as OpenAI's API. It allows you to interact with the model in a manner similar to how you would with [OpenAI's API](https://platform.openai.com/docs/api-reference/chat/create).
+:::caution 已废弃的地址
+`POST /api/v1/agents_openai/{agent_id}/chat/completions` 已废弃。旧地址仅用于兼容已有调用；新调用应使用本节所述地址，并在请求体中传入 `agent_id` 和 `openai-compatible`。
+:::
 
-#### Request
+#### 请求
 
-- Method: POST
-- URL: `/api/v1/agents_openai/{agent_id}/chat/completions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"model"`: `string`
-  - `"messages"`: `object list`
-  - `"stream"`: `boolean`
+- 方法：`POST`
+- 地址：`/api/v1/agents/chat/completions`
+- 请求头：
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <YOUR_API_KEY>`
 
-##### Request example
+请求示例：
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/agents_openai/{agent_id}/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-        "model": "model",
-        "messages": [{"role": "user", "content": "Say this is a test!"}],
-        "stream": true
-      }'
+  --url http://{address}/api/v1/agents/chat/completions \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "agent_id": "<agent_id>",
+    "openai-compatible": true,
+    "model": "model",
+    "messages": [
+      {"role": "user", "content": "请执行这个任务。"}
+    ],
+    "stream": true
+  }'
 ```
 
-##### Request Parameters
+#### 请求体参数
 
-- `model` (*Body parameter*) `string`, *Required*
-  The model used to generate the response. The server will parse this automatically, so you can set it to any value for now.
+- `agent_id`：`string`，必填。智能体 ID。调用者必须有权访问该智能体。
+- `openai-compatible`：`boolean`，必填。设为 `true` 后返回 OpenAI 兼容格式。
+- `model`：`string`，可选。兼容 OpenAI 客户端的模型字段；智能体实际使用的模型由其流程配置决定。
+- `messages`：`array<object>`，必填。至少包含一条消息。接口使用消息列表中最后一条 `user` 消息作为本次输入。
+- `stream`：`boolean`，可选。为 `true` 时返回 SSE 流，否则返回完整响应。
+- `session_id`：`string`，可选。继续已有智能体会话。该会话必须属于指定智能体，并且调用者必须有权访问。
 
-- `messages` (*Body parameter*) `list[object]`, *Required*
-  A list of historical chat messages used to generate the response. This must contain at least one message with the `user` role.
+#### 流式响应
 
-- `stream` (*Body parameter*) `boolean`
-  Whether to receive the response as a stream. Set this to `false` explicitly if you prefer to receive the entire response in one go instead of as a stream.
+```text
+data:{"id":"<completion_id>","object":"chat.completion.chunk","model":"<agent_id>","choices":[{"index":0,"delta":{"content":"任务"},"finish_reason":null}]}
 
-- `session_id` (*Body parameter*) `string`
-  Agent session id.
+data:{"id":"<completion_id>","object":"chat.completion.chunk","model":"<agent_id>","choices":[{"index":0,"delta":{"content":"已完成。"},"finish_reason":null}]}
 
-#### Response
-
-Stream:
-
-```json
-...
-
-data: {
-    "id": "c39f6f9c83d911f0858253708ecb6573",
-    "object": "chat.completion.chunk",
-    "model": "d1f79142831f11f09cc51795b9eb07c0",
-    "choices": [
-        {
-            "delta": {
-                "content": " terminal"
-            },
-            "finish_reason": null,
-            "index": 0
-        }
-    ]
-}
-
-data: {
-    "id": "c39f6f9c83d911f0858253708ecb6573",
-    "object": "chat.completion.chunk",
-    "model": "d1f79142831f11f09cc51795b9eb07c0",
-    "choices": [
-        {
-            "delta": {
-                "content": "."
-            },
-            "finish_reason": null,
-            "index": 0
-        }
-    ]
-}
-
-data: {
-    "id": "c39f6f9c83d911f0858253708ecb6573",
-    "object": "chat.completion.chunk",
-    "model": "d1f79142831f11f09cc51795b9eb07c0",
-    "choices": [
-        {
-            "delta": {
-                "content": "",
-                "reference": {
-                    "chunks": {
-                        "20": {
-                            "id": "4b8935ac0a22deb1",
-                            "content": "```cd /usr/ports/editors/neovim/ && make install```## Android[Termux](https://github.com/termux/termux-app) offers a Neovim package.",
-                            "document_id": "4bdd2ff65e1511f0907f09f583941b45",
-                            "document_name": "INSTALL22.md",
-                            "document_metadata": {
-                                "author": "bob",
-                                "year": "2023",
-                                "source": "internal"
-                            },
-                            "dataset_id": "456ce60c5e1511f0907f09f583941b45",
-                            "image_id": "",
-                            "positions": [
-                                [
-                                    12,
-                                    11,
-                                    11,
-                                    11,
-                                    11
-                                ]
-                            ],
-                            "url": null,
-                            "similarity": 0.5697155305154673,
-                            "vector_similarity": 0.7323851005515574,
-                            "term_similarity": 0.5000000005,
-                            "doc_type": ""
-                        }
-                    },
-                    "doc_aggs": {
-                        "INSTALL22.md": {
-                            "doc_name": "INSTALL22.md",
-                            "doc_id": "4bdd2ff65e1511f0907f09f583941b45",
-                            "count": 3
-                        },
-                        "INSTALL.md": {
-                            "doc_name": "INSTALL.md",
-                            "doc_id": "4bd7fdd85e1511f0907f09f583941b45",
-                            "count": 2
-                        },
-                        "INSTALL(1).md": {
-                            "doc_name": "INSTALL(1).md",
-                            "doc_id": "4bdfb42e5e1511f0907f09f583941b45",
-                            "count": 2
-                        },
-                        "INSTALL3.md": {
-                            "doc_name": "INSTALL3.md",
-                            "doc_id": "4bdab5825e1511f0907f09f583941b45",
-                            "count": 1
-                        }
-                    }
-                }
-            },
-            "finish_reason": null,
-            "index": 0
-        }
-    ]
-}
-
-data: [DONE]
+data:[DONE]
 ```
 
-Non-stream:
+智能体流程使用知识库检索时，响应中的 `delta` 还可能包含 `reference` 引用信息。
+
+#### 非流式响应
 
 ```json
 {
-    "choices": [
-        {
-            "finish_reason": "stop",
-            "index": 0,
-            "logprobs": null,
-            "message": {
-                "content": "\nTo install Neovim, the process varies depending on your operating system:\n\n### For Windows:\n1. **Download from GitHub**: \n   - Visit the [Neovim releases page](https://github.com/neovim/neovim/releases)\n   - Download the latest Windows installer (nvim-win64.msi)\n   - Run the installer and follow the prompts\n\n2. **Using winget** (Windows Package Manager):\n...",
-                "reference": {
-                    "chunks": {
-                        "20": {
-                            "content": "```cd /usr/ports/editors/neovim/ && make install```## Android[Termux](https://github.com/termux/termux-app) offers a Neovim package.",
-                            "dataset_id": "456ce60c5e1511f0907f09f583941b45",
-                            "doc_type": "",
-                            "document_id": "4bdd2ff65e1511f0907f09f583941b45",
-                            "document_name": "INSTALL22.md",
-                            "document_metadata": {
-                                "author": "bob",
-                                "year": "2023",
-                                "source": "internal"
-                            },
-                            "id": "4b8935ac0a22deb1",
-                            "image_id": "",
-                            "positions": [
-                                [
-                                    12,
-                                    11,
-                                    11,
-                                    11,
-                                    11
-                                ]
-                            ],
-                            "similarity": 0.5697155305154673,
-                            "term_similarity": 0.5000000005,
-                            "url": null,
-                            "vector_similarity": 0.7323851005515574
-                        }
-                    },
-                    "doc_aggs": {
-                        "INSTALL(1).md": {
-                            "count": 2,
-                            "doc_id": "4bdfb42e5e1511f0907f09f583941b45",
-                            "doc_name": "INSTALL(1).md"
-                        },
-                        "INSTALL.md": {
-                            "count": 2,
-                            "doc_id": "4bd7fdd85e1511f0907f09f583941b45",
-                            "doc_name": "INSTALL.md"
-                        },
-                        "INSTALL22.md": {
-                            "count": 3,
-                            "doc_id": "4bdd2ff65e1511f0907f09f583941b45",
-                            "doc_name": "INSTALL22.md"
-                        },
-                        "INSTALL3.md": {
-                            "count": 1,
-                            "doc_id": "4bdab5825e1511f0907f09f583941b45",
-                            "doc_name": "INSTALL3.md"
-                        }
-                    }
-                },
-                "role": "assistant"
-            }
-        }
-    ],
-    "created": null,
-    "id": "c39f6f9c83d911f0858253708ecb6573",
-    "model": "d1f79142831f11f09cc51795b9eb07c0",
-    "object": "chat.completion",
-    "param": null,
-    "usage": {
-        "completion_tokens": 415,
-        "completion_tokens_details": {
-            "accepted_prediction_tokens": 0,
-            "reasoning_tokens": 0,
-            "rejected_prediction_tokens": 0
-        },
-        "prompt_tokens": 6,
-        "total_tokens": 421
+  "id": "<completion_id>",
+  "object": "chat.completion",
+  "model": "<agent_id>",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "任务已完成。"
+      },
+      "finish_reason": "stop",
+      "logprobs": null
     }
+  ],
+  "usage": {
+    "prompt_tokens": 8,
+    "completion_tokens": 6,
+    "total_tokens": 14
+  }
 }
 ```
 
-Failure:
+#### 失败响应示例
+
+未提供智能体 ID：
 
 ```json
 {
   "code": 102,
-  "message": "The last content of this conversation is not from user."
+  "data": false,
+  "message": "`agent_id` is required."
 }
 ```
 
-## DATASET MANAGEMENT
+无权访问智能体：
+
+```json
+{
+  "code": 102,
+  "data": false,
+  "message": "Make sure you have permission to access the agent."
+}
+```
+
+已有会话与智能体不匹配时，请求也会被拒绝，不能用一个智能体的 `session_id` 调用另一个智能体。
+
+## 知识库管理
 
 ---
 
-### Create dataset
+本章介绍知识库的创建、查询、更新、删除，以及知识图谱和 RAPTOR 索引任务接口。
+
+所有接口均需在请求头中携带 API Token：
+
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+API Token 与工作空间绑定。接口只会返回该 Token 所属用户有权访问的工作空间资源；创建、修改、删除和构建索引还会校验相应资源的写权限。
+
+### 创建知识库
 
 **POST** `/api/v1/datasets`
 
-Creates a dataset.
+在指定工作空间中创建知识库。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/datasets`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"avatar"`: `string`
-  - `"description"`: `string`
-  - `"embedding_model"`: `string`
-  - `"permission"`: `string`
-  - `"chunk_method"`: `string`
-  - `"parser_config"`: `object`
-  - `"parse_type"`: `int`
-  - `"pipeline_id"`: `string`
-
-##### A basic request example
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/datasets \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-      "name": "test_1"
-      }'
-```
-
-##### A request example specifying ingestion pipeline
-
-:::caution WARNING
-You must *not* include `"chunk_method"` or `"parser_config"` when specifying an ingestion pipeline.
-:::
+#### 请求示例
 
 ```bash
 curl --request POST \
@@ -519,2150 +453,1363 @@ curl --request POST \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer <YOUR_API_KEY>' \
   --data '{
-   "name": "test-sdk",
-   "parse_type": <NUMBER_OF_PARSERS_IN_YOUR_PARSER_COMPONENT>,
-   "pipeline_id": "<PIPELINE_ID_32_HEX>"
+    "name": "产品资料库",
+    "workspace_id": "<WORKSPACE_ID>",
+    "chunk_method": "naive"
   }'
 ```
 
-##### Request parameters
+使用 DataFlow 解析流水线创建知识库：
 
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The unique name of the dataset to create. It must adhere to the following requirements:
-  - Basic Multilingual Plane (BMP) only
-  - Maximum 128 characters
-  - Case-insensitive
+```bash
+curl --request POST \
+  --url http://{address}/api/v1/datasets \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "流水线知识库",
+    "workspace_id": "<WORKSPACE_ID>",
+    "parse_type": 2,
+    "pipeline_id": "d0bebe30ae2211f0970942010a8e0005"
+  }'
+```
 
-- `"avatar"`: (*Body parameter*), `string`
-  Base64 encoding of the avatar.
-  - Maximum 65535 characters
+#### 请求体参数
 
-- `"description"`: (*Body parameter*), `string`
-  A brief description of the dataset to create.
-  - Maximum 65535 characters
+- `name`：`string`，必填。知识库名称，去除首尾空白后长度为 1～128 个字符；同一工作空间内名称不区分大小写且不可重复。
+- `workspace_id`：`string`，可选。32 位工作空间 ID。未传入时使用当前用户的个人工作空间。调用者必须有权在该工作空间创建知识库。
+- `avatar`：`string | null`，可选。带 MIME 前缀的 Base64 图片，仅支持 JPEG 和 PNG，例如 `data:image/png;base64,...`，最大 65535 个字符。
+- `description`：`string | null`，可选。知识库描述，最大 65535 个字符。
+- `embedding_model`：`string | null`，可选。嵌入模型实例 ID，或 `模型名称@提供商` 格式的模型标识。未提供时使用工作空间默认嵌入模型。
+- `chunk_method`：`string | null`，可选。内置分块方法，可选值见下表。
+- `parser_config`：`object | null`，可选。分块和解析配置。
+- `parse_type`：`integer | null`，可选，范围为 0～64。使用 DataFlow 时表示解析模式。
+- `pipeline_id`：`string | null`，可选。32 位 DataFlow ID。
+- `auto_metadata_config`：`object | null`，可选。自动元数据提取配置。
+- `ext`：`object`，可选。扩展配置。
+- `permission`：`"me" | "team"`，可选。为兼容接口保留；服务端会根据目标工作空间类型将个人空间设为 `me`、团队空间设为 `team`。
 
-- `"embedding_model"`: (*Body parameter*), `string`
-  The name of the embedding model to use. For example: `"BAAI/bge-large-zh-v1.5@BAAI"`
-  - Maximum 255 characters
-  - Must follow `model_name@model_factory` format
+支持的 `chunk_method`：
 
-- `"permission"`: (*Body parameter*), `string`
-  Specifies who can access the dataset to create. Available options:
-  - `"me"`: (Default) Only you can manage the dataset.
-  - `"team"`: All team members can manage the dataset.
+| 值 | 含义 |
+| --- | --- |
+| `naive` | 通用 |
+| `book` | 图书 |
+| `email` | 邮件 |
+| `laws` | 法律文件 |
+| `manual` | 手册 |
+| `one` | 整体作为一个分块 |
+| `paper` | 论文 |
+| `picture` | 图片 |
+| `presentation` | 演示文稿 |
+| `qa` | 问答 |
+| `table` | 表格 |
+| `tag` | 标签集 |
 
-- `"chunk_method"`: (*Body parameter*), `enum<string>`
-  The default chunk method of the dataset to create. Mutually exclusive with `"parse_type"` and `"pipeline_id"`. If you set `"chunk_method"`, do not include `"parse_type"` or `"pipeline_id"`.
-  Available options:
-  - `"naive"`: General (default)
-  - `"book"`: Book
-  - `"email"`: Email
-  - `"laws"`: Laws
-  - `"manual"`: Manual
-  - `"one"`: One
-  - `"paper"`: Paper
-  - `"picture"`: Picture
-  - `"presentation"`: Presentation
-  - `"qa"`: Q&A
-  - `"table"`: Table
-  - `"tag"`: Tag
+常用 `parser_config` 字段：
 
-- `"parser_config"`: (*Body parameter*), `object`
-  The configuration settings for the dataset parser. The attributes in this JSON object vary with the selected `"chunk_method"`:
-  - If `"chunk_method"` is `"naive"`, the `"parser_config"` object contains the following attributes:
-    - `"auto_keywords"`: `int`
-      - Defaults to `0`
-      - Minimum: `0`
-      - Maximum: `32`
-    - `"auto_questions"`: `int`
-      - Defaults to `0`
-      - Minimum: `0`
-      - Maximum: `10`
-    - `"chunk_token_num"`: `int`
-      - Defaults to `512`
-      - Minimum: `1`
-      - Maximum: `2048`
-    - `"delimiter"`: `string`
-      - Defaults to `"\n"`.
-    - `"html4excel"`: `bool`
-      - Whether to convert Excel documents into HTML format.
-      - Defaults to `false`
-    - `"layout_recognize"`: `string`
-      - Defaults to `DeepDOC`
-    - `"tag_kb_ids"`: `array<string>`
-      - IDs of datasets to be parsed using the ​​Tag chunk method.
-      - Before setting this, ensure a tag set is created and properly configured. For details, see [Use tag set](https://ragflow.io/docs/dev/use_tag_sets).
-    - `"task_page_size"`: `int`
-      - For PDFs only.
-      - Defaults to `12`
-      - Minimum: `1`
-    - `"raptor"`: `object` RAPTOR-specific settings.
-      - Defaults to: `{"use_raptor": false}`
-    - `"graphrag"`: `object` GRAPHRAG-specific settings.
-      - Defaults to: `{"use_graphrag": false}`
-    - `"parent_child"`: `object` Parent-child chunking settings. When enabled, each chunk is further split into smaller child chunks using `children_delimiter`. At retrieval time, matched child chunks are replaced by their parent's full text before being passed to the LLM, giving precise vector matching with broader context.
-      - `"use_parent_child"`: `bool` Whether to enable parent-child chunking. Defaults to `false`.
-      - `"children_delimiter"`: `string` The delimiter used to split a parent chunk into child chunks. Only takes effect when `"use_parent_child"` is `true`. Defaults to `"\n"`.
-  - If `"chunk_method"` is `"qa"`, `"manual"`, `"paper"`, `"book"`, `"laws"`, or `"presentation"`, the `"parser_config"` object contains the following attribute:
-    - `"raptor"`: `object` RAPTOR-specific settings.
-      - Defaults to: `{"use_raptor": false}`.
-  - If `"chunk_method"` is `"table"`, `"picture"`, `"one"`, or `"email"`, `"parser_config"` is an empty JSON object.
+- `chunk_token_num`：分块的目标 Token 数。
+- `delimiter`：分隔符。
+- `layout_recognize`：版面识别方式。
+- `html4excel`：是否将 Excel 转换为 HTML。
+- `auto_keywords`：自动生成关键词数量。
+- `auto_questions`：自动生成问题数量。
+- `task_page_size`：PDF 单个解析任务处理的页数。
+- `tag_kb_ids`：使用标签集时引用的知识库 ID 列表。
+- `raptor`：RAPTOR 配置，例如 `{"use_raptor": false}`。
+- `graphrag`：GraphRAG 配置，例如 `{"use_graphrag": false}`。
+- `parent_child`：父子分块配置，包括 `use_parent_child` 和 `children_delimiter`。
 
-- `"parse_type"`: (*Body parameter*), `int`
-  The ingestion pipeline parse type identifier, i.e., the number of parsers in your **Parser** component.
-  - Required (along with `"pipeline_id"`) if specifying an ingestion pipeline.
-  - Must not be included when `"chunk_method"` is specified.
-
-- `"pipeline_id"`: (*Body parameter*), `string`
-  The ingestion pipeline ID. Can be found in the corresponding URL in the RAGFlow UI.
-  - Required (along with `"parse_type"`) if specifying an ingestion pipeline.
-  - Must be a 32-character lowercase hexadecimal string, e.g., `"d0bebe30ae2211f0970942010a8e0005"`.
-  - Must not be included when `"chunk_method"` is specified.
-
-:::caution WARNING
-You can choose either of the following ingestion options when creating a dataset, but *not* both:
-
-- Use a built-in chunk method -- specify `"chunk_method"` (optionally with `"parser_config"`).
-- Use an ingestion pipeline -- specify both `"parse_type"` and `"pipeline_id"`.
-
-If none of `"chunk_method"`, `"parse_type"`, or `"pipeline_id"` are provided, the system defaults to `chunk_method = "naive"`.
+:::caution 解析方式互斥
+使用内置分块方法时设置 `chunk_method`，可同时设置 `parser_config`；使用 DataFlow 时设置 `parse_type` 和 `pipeline_id`。不要在同一次请求中混用这两种方式。均未设置时，服务端默认使用 `naive`。
 :::
 
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "avatar": null,
-        "chunk_count": 0,
-        "chunk_method": "naive",
-        "create_date": "Mon, 28 Apr 2025 18:40:41 GMT",
-        "create_time": 1745836841611,
-        "created_by": "3af81804241d11f0a6a79f24fc270c7f",
-        "description": null,
-        "document_count": 0,
-        "embedding_model": "BAAI/bge-large-zh-v1.5@BAAI",
-        "id": "3b4de7d4241d11f0a6a79f24fc270c7f",
-        "language": "English",
-        "name": "RAGFlow example",
-        "pagerank": 0,
-        "parser_config": {
-            "chunk_token_num": 128,
-            "delimiter": "\\n!?;。；！？",
-            "html4excel": false,
-            "layout_recognize": "DeepDOC",
-            "raptor": {
-                "use_raptor": false
-                }
-            },
-        "permission": "me",
-        "similarity_threshold": 0.2,
-        "status": "1",
-        "tenant_id": "3af81804241d11f0a6a79f24fc270c7f",
-        "token_num": 0,
-        "update_date": "Mon, 28 Apr 2025 18:40:41 GMT",
-        "update_time": 1745836841611,
-        "vector_similarity_weight": 0.3,
-    },
+  "code": 0,
+  "data": {
+    "id": "3b4de7d4241d11f0a6a79f24fc270c7f",
+    "name": "产品资料库",
+    "tenant_id": "3af81804241d11f0a6a79f24fc270c7f",
+    "created_by": "69736c5e723611efb51b0242ac120007",
+    "chunk_method": "naive",
+    "embedding_model": "BAAI/bge-large-zh-v1.5@BAAI",
+    "document_count": 0,
+    "chunk_count": 0,
+    "token_num": 0,
+    "permission": "team"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 101,
-    "message": "Field: <name> - Message: <String should have at least 1 character> - Value: <>"
-}
-```
+创建失败时会返回非零 `code`，常见原因包括名称无效或重复、目标工作空间不可写、嵌入模型不可用，以及 DataFlow 与知识库不属于同一工作空间。
 
 ---
 
-### Delete datasets
+### 删除知识库
 
 **DELETE** `/api/v1/datasets`
 
-Deletes datasets by ID.
+批量删除知识库。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/datasets`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]` or `null`
-  - `"delete_all"`: `boolean`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-     "ids": ["d94a8dc02c9711f0930f7fbc369eab6d", "e94a8dc02c9711f0930f7fbc369eab6e"]
-     }'
+  --url http://{address}/api/v1/datasets \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "ids": [
+      "d94a8dc02c9711f0930f7fbc369eab6d",
+      "e94a8dc02c9711f0930f7fbc369eab6e"
+    ]
+  }'
 ```
+
+删除当前用户创建的全部知识库：
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-     "delete_all": true
-     }'
+  --url http://{address}/api/v1/datasets \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{"delete_all": true}'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `"ids"`: (*Body parameter*), `list[string]` or `null`
-  Specifies the datasets to delete:
-  - If omitted, or set to `null` or an empty array, no datasets are deleted.
-  - If an array of IDs is provided, only the datasets matching those IDs are deleted.
-- `"delete_all"`: (*Body parameter*), `boolean`
-  Whether to delete all datasets owned by the current user when`"ids"` is omitted, or set to `null` or an empty array. Defaults to `false`.
+- `ids`：`array<string> | null`，可选。待删除的知识库 ID；不允许包含重复 ID。
+- `delete_all`：`boolean`，可选，默认 `false`。当 `ids` 未提供、为 `null` 或空数组时，设为 `true` 会删除当前用户创建且有权删除的全部知识库。
 
-#### Response
+当 `ids` 为空且 `delete_all` 为 `false` 时，不删除任何数据。
 
-Success:
+删除前服务端会检查权限和资源引用。如果知识库或其中的文件正被聊天、智能体等资源引用，接口会拒绝删除并返回引用信息。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0
+  "code": 0,
+  "data": {
+    "success_count": 2
+  }
 }
-```
-
-Failure:
-
-```json
-{
-    "code":108,
-    "message":"User '<tenant_id>' lacks permission for datasets: '<dataset_ids>'"
-}
-
 ```
 
 ---
 
-### Update dataset
+### 更新知识库
 
 **PUT** `/api/v1/datasets/{dataset_id}`
 
-Updates configurations for a specified dataset.
+更新指定知识库的配置。只需提交需要修改的字段；该接口不能移动知识库所属工作空间。
 
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/datasets/{dataset_id}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"avatar"`: `string`
-  - `"description"`: `string`
-  - `"embedding_model"`: `string`
-  - `"permission"`: `string`
-  - `"chunk_method"`: `string`
-  - `"pagerank"`: `int`
-  - `"parser_config"`: `object`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PUT \
-     --url http://{address}/api/v1/datasets/{dataset_id} \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "name": "updated_dataset"
-     }'
+  --url http://{address}/api/v1/datasets/{dataset_id} \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "更新后的资料库",
+    "description": "产品和研发资料"
+  }'
 ```
 
-##### Request parameters
+#### 参数
 
-- `dataset_id`: (*Path parameter*)
-  The ID of the dataset to update.
-- `"name"`: (*Body parameter*), `string`
-  The revised name of the dataset.
-  - Basic Multilingual Plane (BMP) only
-  - Maximum 128 characters
-  - Case-insensitive
-- `"avatar"`: (*Body parameter*), `string`
-  The updated base64 encoding of the avatar.
-  - Maximum 65535 characters
-- `"embedding_model"`: (*Body parameter*), `string`
-  The updated embedding model name.
-  - Ensure that `"chunk_count"` is `0` before updating `"embedding_model"`.
-  - Maximum 255 characters
-  - Must follow `model_name@model_factory` format
-- `"permission"`: (*Body parameter*), `string`
-  The updated dataset permission. Available options:
-  - `"me"`: (Default) Only you can manage the dataset.
-  - `"team"`: All team members can manage the dataset.
-- `"pagerank"`: (*Body parameter*), `int`
-  refer to [Set page rank](https://ragflow.io/docs/dev/set_page_rank)
-  - Default: `0`
-  - Minimum: `0`
-  - Maximum: `100`
-- `"chunk_method"`: (*Body parameter*), `enum<string>`
-  The chunking method for the dataset. Available options:
-  - `"naive"`: General (default)
-  - `"book"`: Book
-  - `"email"`: Email
-  - `"laws"`: Laws
-  - `"manual"`: Manual
-  - `"one"`: One
-  - `"paper"`: Paper
-  - `"picture"`: Picture
-  - `"presentation"`: Presentation
-  - `"qa"`: Q&A
-  - `"table"`: Table
-  - `"tag"`: Tag
-- `"parser_config"`: (*Body parameter*), `object`
-  The configuration settings for the dataset parser. The attributes in this JSON object vary with the selected `"chunk_method"`:
-  - If `"chunk_method"` is `"naive"`, the `"parser_config"` object contains the following attributes:
-    - `"auto_keywords"`: `int`
-      - Defaults to `0`
-      - Minimum: `0`
-      - Maximum: `32`
-    - `"auto_questions"`: `int`
-      - Defaults to `0`
-      - Minimum: `0`
-      - Maximum: `10`
-    - `"chunk_token_num"`: `int`
-      - Defaults to `512`
-      - Minimum: `1`
-      - Maximum: `2048`
-    - `"delimiter"`: `string`
-      - Defaults to `"\n"`.
-    - `"html4excel"`: `bool` Indicates whether to convert Excel documents into HTML format.
-      - Defaults to `false`
-    - `"layout_recognize"`: `string`
-      - Defaults to `DeepDOC`
-    - `"tag_kb_ids"`: `array<string>` refer to [Use tag set](https://ragflow.io/docs/dev/use_tag_sets)
-      - Must include a list of dataset IDs, where each dataset is parsed using the ​​Tag Chunking Method
-    - `"task_page_size"`: `int` For PDF only.
-      - Defaults to `12`
-      - Minimum: `1`
-    - `"raptor"`: `object` RAPTOR-specific settings.
-      - Defaults to: `{"use_raptor": false}`
-    - `"graphrag"`: `object` GRAPHRAG-specific settings.
-      - Defaults to: `{"use_graphrag": false}`
-    - `"parent_child"`: `object` Parent-child chunking settings. When enabled, each chunk is further split into smaller child chunks using `children_delimiter`. At retrieval time, matched child chunks are replaced by their parent's full text before being passed to the LLM, giving precise vector matching with broader context.
-      - `"use_parent_child"`: `bool` Whether to enable parent-child chunking. Defaults to `false`.
-      - `"children_delimiter"`: `string` The delimiter used to split a parent chunk into child chunks. Only takes effect when `"use_parent_child"` is `true`. Defaults to `"\n"`.
-  - If `"chunk_method"` is `"qa"`, `"manual"`, `"paper"`, `"book"`, `"laws"`, or `"presentation"`, the `"parser_config"` object contains the following attribute:
-    - `"raptor"`: `object` RAPTOR-specific settings.
-      - Defaults to: `{"use_raptor": false}`.
-  - If `"chunk_method"` is `"table"`, `"picture"`, `"one"`, or `"email"`, `"parser_config"` is an empty JSON object.
+- `dataset_id`：路径参数，必填。知识库 ID。
+- `name`：`string`，可选。新名称，规则与创建接口一致。
+- `avatar`：`string | null`，可选。新头像。
+- `description`：`string | null`，可选。新描述。
+- `embedding_model`：`string | null`，可选。新嵌入模型。已有分块时切换嵌入模型可能需要重新处理文档。
+- `chunk_method`：`string | null`，可选。新分块方法。
+- `parser_config`：`object | null`，可选。与已有解析配置进行合并。
+- `pagerank`：`integer`，可选，范围为 0～100。仅 Elasticsearch 检索引擎支持非零值。
+- `language`：`string | null`，可选，最大 32 个字符。
+- `connectors`：`array<object>`，可选。关联的数据源；数据源必须与知识库属于同一工作空间。
+- `auto_metadata_config`：`object | null`，可选。自动元数据提取配置。
+- `permission`：兼容字段。服务端仍按知识库实际工作空间类型确定其值。
 
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0
+  "code": 0,
+  "data": {
+    "id": "3b4de7d4241d11f0a6a79f24fc270c7f",
+    "name": "更新后的资料库",
+    "description": "产品和研发资料"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Can't change tenant_id."
-}
-```
+无写权限、名称冲突、模型不可用或跨工作空间引用数据源/编译模板时，接口会返回非零 `code`。
 
 ---
 
-### List datasets
+### 获取知识库列表
 
-**GET** `/api/v1/datasets?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={dataset_name}&id={dataset_id}&include_parsing_status={include_parsing_status}`
+**GET** `/api/v1/datasets`
 
-Lists datasets.
+返回当前用户可见的知识库。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={dataset_name}&id={dataset_id}&include_parsing_status={include_parsing_status}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --request GET \
-     --url http://{address}/api/v1/datasets?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={dataset_name}&id={dataset_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --get http://{address}/api/v1/datasets \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=30' \
+  --data-urlencode 'scope=all' \
+  --data-urlencode 'orderby=update_time' \
+  --data-urlencode 'desc=true' \
+  --data-urlencode 'include_parsing_status=true'
 ```
 
-```bash
-# List datasets with parsing status
-curl --request GET \
-     --url 'http://{address}/api/v1/datasets?include_parsing_status=true' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
+#### 查询参数
 
-##### Request parameters
+- `page`：`integer`，默认 `1`。页码。
+- `page_size`：`integer`，默认 `30`。每页数量。
+- `orderby`：`string`，默认 `create_time`。排序字段，常用值为 `create_time`、`update_time`。
+- `desc`：`boolean`，默认 `true`。是否降序排列。
+- `id`：`string`，可选。按知识库 ID 精确筛选。
+- `name`：`string`，可选。按名称筛选。
+- `scope`：`"all" | "personal" | "team"`，默认 `all`。工作空间范围。
+- `workspace_id`：`string`，可选。筛选具体工作空间。`scope=team` 时必须提供有效的团队工作空间 ID。
+- `include_parsing_status`：`boolean`，默认 `false`。是否统计各解析状态的文件数。
 
-- `page`: (*Filter parameter*)
-  Specifies the page on which the datasets will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*)
-  The number of datasets on each page. Defaults to `30`.
-- `orderby`: (*Filter parameter*)
-  The field by which datasets should be sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*)
-  Indicates whether the retrieved datasets should be sorted in descending order. Defaults to `true`.
-- `name`: (*Filter parameter*)
-  The name of the dataset to retrieve.
-- `id`: (*Filter parameter*)
-  The ID of the dataset to retrieve.
-- `include_parsing_status`: (*Filter parameter*)
-  Whether to include document parsing status counts in the response. Defaults to `false`. When set to `true`, each dataset object in the response will include the following additional fields:
-  - `unstart_count`: Number of documents not yet started parsing.
-  - `running_count`: Number of documents currently being parsed.
-  - `cancel_count`: Number of documents whose parsing was cancelled.
-  - `done_count`: Number of documents that have been successfully parsed.
-  - `fail_count`: Number of documents whose parsing failed.
+`include_parsing_status=true` 时，每个知识库还会包含：
 
-#### Response
+- `unstart_count`：未开始解析的文件数。
+- `running_count`：正在解析的文件数。
+- `cancel_count`：已取消解析的文件数。
+- `done_count`：解析成功的文件数。
+- `fail_count`：解析失败的文件数。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "avatar": "",
-            "chunk_count": 59,
-            "create_date": "Sat, 14 Sep 2024 01:12:37 GMT",
-            "create_time": 1726276357324,
-            "created_by": "69736c5e723611efb51b0242ac120007",
-            "description": null,
-            "document_count": 1,
-            "embedding_model": "BAAI/bge-large-zh-v1.5",
-            "id": "6e211ee0723611efa10a0242ac120007",
-            "language": "English",
-            "name": "mysql",
-            "chunk_method": "naive",
-            "parser_config": {
-                "chunk_token_num": 8192,
-                "delimiter": "\\n",
-                "entity_types": [
-                    "organization",
-                    "person",
-                    "location",
-                    "event",
-                    "time"
-                ]
-            },
-            "permission": "me",
-            "similarity_threshold": 0.2,
-            "status": "1",
-            "tenant_id": "69736c5e723611efb51b0242ac120007",
-            "token_num": 12744,
-            "update_date": "Thu, 10 Oct 2024 04:07:23 GMT",
-            "update_time": 1728533243536,
-            "vector_similarity_weight": 0.3
-        }
-    ],
-    "total_datasets": 1
-}
-```
-
-Success (with `include_parsing_status=true`):
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "avatar": null,
-            "cancel_count": 0,
-            "chunk_count": 30,
-            "chunk_method": "qa",
-            "create_date": "2026-03-09T18:57:13",
-            "create_time": 1773053833094,
-            "created_by": "928f92a210b911f1ac4cc39e0b8fa3ad",
-            "description": null,
-            "document_count": 1,
-            "done_count": 1,
-            "embedding_model": "text-embedding-v2@Tongyi-Qianwen",
-            "fail_count": 0,
-            "id": "ba6586c21ba611f1a3dc476f0709e75e",
-            "language": "English",
-            "name": "Test Dataset",
-            "parser_config": {
-                "graphrag": { "use_graphrag": false },
-                "llm_id": "deepseek-chat@DeepSeek",
-                "raptor": { "use_raptor": false }
-            },
-            "permission": "me",
-            "running_count": 0,
-            "similarity_threshold": 0.2,
-            "status": "1",
-            "tenant_id": "928f92a210b911f1ac4cc39e0b8fa3ad",
-            "token_num": 1746,
-            "unstart_count": 0,
-            "update_date": "2026-03-09T18:59:32",
-            "update_time": 1773053972723,
-            "vector_similarity_weight": 0.3
-        }
-    ],
-    "total_datasets": 1
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The dataset doesn't exist"
-}
-```
-
- ---
-
-### Get knowledge graph
-
-**GET** `/api/v1/datasets/{dataset_id}/knowledge_graph`
-
-Retrieves the knowledge graph of a specified dataset.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/knowledge_graph`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
-```bash
-curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/knowledge_graph \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "graph": {
-            "directed": false,
-            "edges": [
-                {
-                    "description": "The notice is a document issued to convey risk warnings and operational alerts.<SEP>The notice is a specific instance of a notification document issued under the risk warning framework.",
-                    "keywords": ["9", "8"],
-                    "source": "notice",
-                    "source_id": ["8a46cdfe4b5c11f0a5281a58e595aa1c"],
-                    "src_id": "xxx",
-                    "target": "xxx",
-                    "tgt_id": "xxx",
-                    "weight": 17.0
-                }
-            ],
-            "graph": {
-                "source_id": ["8a46cdfe4b5c11f0a5281a58e595aa1c", "8a7eb6424b5c11f0a5281a58e595aa1c"]
-            },
-            "multigraph": false,
-            "nodes": [
-                {
-                    "description": "xxx",
-                    "entity_name": "xxx",
-                    "entity_type": "ORGANIZATION",
-                    "id": "xxx",
-                    "pagerank": 0.10804906590624092,
-                    "rank": 3,
-                    "source_id": ["8a7eb6424b5c11f0a5281a58e595aa1c"]
-                }
-            ]
-        },
-        "mind_map": {}
+  "code": 0,
+  "data": [
+    {
+      "id": "6e211ee0723611efa10a0242ac120007",
+      "name": "产品资料库",
+      "tenant_id": "69736c5e723611efb51b0242ac120007",
+      "created_by": "69736c5e723611efb51b0242ac120007",
+      "chunk_method": "naive",
+      "embedding_model": "BAAI/bge-large-zh-v1.5@BAAI",
+      "document_count": 3,
+      "chunk_count": 59,
+      "token_num": 12744,
+      "done_count": 2,
+      "running_count": 1,
+      "fail_count": 0,
+      "update_time": 1728533243536
     }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The dataset doesn't exist"
+  ],
+  "total": 1
 }
 ```
 
 ---
 
-### Delete knowledge graph
+### 获取知识图谱
 
-**DELETE** `/api/v1/datasets/{dataset_id}/knowledge_graph`
+**GET** `/api/v1/datasets/{dataset_id}/graph`
 
-Removes the knowledge graph of a specified dataset.
+读取指定知识库已生成的知识图谱。调用者需要对知识库具有读取权限。
 
-#### Request
+#### 请求示例
 
-- Method: DELETE
-- URL: `/api/v1/datasets/{dataset_id}/knowledge_graph`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
+```bash
+curl --request GET \
+  --url http://{address}/api/v1/datasets/{dataset_id}/graph \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
+```
 
-##### Request example
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": {
+    "graph": {
+      "directed": false,
+      "nodes": [
+        {
+          "id": "entity-id",
+          "label": "产品"
+        }
+      ],
+      "edges": [
+        {
+          "source": "产品",
+          "target": "文档",
+          "weight": 1.0
+        }
+      ]
+    }
+  }
+}
+```
+
+:::caution 旧接口已废弃
+`GET /api/v1/datasets/{dataset_id}/knowledge_graph` 仅作为兼容别名保留。新调用请使用 `/graph`。
+:::
+
+---
+
+### 删除知识图谱索引
+
+**DELETE** `/api/v1/datasets/{dataset_id}/graph`
+
+停止知识图谱构建任务，并默认删除已经生成的图谱索引数据。调用者需要对知识库具有修改权限。
+
+#### 查询参数
+
+- `wipe`：`boolean`，默认 `true`。为 `false` 时只停止任务并保留已有进度，以便后续恢复。
+
+#### 请求示例
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/knowledge_graph \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/graph?wipe=true' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true
+  "code": 0,
+  "data": true
 }
 ```
 
-Failure:
+也可以使用统一索引地址：`DELETE /api/v1/datasets/{dataset_id}/index?type=graph&wipe=true`。
 
-```json
-{
-    "code": 102,
-    "message": "The dataset doesn't exist"
-}
-```
+:::caution 旧接口已废弃
+`DELETE /api/v1/datasets/{dataset_id}/knowledge_graph` 仅作为兼容别名保留。
+:::
 
 ---
 
-### Construct knowledge graph
+### 构建知识图谱
 
-**POST** `/api/v1/datasets/{dataset_id}/run_graphrag`
+**POST** `/api/v1/datasets/{dataset_id}/index?type=graph`
 
-Constructs a knowledge graph from a specified dataset.
+为知识库提交知识图谱构建任务。知识库必须至少包含一个文件，且调用者需要具有修改权限。同一类型已有任务运行时不会重复创建。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/run_graphrag`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/run_graphrag \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/index?type=graph' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code":0,
-    "data":{
-      "graphrag_task_id":"e498de54bfbb11f0ba028f704583b57b"
-    }
+  "code": 0,
+  "data": {
+    "task_id": "50d3c31cbfbd11f0ba028f704583b57b"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Invalid Dataset ID"
-}
-```
+:::caution 旧接口已废弃
+`POST /api/v1/datasets/{dataset_id}/run_graphrag` 仅作为兼容别名保留。
+:::
 
 ---
 
-### Get knowledge graph construction status
+### 查询知识图谱构建状态
 
-**GET** `/api/v1/datasets/{dataset_id}/trace_graphrag`
+**GET** `/api/v1/datasets/{dataset_id}/index?type=graph`
 
-Retrieves the knowledge graph construction status for a specified dataset.
+查询当前知识图谱任务。尚未创建任务时，`data` 为空对象。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/trace_graphrag`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/trace_graphrag \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/index?type=graph' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code":0,
-    "data":{
-        "begin_at":"Wed, 12 Nov 2025 19:36:56 GMT",
-        "chunk_ids":"",
-        "create_date":"Wed, 12 Nov 2025 19:36:56 GMT",
-        "create_time":1762947416350,
-        "digest":"39e43572e3dcd84f",
-        "doc_id":"44661c10bde211f0bc93c164a47ffc40",
-        "from_page":100000000,
-        "id":"e498de54bfbb11f0ba028f704583b57b",
-        "priority":0,
-        "process_duration":2.45419,
-        "progress":1.0,
-        "progress_msg":"19:36:56 created task graphrag\n19:36:57 Task has been received.\n19:36:58 [GraphRAG] doc:083661febe2411f0bc79456921e5745f has no available chunks, skip generation.\n19:36:58 [GraphRAG] build_subgraph doc:44661c10bde211f0bc93c164a47ffc40 start (chunks=1, timeout=10000000000s)\n19:36:58 Graph already contains 44661c10bde211f0bc93c164a47ffc40\n19:36:58 [GraphRAG] build_subgraph doc:44661c10bde211f0bc93c164a47ffc40 empty\n19:36:58 [GraphRAG] kb:33137ed0bde211f0bc93c164a47ffc40 no subgraphs generated successfully, end.\n19:36:58 Knowledge Graph done (0.72s)","retry_count":1,
-        "task_type":"graphrag",
-        "to_page":100000000,
-        "update_date":"Wed, 12 Nov 2025 19:36:58 GMT",
-        "update_time":1762947418454
-    }
+  "code": 0,
+  "data": {
+    "id": "50d3c31cbfbd11f0ba028f704583b57b",
+    "task_type": "graphrag",
+    "progress": 0.6,
+    "progress_msg": "Processing...",
+    "begin_at": "2026-07-21T10:00:00"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Invalid Dataset ID"
-}
-```
+:::caution 旧接口已废弃
+`GET /api/v1/datasets/{dataset_id}/trace_graphrag` 仅作为兼容别名保留。
+:::
 
 ---
 
-### Construct RAPTOR
+### 构建 RAPTOR 索引
 
-**POST** `/api/v1/datasets/{dataset_id}/run_raptor`
+**POST** `/api/v1/datasets/{dataset_id}/index?type=raptor`
 
-Construct a RAPTOR from a specified dataset.
+为知识库提交 RAPTOR 构建任务。知识库必须至少包含一个文件，且调用者需要具有修改权限。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/run_raptor`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/run_raptor \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/index?type=raptor' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code":0,
-    "data":{
-        "raptor_task_id":"50d3c31cbfbd11f0ba028f704583b57b"
-    }
+  "code": 0,
+  "data": {
+    "task_id": "50d3c31cbfbd11f0ba028f704583b57b"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Invalid Dataset ID"
-}
-```
+:::caution 旧接口已废弃
+`POST /api/v1/datasets/{dataset_id}/run_raptor` 仅作为兼容别名保留。
+:::
 
 ---
 
-### Get RAPTOR construction status
+### 查询 RAPTOR 构建状态
 
-**GET** `/api/v1/datasets/{dataset_id}/trace_raptor`
+**GET** `/api/v1/datasets/{dataset_id}/index?type=raptor`
 
-Retrieves the RAPTOR construction status for a specified dataset.
+查询当前 RAPTOR 任务。尚未创建任务时，`data` 为空对象。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/trace_raptor`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/trace_raptor \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/index?type=raptor' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the target dataset.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code":0,
-    "data":{
-        "begin_at":"Wed, 12 Nov 2025 19:47:07 GMT",
-        "chunk_ids":"",
-        "create_date":"Wed, 12 Nov 2025 19:47:07 GMT",
-        "create_time":1762948027427,
-        "digest":"8b279a6248cb8fc6",
-        "doc_id":"44661c10bde211f0bc93c164a47ffc40",
-        "from_page":100000000,
-        "id":"50d3c31cbfbd11f0ba028f704583b57b",
-        "priority":0,
-        "process_duration":0.948244,
-        "progress":1.0,
-        "progress_msg":"19:47:07 created task raptor\n19:47:07 Task has been received.\n19:47:07 Processing...\n19:47:07 Processing...\n19:47:07 Indexing done (0.01s).\n19:47:07 Task done (0.29s)",
-        "retry_count":1,
-        "task_type":"raptor",
-        "to_page":100000000,
-        "update_date":"Wed, 12 Nov 2025 19:47:07 GMT",
-        "update_time":1762948027948
-    }
+  "code": 0,
+  "data": {
+    "id": "50d3c31cbfbd11f0ba028f704583b57b",
+    "task_type": "raptor",
+    "progress": 1.0,
+    "progress_msg": "Task done",
+    "process_duration": 0.948244
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Invalid Dataset ID"
-}
-```
+:::caution 旧接口已废弃
+`GET /api/v1/datasets/{dataset_id}/trace_raptor` 仅作为兼容别名保留。
+:::
 
 ---
 
-## FILE MANAGEMENT WITHIN DATASET
+统一索引接口还接受 `type=mindmap`，其提交、状态查询和删除方式与 `graph`、`raptor` 相同。
+## 知识库文件管理
+
+本章介绍如何通过 HTTP API 上传、查询、更新、下载、删除和解析知识库中的文件。
+
+:::note 权限说明
+读取文件列表和下载文件要求 API 密钥所属工作空间对知识库具有读取权限；上传、修改、删除、开始解析和停止解析要求该工作空间对知识库具有修改权限。文件 ID 还必须属于路径中指定的知识库。
+:::
 
 ---
 
-### Upload documents
+### 上传文件
 
 **POST** `/api/v1/datasets/{dataset_id}/documents`
 
-Uploads documents to a specified dataset.
+向指定知识库添加一个或多个文件。查询参数 `type` 决定文件的创建方式：
 
-This endpoint supports three creation modes via the optional `type` query parameter:
+- `local`：上传本地文件，也是未指定 `type` 时的默认方式。
+- `web`：抓取网页并将其保存为 PDF 文件。
+- `empty`：创建一个不包含内容的虚拟文件。
 
-- `type=local` or omitted: Upload one or more local files using `multipart/form-data`.
-- `type=web`: Crawl a web page and save it as a document.
-- `type=empty`: Create an empty virtual document by name.
+#### 请求
 
-#### Request
+- 请求头：`Authorization: Bearer <YOUR_API_KEY>`
+- 路径参数：
+  - `dataset_id`：目标知识库 ID。
+- 查询参数：
+  - `type`：可选，取值为 `local`、`web` 或 `empty`，默认为 `local`。
+  - `return_raw_files`：仅用于 `local`，可选。设为 `true` 时返回未经 API 字段映射的原始文件数据，默认为 `false`。
 
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/documents`
-- Query:
-  - `type`: Optional. One of `local`, `web`, or `empty`. Defaults to `local`.
-- Headers:
-  - `'Content-Type: multipart/form-data'` for `type=local` and `type=web`
-  - `'Content-Type: application/json'` for `type=empty`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - For `type=local`: form field `'file=@{FILE_PATH}'`
-  - For `type=web`: form fields `'name'` and `'url'`
-  - For `type=empty`: JSON body with `'name'`
+#### 上传本地文件
 
-##### Request example
+请求体使用 `multipart/form-data`：
+
+- `file`：必填，可重复传递以一次上传多个文件。
+- `parent_path`：可选，文件在知识库文件目录下的相对路径，使用 `/` 分隔层级。
+- `parser_config`：可选，JSON 字符串。当前上传接口仅接受表格列配置字段 `table_column_mode` 和 `table_column_roles`，其他字段会被忽略。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents \
-     --header 'Content-Type: multipart/form-data' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --form 'file=@./test1.txt' \
-     --form 'file=@./test2.pdf'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --form 'file=@./manual.txt' \
+  --form 'file=@./report.pdf' \
+  --form 'parent_path=产品资料/2026'
 ```
+
+#### 抓取网页
+
+请求体使用 `multipart/form-data`：
+
+- `name`：必填，生成文件的名称；系统会为其添加 `.pdf` 后缀。
+- `url`：必填，需要抓取的 HTTP 或 HTTPS 地址。
 
 ```bash
 curl --request POST \
-     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents?type=web' \
-     --header 'Content-Type: multipart/form-data' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --form 'name=example-page' \
-     --form 'url=https://example.com'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents?type=web' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --form 'name=产品说明' \
+  --form 'url=https://example.com/manual'
 ```
+
+#### 创建空文件
+
+请求体使用 `application/json`：
+
+- `name`：必填，文件名在同一知识库内不能重复。
 
 ```bash
 curl --request POST \
-     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents?type=empty' \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{"name":"blank.txt"}'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents?type=empty' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"name":"notes.txt"}'
 ```
 
-##### Request parameters
+:::note 配额限制
+三种创建方式都会检查工作空间及知识库的文件数量和存储配额。超过任一配额时，接口拒绝上传或创建文件，并在 `message` 中返回具体原因。
+:::
 
-- `dataset_id`: (*Path parameter*)
-  The ID of the dataset to which the documents will be uploaded.
-- `type`: (*Query parameter*)
-  Controls how the document is created:
-  - `local`: Upload files.
-  - `web`: Crawl a URL into a document.
-  - `empty`: Create an empty document without file upload.
-- `'file'`: (*Body parameter*)
-  A document to upload. Required when `type=local`.
-- `'name'`: (*Body parameter*)
-  The document name. Required when `type=web` or `type=empty`.
-- `'url'`: (*Body parameter*)
-  The source URL to crawl. Required when `type=web`.
+#### 响应
 
-#### Response
-
-Success:
+本地文件上传成功后，`data` 为文件数组；网页和空文件创建成功后，`data` 为单个文件对象。
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "chunk_method": "naive",
-            "created_by": "69736c5e723611efb51b0242ac120007",
-            "dataset_id": "527fa74891e811ef9c650242ac120006",
-            "id": "b330ec2e91ec11efbc510242ac120004",
-            "location": "1.txt",
-            "name": "1.txt",
-            "parser_config": {
-                "chunk_token_num": 128,
-                "delimiter": "\\n",
-                "html4excel": false,
-                "layout_recognize": true,
-                "raptor": {
-                    "use_raptor": false
-                }
-            },
-            "run": "UNSTART",
-            "size": 17966,
-            "thumbnail": "",
-            "type": "doc"
-        }
-    ]
+  "code": 0,
+  "data": [
+    {
+      "id": "b330ec2e91ec11efbc510242ac120004",
+      "name": "manual.txt",
+      "location": "manual.txt",
+      "dataset_id": "527fa74891e811ef9c650242ac120006",
+      "created_by": "69736c5e723611efb51b0242ac120007",
+      "chunk_method": "naive",
+      "chunk_count": 0,
+      "token_count": 0,
+      "run": "UNSTART",
+      "size": 17966,
+      "type": "doc"
+    }
+  ]
 }
 ```
 
-Failure:
+未提交文件时的响应示例：
 
 ```json
 {
-    "code": 101,
-    "message": "No file part!"
+  "code": 101,
+  "message": "No file part!"
 }
 ```
 
 ---
 
-### Update document
+### 更新文件配置
 
-**PUT** `/api/v1/datasets/{dataset_id}/documents/{document_id}`
+**PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}`
 
-Updates configurations for a specified document.
+更新指定文件的名称、元数据、分块方式、解析配置或可用状态。
 
-#### Request
+:::caution 旧请求方法
+`PUT /api/v1/datasets/{dataset_id}/documents/{document_id}` 仅作为兼容别名保留，已弃用。新调用应使用 `PATCH`。
+:::
 
-- Method: PUT
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`:`string`
-  - `"meta_fields"`:`object`
-  - `"chunk_method"`:`string`
-  - `"parser_config"`:`object`
+#### 请求
 
-##### Request example
+- 请求头：
+  - `Authorization: Bearer <YOUR_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数：
+  - `dataset_id`：文件所属知识库 ID。
+  - `document_id`：需要更新的文件 ID。
+- 请求体参数均为可选，只需提交需要修改的字段：
+  - `name`：`string`，新文件名；在同一知识库中不能与其他文件重名。
+  - `meta_fields`：`object`，文件元数据。值可以是字符串、数字或由这些标量组成的数组。
+  - `chunk_method`：`string`，分块方式。可用值包括 `naive`、`manual`、`qa`、`table`、`paper`、`book`、`laws`、`presentation`、`picture`、`one`、`knowledge_graph`、`email` 和 `tag`。
+  - `parser_config`：`object`，与所选分块方式对应的解析配置。
+  - `pipeline_id`：`string`，数据流水线 ID；传入空字符串可切回内置解析流程。
+  - `enabled`：`integer`，`1` 表示可用于检索，`0` 表示停用。
+
+修改分块方式、数据流水线或影响解析结果的知识编译模板配置时，文件会被重置为需要重新解析的状态。`parser_config` 引用的知识编译模板必须与知识库属于同一工作空间。
 
 ```bash
-curl --request PUT \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --header 'Content-Type: application/json' \
-     --data '
-     {
-          "name": "manual.txt",
-          "chunk_method": "manual",
-          "parser_config": {"chunk_token_num": 128}
-     }'
-
+curl --request PATCH \
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "user-manual.txt",
+    "chunk_method": "naive",
+    "parser_config": {
+      "chunk_token_num": 512,
+      "delimiter": "\\n"
+    },
+    "meta_fields": {
+      "department": "研发部"
+    },
+    "enabled": 1
+  }'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The ID of the associated dataset.
-- `document_id`: (*Path parameter*)
-  The ID of the document to update.
-- `"name"`: (*Body parameter*), `string`
-- `"meta_fields"`: (*Body parameter*), `dict[str, Any]` The meta fields of the document.
-- `"chunk_method"`: (*Body parameter*), `string`
-  The parsing method to apply to the document:
-  - `"naive"`: General
-  - `"manual`: Manual
-  - `"qa"`: Q&A
-  - `"table"`: Table
-  - `"paper"`: Paper
-  - `"book"`: Book
-  - `"laws"`: Laws
-  - `"presentation"`: Presentation
-  - `"picture"`: Picture
-  - `"one"`: One
-  - `"email"`: Email
-- `"parser_config"`: (*Body parameter*), `object`
-  The configuration settings for the dataset parser. The attributes in this JSON object vary with the selected `"chunk_method"`:
-  - If `"chunk_method"` is `"naive"`, the `"parser_config"` object contains the following attributes:
-    - `"chunk_token_num"`: Defaults to `256`.
-    - `"layout_recognize"`: Defaults to `true`.
-    - `"html4excel"`: Indicates whether to convert Excel documents into HTML format. Defaults to `false`.
-    - `"delimiter"`: Defaults to `"\n"`.
-    - `"task_page_size"`: Defaults to `12`. For PDF only.
-    - `"raptor"`: RAPTOR-specific settings. Defaults to: `{"use_raptor": false}`.
-  - If `"chunk_method"` is `"qa"`, `"manual"`, `"paper"`, `"book"`, `"laws"`, or `"presentation"`, the `"parser_config"` object contains the following attribute:
-    - `"raptor"`: RAPTOR-specific settings. Defaults to: `{"use_raptor": false}`.
-  - If `"chunk_method"` is `"table"`, `"picture"`, `"one"`, or `"email"`, `"parser_config"` is an empty JSON object.
-- `"enabled"`: (*Body parameter*), `integer`
-  Whether the document should be **available** in the knowledge base.
-  - `1` → （available）
-  - `0` → （unavailable）
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
   "code": 0,
   "data": {
     "id": "cd38dd72d4a611f0af9c71de94a988ef",
-    "name": "large.md",
-    "type": "doc",
-    "suffix": "md",
-    "size": 2306906,
-    "location": "large.md",
-    "source_type": "local",
-    "status": "1",
-    "run": "DONE",
     "dataset_id": "5f546a1ad4a611f0af9c71de94a988ef",
-
+    "name": "user-manual.txt",
     "chunk_method": "naive",
     "chunk_count": 2,
     "token_count": 8126,
-
-    "created_by": "eab7f446cb5a11f0ab334fbc3aa38f35",
-    "create_date": "Tue, 09 Dec 2025 10:28:52 GMT",
-    "create_time": 1765247332122,
-    "update_date": "Wed, 17 Dec 2025 10:51:16 GMT",
-    "update_time": 1765939876819,
-
-    "process_begin_at": "Wed, 17 Dec 2025 10:33:55 GMT",
-    "process_duration": 14.8615,
-    "progress": 1.0,
-
-    "progress_msg": [
-      "10:33:58 Task has been received.",
-      "10:33:59 Page(1~100000001): Start to parse.",
-      "10:33:59 Page(1~100000001): Finish parsing.",
-      "10:34:07 Page(1~100000001): Generate 2 chunks",
-      "10:34:09 Page(1~100000001): Embedding chunks (2.13s)",
-      "10:34:09 Page(1~100000001): Indexing done (0.31s).",
-      "10:34:09 Page(1~100000001): Task done (11.68s)"
-    ],
-
-    "parser_config": {
-      "chunk_token_num": 512,
-      "delimiter": "\n",
-      "auto_keywords": 0,
-      "auto_questions": 0,
-      "topn_tags": 3,
-
-      "layout_recognize": "DeepDOC",
-      "html4excel": false,
-      "image_context_size": 0,
-      "table_context_size": 0,
-
-      "graphrag": {
-        "use_graphrag": true,
-        "method": "light",
-        "entity_types": [
-          "organization",
-          "person",
-          "geo",
-          "event",
-          "category"
-        ]
-      },
-
-      "raptor": {
-        "use_raptor": true,
-        "max_cluster": 64,
-        "max_token": 256,
-        "threshold": 0.1,
-        "random_seed": 0,
-        "prompt": "Please summarize the following paragraphs. Be careful with the numbers, do not make things up. Paragraphs as following:\n      {cluster_content}\nThe above is the content you need to summarize."
-      }
-    },
-
-    "meta_fields": {},
-    "pipeline_id": "",
-    "thumbnail": ""
+    "run": "DONE",
+    "enabled": 1,
+    "meta_fields": {
+      "department": "研发部"
+    }
   }
 }
-
 ```
 
-Failure:
+文件不属于指定知识库时，接口返回错误，例如：
 
 ```json
 {
-    "code": 102,
-    "message": "The dataset does not have the document."
+  "code": 102,
+  "message": "The dataset doesn't own the document."
 }
 ```
 
 ---
 
-### Download document
+### 下载文件
 
 **GET** `/api/v1/datasets/{dataset_id}/documents/{document_id}`
 
-Downloads a document from a specified dataset.
+下载指定知识库中的原始文件。成功响应是文件流，不是 JSON。
 
-#### Request
+#### 请求
 
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Output:
-  - `'{PATH_TO_THE_FILE}'`
-
-##### Request example
+- 请求头：`Authorization: Bearer <YOUR_API_KEY>`
+- 路径参数：
+  - `dataset_id`：文件所属知识库 ID。
+  - `document_id`：文件 ID。
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --output ./ragflow.txt
-```
-
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `documents_id`: (*Path parameter*)
-  The ID of the document to download.
-
-#### Response
-
-Success:
-
-```json
-This is a test to verify the file download feature.
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "You do not own the dataset 7898da028a0511efbf750242ac1220005."
-}
-```
-
----
-
-### List documents
-
-**GET** `/api/v1/datasets/{dataset_id}/documents?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&keywords={keywords}&id={document_id}&name={document_name}&create_time_from={timestamp}&create_time_to={timestamp}&suffix={file_suffix}&run={run_status}&metadata_condition={json}`
-
-Lists documents in a specified dataset.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/documents?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&keywords={keywords}&id={document_id}&name={document_name}&create_time_from={timestamp}&create_time_to={timestamp}&suffix={file_suffix}&run={run_status}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request examples
-
-**A basic request with pagination:**
-
-```bash
-curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents?page=1&page_size=10 \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `keywords`: (*Filter parameter*), `string`
-  The keywords used to match document titles.
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the documents will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The maximum number of documents on each page. Defaults to `30`.
-- `orderby`: (*Filter parameter*), `string`
-  The field by which documents should be sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved documents should be sorted in descending order. Defaults to `true`.
-- `id`: (*Filter parameter*), `string`
-  The ID of the document to retrieve.
-- `create_time_from`: (*Filter parameter*), `integer`
-  Unix timestamp for filtering documents created after this time. 0 means no filter. Defaults to `0`.
-- `create_time_to`: (*Filter parameter*), `integer`
-  Unix timestamp for filtering documents created before this time. 0 means no filter. Defaults to `0`.
-- `suffix`: (*Filter parameter*), `array[string]`
-  Filter by file suffix. Supports multiple values, e.g., `pdf`, `txt`, and `docx`. Defaults to all suffixes.
-- `run`: (*Filter parameter*), `array[string]`
-  Filter by document processing status. Supports numeric, text, and mixed formats:
-  - Numeric format: `["0", "1", "2", "3", "4"]`
-  - Text format: `[UNSTART, RUNNING, CANCEL, DONE, FAIL]`
-  - Mixed format: `[UNSTART, 1, DONE]` (mixing numeric and text formats)
-  - Status mapping:
-    - `0` / `UNSTART`: Document not yet processed
-    - `1` / `RUNNING`: Document is currently being processed
-    - `2` / `CANCEL`: Document processing was cancelled
-    - `3` / `DONE`: Document processing completed successfully
-    - `4` / `FAIL`: Document processing failed
-  Defaults to all statuses.
-- `metadata_condition`: (*Filter parameter*), `object` (JSON in query)
-  Optional metadata filter applied to documents when `document_ids` is not provided. Uses the same structure as retrieval:
-  - `logic`: `"and"` (default) or `"or"`
-  - `conditions`: array of `{ "name": string, "comparison_operator": string, "value": string }`
-    - `comparison_operator` supports: `is`, `not is`, `contains`, `not contains`, `in`, `not in`, `start with`, `end with`, `>`, `<`, `≥`, `≤`, `empty`, `not empty`
-
-##### Usage examples
-
-**A request with multiple filtering parameters**
-
-```bash
-curl --request GET \
-     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents?suffix=pdf&run=DONE&page=1&page_size=10' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-**Filter by metadata (query JSON):**
-
-```bash
-curl -G \
-  --url "http://localhost:9222/api/v1/datasets/{{KB_ID}}/documents" \
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}' \
   --header 'Authorization: Bearer <YOUR_API_KEY>' \
-  --data-urlencode 'metadata_condition={"logic":"and","conditions":[{"name":"tags","comparison_operator":"is","value":"bar"},{"name":"author","comparison_operator":"is","value":"alice"}]}'
+  --output ./downloaded-file.pdf
 ```
 
-#### Response
+#### 响应
 
-Success:
+成功时返回原始文件内容，并通过 `Content-Disposition` 提供文件名。文件不存在、为空或调用方无权读取时返回 JSON 错误响应。
+
+---
+
+### 查询文件列表
+
+**GET** `/api/v1/datasets/{dataset_id}/documents`
+
+分页查询指定知识库中的文件。
+
+#### 请求
+
+- 请求头：`Authorization: Bearer <YOUR_API_KEY>`
+- 路径参数：
+  - `dataset_id`：知识库 ID。
+- 查询参数：
+  - `page`：`integer`，页码，默认为 `1`。
+  - `page_size`：`integer`，每页数量，默认为 `30`，并受服务端最大分页数量限制。
+  - `orderby`：`string`，排序字段，默认为 `create_time`。
+  - `desc`：`boolean`，是否按降序排列，默认为 `true`；只有字符串 `false` 表示升序。
+  - `keywords`：`string`，按文件名进行关键词搜索。
+  - `id`：`string`，精确匹配单个文件 ID。设置后会忽略其他文件集合过滤条件。
+  - `ids`：`array<string>`，按多个文件 ID 过滤；可重复传递，如 `ids=id1&ids=id2`。
+  - `name`：`string`，精确匹配文件名。
+  - `types`：`array<string>`，按文件类型过滤，可重复传递。
+  - `suffix`：`array<string>`，按扩展名过滤，可重复传递，如 `suffix=pdf&suffix=txt`。
+  - `run` 或 `run_status`：`array<string>`，按解析状态过滤。支持状态值 `0` 至 `4`，也支持 `UNSTART`、`RUNNING`、`CANCEL`、`DONE` 和 `FAIL`；可重复传递。
+  - `create_time_from`：`integer`，创建时间下界的 Unix 毫秒时间戳，`0` 表示不限制。
+  - `create_time_to`：`integer`，创建时间上界的 Unix 毫秒时间戳，`0` 表示不限制。
+  - `metadata`：`object`，以 JSON 字符串传递，用于元数据键值精确匹配。
+  - `metadata_condition`：`object`，以 JSON 字符串传递，用于组合元数据条件。
+  - `return_empty_metadata`：`boolean`，控制是否包含没有元数据的文件。
+
+解析状态对应关系：
+
+| 数值 | 名称 | 含义 |
+| --- | --- | --- |
+| `0` | `UNSTART` | 尚未开始 |
+| `1` | `RUNNING` | 正在解析 |
+| `2` | `CANCEL` | 已取消 |
+| `3` | `DONE` | 已完成 |
+| `4` | `FAIL` | 解析失败 |
+
+`metadata_condition` 的结构如下：
+
+- `logic`：`and` 或 `or`，默认为 `and`。
+- `conditions`：条件数组，每项包含 `name`、`comparison_operator` 和 `value`。
+- `comparison_operator` 支持 `is`、`not is`、`contains`、`not contains`、`in`、`not in`、`start with`、`end with`、`>`、`<`、`≥`、`≤`、`empty` 和 `not empty`。
+
+```bash
+curl --get \
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=10' \
+  --data-urlencode 'suffix=pdf' \
+  --data-urlencode 'run=DONE' \
+  --data-urlencode 'metadata_condition={"logic":"and","conditions":[{"name":"department","comparison_operator":"is","value":"研发部"}]}'
+```
+
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "docs": [
-            {
-                "chunk_count": 0,
-                "create_date": "Mon, 14 Oct 2024 09:11:01 GMT",
-                "create_time": 1728897061948,
-                "created_by": "69736c5e723611efb51b0242ac120007",
-                "id": "3bcfbf8a8a0c11ef8aba0242ac120006",
-                "knowledgebase_id": "7898da028a0511efbf750242ac120005",
-                "location": "Test_2.txt",
-                "name": "Test_2.txt",
-                "parser_config": {
-                    "chunk_token_count": 128,
-                    "delimiter": "\n",
-                    "layout_recognize": true,
-                    "task_page_size": 12
-                },
-                "chunk_method": "naive",
-                "process_begin_at": null,
-                "process_duration": 0.0,
-                "progress": 0.0,
-                "progress_msg": "",
-                "run": "UNSTART",
-                "size": 7,
-                "source_type": "local",
-                "status": "1",
-                "thumbnail": null,
-                "token_count": 0,
-                "type": "doc",
-                "update_date": "Mon, 14 Oct 2024 09:11:01 GMT",
-                "update_time": 1728897061948
-            }
-        ],
-        "total_datasets": 1
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "You don't own the dataset 7898da028a0511efbf750242ac1220005. "
+  "code": 0,
+  "data": {
+    "total": 1,
+    "docs": [
+      {
+        "id": "3bcfbf8a8a0c11ef8aba0242ac120006",
+        "dataset_id": "7898da028a0511efbf750242ac120005",
+        "name": "manual.pdf",
+        "location": "manual.pdf",
+        "chunk_method": "naive",
+        "chunk_count": 8,
+        "token_count": 4096,
+        "run": "DONE",
+        "size": 102400,
+        "source_type": "local",
+        "create_time": 1728897061948,
+        "update_time": 1728897061948
+      }
+    ]
+  }
 }
 ```
 
 ---
 
-### Delete documents
+### 删除文件
 
 **DELETE** `/api/v1/datasets/{dataset_id}/documents`
 
-Deletes documents by ID.
+按 ID 删除文件，或者删除指定知识库中的全部文件。删除文件时会同时清理其存储对象、解析任务和分块数据；如果文件仍被其他资源引用，接口会拒绝删除并返回引用详情。
 
-#### Request
+#### 请求
 
-- Method: DELETE
-- URL: `/api/v1/datasets/{dataset_id}/documents`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]`
-  - `"delete_all"`: `boolean`
+- 请求头：
+  - `Authorization: Bearer <YOUR_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数：
+  - `dataset_id`：知识库 ID。
+- 请求体使用以下两种方式之一：
+  - `ids`：`array<string>`，需要删除的文件 ID。ID 不能重复，且都必须属于指定知识库。
+  - `delete_all`：`boolean`，设为 `true` 时删除知识库中的全部文件。
 
-##### Request example
-
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "ids": ["id_1","id_2"]
-     }'
-```
+`ids` 和 `delete_all: true` 不能同时提供；两者都未提供时不会执行删除并返回参数错误。
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "delete_all": true
-     }'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "ids": [
+      "97a5f1c2759811efaa500242ac120004",
+      "97ad64b6759811ef9fc30242ac120004"
+    ]
+  }'
 ```
 
-##### Request parameters
+删除全部文件：
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `"ids"`: (*Body parameter*), `list[string]`
-  The IDs of the documents to delete.
-  - If omitted, or set to `null` or an empty array, no documents are deleted.
-  - If an array of IDs is provided, only the documents matching those IDs are deleted.
-- `"delete_all"`: (*Body parameter*), `boolean`
-  Whether to delete all documents in the specified dataset when `"ids"` is omitted, or set to `null` or an empty array. Defaults to `false`.
+```bash
+curl --request DELETE \
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/documents' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"delete_all":true}'
+```
 
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0
-}.
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "You do not own the dataset 7898da028a0511efbf750242ac1220005."
+  "code": 0,
+  "data": {
+    "deleted": 2
+  }
 }
 ```
 
 ---
 
-### Parse documents
+### 使用内置分块流程解析文件
 
 **POST** `/api/v1/datasets/{dataset_id}/chunks`
 
-Parses documents in a specified dataset using the built-in chunking pipeline.
+启动指定文件的解析任务。此接口会清理文件已有的任务和索引数据，然后按照当前文件配置重新生成分块。
 
-:::note
-This endpoint only supports datasets that use the built-in chunking pipeline. For datasets configured with an ingestion pipeline, use `POST /api/v1/documents/ingest` instead.
+:::caution 数据流水线知识库
+该接口仅适用于使用内置分块方式的知识库。知识库配置了数据流水线时，应调用 `POST /api/v1/documents/ingest`。
 :::
 
-#### Request
+#### 请求
 
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/chunks`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"document_ids"`: `list[string]`
-
-##### Request example
+- 请求头：
+  - `Authorization: Bearer <YOUR_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数：
+  - `dataset_id`：知识库 ID。
+- 请求体：
+  - `document_ids`：`array<string>`，必填且不能为空。所有文件都必须属于指定知识库。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/chunks \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "document_ids": ["97a5f1c2759811efaa500242ac120004","97ad64b6759811ef9fc30242ac120004"]
-     }'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/chunks' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "document_ids": [
+      "97a5f1c2759811efaa500242ac120004",
+      "97ad64b6759811ef9fc30242ac120004"
+    ]
+  }'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The dataset ID.
-- `"document_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the documents to parse.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0
+  "code": 0
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "`document_ids` is required"
-}
-```
+文件正在解析、文件不属于知识库或 `document_ids` 缺失时，接口返回错误响应。重复 ID 可能产生部分成功响应，详情位于 `data.errors`。
 
 ---
 
-### Ingest documents
+### 使用数据流水线处理文件
 
 **POST** `/api/v1/documents/ingest`
 
-Starts, cancels, or reruns ingestion for documents. Use this endpoint for documents in datasets configured with an ingestion pipeline.
+启动、取消或重新运行文件的数据流水线任务。每个文件所属的知识库都必须允许 API 密钥所属工作空间修改。
 
-#### Request
+#### 请求
 
-- Method: POST
-- URL: `/api/v1/documents/ingest`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"doc_ids"`: `list[string]`
-  - `"run"`: `string`
-  - `"delete"`: `boolean`
-
-##### Request example
+- 请求头：
+  - `Authorization: Bearer <YOUR_API_KEY>`
+  - `Content-Type: application/json`
+- 请求体：
+  - `doc_ids`：`array<string>`，必填，文件 ID 列表。
+  - `run`：`string`，必填。`"1"` 表示启动，`"2"` 表示取消。
+  - `delete`：`boolean`，可选。设为 `true` 时，在重新运行前删除已有任务和分块，默认为 `false`。
+  - `apply_kb`：`boolean`，可选。启动任务时，将知识库当前的模型和元数据配置应用到文件解析配置。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/documents/ingest \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "doc_ids": ["97a5f1c2759811efaa500242ac120004"],
-          "run": "1",
-          "delete": true
-     }'
+  --url 'http://{address}/api/v1/documents/ingest' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "doc_ids": ["97a5f1c2759811efaa500242ac120004"],
+    "run": "1",
+    "delete": true,
+    "apply_kb": true
+  }'
 ```
 
-##### Request parameters
-
-- `"doc_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the documents to ingest.
-- `"run"`: (*Body parameter*), `string`, *Required*
-  The ingestion action. Use `"1"` to start ingestion and `"2"` to cancel ingestion.
-- `"delete"`: (*Body parameter*), `boolean`
-  Whether to delete existing tasks and chunks before rerunning. Defaults to `false`.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": true
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Document not found!"
+  "code": 0,
+  "data": true
 }
 ```
 
 ---
 
-### Stop parsing documents
+### 停止内置分块解析
 
 **DELETE** `/api/v1/datasets/{dataset_id}/chunks`
 
-Stops parsing specified documents.
+停止指定文件当前正在运行的解析任务，并清理其已生成的分块索引。只有处于 `RUNNING` 状态的文件可以通过此接口停止。
 
-#### Request
+#### 请求
 
-- Method: DELETE
-- URL: `/api/v1/datasets/{dataset_id}/chunks`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"document_ids"`: `list[string]`
-
-##### Request example
+- 请求头：
+  - `Authorization: Bearer <YOUR_API_KEY>`
+  - `Content-Type: application/json`
+- 路径参数：
+  - `dataset_id`：知识库 ID。
+- 请求体：
+  - `document_ids`：`array<string>`，必填且不能为空。所有文件都必须属于指定知识库。
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/chunks \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "document_ids": ["97a5f1c2759811efaa500242ac120004","97ad64b6759811ef9fc30242ac120004"]
-     }'
+  --url 'http://{address}/api/v1/datasets/{dataset_id}/chunks' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "document_ids": [
+      "97a5f1c2759811efaa500242ac120004",
+      "97ad64b6759811ef9fc30242ac120004"
+    ]
+  }'
 ```
 
-##### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `"document_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the documents for which the parsing should be stopped.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0
+  "code": 0
 }
 ```
 
-Failure:
+如果文件未在解析、文件不属于知识库或 `document_ids` 缺失，接口返回错误响应。
 
-```json
-{
-    "code": 102,
-    "message": "`document_ids` is required"
-}
-```
+---
+## 知识库内分块管理
+
+本章介绍知识库文档分块的增删改查、可用状态切换、文档元数据管理以及分块检索接口。
+
+所有接口都需要在 `Authorization` 请求头中携带 API Token。读取接口要求 Token 对目标知识库具有访问权限；新增、修改、删除接口要求 Token 对目标知识库具有修改权限。知识库、文档和分块必须位于 Token 所属工作空间内。
 
 ---
 
-## CHUNK MANAGEMENT WITHIN DATASET
-
----
-
-### Add chunk
+### 添加分块
 
 **POST** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
 
-Adds a chunk to a specified document in a specified dataset.
+向指定文档添加一个分块。服务端会使用文档配置的嵌入模型为分块生成向量，因此调用前必须确保该工作空间已配置可用的嵌入模型。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"content"`: `string`
-  - `"important_keywords"`: `list[string]`
-  - `"tag_kwd"`: `list[string]`
-  - `"questions"`: `list[string]`
-  - `"image_base64"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "content": "<CHUNK_CONTENT_HERE>",
-          "image_base64": "<BASE64_ENCODED_IMAGE>"
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "content": "RAGFlow 是一个开源的 RAG 引擎。",
+       "important_keywords": ["RAGFlow", "RAG"],
+       "questions": ["什么是 RAGFlow？"],
+       "tag_kwd": ["产品介绍"]
      }'
 ```
 
-##### Request parameters
+#### 路径参数
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `document_id`: (*Path parameter*)
-  The associated document ID.
-- `"content"`: (*Body parameter*), `string`, *Required*
-  The text content of the chunk.
-- `"important_keywords"`: (*Body parameter*), `list[string]`
-  The key terms or phrases to tag with the chunk.
-- `"tag_kwd"`: (*Body parameter*), `list[string]`
-  Tag keywords to associate with the chunk.
-- `"questions"`: (*Body parameter*), `list[string]`
-  Optional questions to use when embedding the chunk.
-- `"image_base64"`: (*Body parameter*), `string`
-  A base64-encoded image to associate with the chunk.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `dataset_id` | `string` | 是 | 知识库 ID |
+| `document_id` | `string` | 是 | 文档 ID；该文档必须属于指定知识库 |
 
-#### Response
+#### 请求体参数
 
-Success:
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `content` | `string` | 是 | 分块正文，不能为空或只包含空白字符 |
+| `important_keywords` | `string[]` | 否 | 重要关键词列表，默认 `[]` |
+| `questions` | `string[]` | 否 | 与分块关联的问题列表；非空问题将参与向量生成，默认 `[]` |
+| `tag_kwd` | `string[]` | 否 | 标签列表，所有元素必须为字符串 |
+| `tag_feas` | `object` | 否 | 标签特征分数，键为非空字符串，值为大于 `0` 的有限数值 |
+| `image_base64` | `string` | 否 | 与分块关联的图片内容，仅接受不带 Data URL 前缀的有效 Base64 字符串 |
+
+分块 ID 根据 `content` 和 `document_id` 计算。添加成功后，服务端会更新文档的分块数和 Token 数。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chunk": {
-            "content": "who are you",
-            "create_time": "2024-12-30 16:59:55",
-            "create_timestamp": 1735549195.969164,
-            "dataset_id": "72f36e1ebdf411efb7250242ac120006",
-            "document_id": "61d68474be0111ef98dd0242ac120006",
-            "id": "12ccdc56e59837e5",
-            "image_id": "",
-            "important_keywords": [],
-            "tag_kwd": [],
-            "questions": []
-        }
+  "code": 0,
+  "data": {
+    "chunk": {
+      "id": "12ccdc56e59837e5",
+      "content": "RAGFlow 是一个开源的 RAG 引擎。",
+      "document_id": "61d68474be0111ef98dd0242ac120006",
+      "dataset_id": "72f36e1ebdf411efb7250242ac120006",
+      "important_keywords": ["RAGFlow", "RAG"],
+      "questions": ["什么是 RAGFlow？"],
+      "tag_kwd": ["产品介绍"],
+      "create_time": "2026-07-21 10:30:00",
+      "create_timestamp": 1784601000.0
     }
+  }
 }
 ```
 
-Failure:
+#### 常见失败响应
 
 ```json
 {
-    "code": 102,
-    "message": "`content` is required"
+  "code": 102,
+  "message": "`content` is required"
 }
 ```
 
 ---
 
-### List chunks
+### 获取分块列表
 
-**GET** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?keywords={keywords}&page={page}&page_size={page_size}&id={id}`
+**GET** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
 
-Lists chunks in a specified document.
+分页获取指定文档的普通分块。知识编译生成的结构化索引不会出现在此列表中。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?keywords={keywords}&page={page}&page_size={page_size}&id={chunk_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?keywords={keywords}&page={page}&page_size={page_size}&id={chunk_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks?page=1&page_size=30&keywords=RAGFlow&available=true' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+#### 路径参数
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `document_id`: (*Path parameter*)
-  The associated document ID.
-- `keywords`(*Filter parameter*), `string`
-  The keywords used to match chunk content.
-- `page`(*Filter parameter*), `integer`
-  Specifies the page on which the chunks will be displayed. Defaults to `1`.
-- `page_size`(*Filter parameter*), `integer`
-  The maximum number of chunks on each page. Defaults to `30`.
-- `id`(*Filter parameter*), `string`
-  The ID of the chunk to retrieve. You can also use `GET /api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` to retrieve one chunk.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `dataset_id` | `string` | 是 | 知识库 ID |
+| `document_id` | `string` | 是 | 文档 ID；该文档必须属于指定知识库 |
 
-#### Response
+#### 查询参数
 
-Success:
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `page` | `integer` | 否 | `1` | 页码 |
+| `page_size` | `integer` | 否 | `30` | 每页数量，最大为 `100` |
+| `keywords` | `string` | 否 | `""` | 按分块正文搜索；命中内容可能包含高亮标记 |
+| `id` | `string` | 否 | — | 仅返回指定分块；设置后忽略分页搜索 |
+| `chunk_ids` | `string` 或重复参数 | 否 | — | 按多个分块 ID 过滤；支持逗号分隔或多次传入，例如 `chunk_ids=id1,id2` |
+| `available` | `string` | 否 | — | 可用状态过滤；值等于 `true` 时筛选可用分块，其他值筛选不可用分块 |
+
+如只需读取一个分块，也可以使用下文的“获取单个分块”接口。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chunks": [
-            {
-                "available": true,
-                "content": "This is a test content.",
-                "docnm_kwd": "1.txt",
-                "document_id": "b330ec2e91ec11efbc510242ac120004",
-                "id": "b48c170e90f70af998485c1065490726",
-                "image_id": "",
-                "important_keywords": [],
-                "tag_kwd": [],
-                "positions": []
-            }
-        ],
-        "doc": {
-            "chunk_count": 1,
-            "chunk_method": "naive",
-            "create_date": "Thu, 24 Oct 2024 09:45:27 GMT",
-            "create_time": 1729763127646,
-            "created_by": "69736c5e723611efb51b0242ac120007",
-            "dataset_id": "527fa74891e811ef9c650242ac120006",
-            "id": "b330ec2e91ec11efbc510242ac120004",
-            "location": "1.txt",
-            "name": "1.txt",
-            "parser_config": {
-                "chunk_token_num": 128,
-                "delimiter": "\\n",
-                "html4excel": false,
-                "layout_recognize": true,
-                "raptor": {
-                    "use_raptor": false
-                }
-            },
-            "process_begin_at": "Thu, 24 Oct 2024 09:56:44 GMT",
-            "process_duration": 0.54213,
-            "progress": 0.0,
-            "progress_msg": "Task dispatched...",
-            "run": "2",
-            "size": 17966,
-            "source_type": "local",
-            "status": "1",
-            "thumbnail": "",
-            "token_count": 8,
-            "type": "doc",
-            "update_date": "Thu, 24 Oct 2024 11:03:15 GMT",
-            "update_time": 1729767795721
-        },
-        "total": 1
+  "code": 0,
+  "data": {
+    "total": 1,
+    "chunks": [
+      {
+        "id": "b48c170e90f70af998485c1065490726",
+        "content": "这是一个测试分块。",
+        "document_id": "b330ec2e91ec11efbc510242ac120004",
+        "dataset_id": "527fa74891e811ef9c650242ac120006",
+        "docnm_kwd": "1.txt",
+        "important_keywords": [],
+        "questions": [],
+        "tag_kwd": [],
+        "image_id": "",
+        "available": true,
+        "positions": []
+      }
+    ],
+    "doc": {
+      "id": "b330ec2e91ec11efbc510242ac120004",
+      "name": "1.txt",
+      "dataset_id": "527fa74891e811ef9c650242ac120006",
+      "chunk_count": 1,
+      "chunk_method": "naive",
+      "token_count": 8,
+      "run": "DONE"
     }
+  }
 }
 ```
 
-Failure:
+文档的 `run` 字段可能为 `UNSTART`、`RUNNING`、`CANCEL`、`DONE` 或 `FAIL`。
 
-```json
-{
-    "code": 102,
-    "message": "You don't own the document 5c5999ec7be811ef9cab0242ac12000e5."
-}
-```
+当 `id` 指定的分块不存在、不属于该文档或属于结构化编译结果时，接口返回非零业务状态码。
 
 ---
 
-### Get chunk
+### 获取单个分块
 
 **GET** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}`
 
-Retrieves a specified chunk in a specified document. Runtime fields such as vector and token fields are not returned.
+获取指定分块的原始索引字段。向量、分词等运行时字段会从响应中移除；返回字段名称仍采用索引存储格式，因此与分块列表接口略有不同。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+#### 路径参数
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `document_id`: (*Path parameter*)
-  The associated document ID.
-- `chunk_id`: (*Path parameter*)
-  The ID of the chunk to retrieve.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `dataset_id` | `string` | 是 | 知识库 ID |
+| `document_id` | `string` | 是 | 文档 ID |
+| `chunk_id` | `string` | 是 | 分块 ID |
 
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "available_int": 1,
-        "content_with_weight": "This is a test content.",
-        "doc_id": "b330ec2e91ec11efbc510242ac120004",
-        "docnm_kwd": "1.txt",
-        "id": "b48c170e90f70af998485c1065490726",
-        "img_id": "",
-        "important_kwd": [],
-        "question_kwd": [],
-        "tag_kwd": []
-    }
+  "code": 0,
+  "data": {
+    "id": "b48c170e90f70af998485c1065490726",
+    "content_with_weight": "这是一个测试分块。",
+    "doc_id": "b330ec2e91ec11efbc510242ac120004",
+    "docnm_kwd": "1.txt",
+    "kb_id": "527fa74891e811ef9c650242ac120006",
+    "important_kwd": [],
+    "question_kwd": [],
+    "tag_kwd": [],
+    "img_id": "",
+    "available_int": 1
+  }
 }
 ```
 
-Failure:
+#### 分块不存在
 
 ```json
 {
-    "code": 100,
-    "message": "Chunk not found"
+  "code": 100,
+  "data": false,
+  "message": "Chunk not found!"
 }
 ```
 
 ---
 
-### Delete chunks
+### 删除分块
 
 **DELETE** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
 
-Deletes chunks by ID.
+按 ID 删除一个或多个分块，或者删除文档中的全部普通分块。结构化编译产生的索引不会被此接口删除。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"chunk_ids"`: `list[string]`
-  - `"delete_all"`: `boolean`
-
-##### Request example
+#### 按 ID 删除
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "chunk_ids": ["test_1", "test_2"]
-     }'
-```
-
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-          "delete_all": true
+       "chunk_ids": ["chunk_id_1", "chunk_id_2"]
      }'
 ```
 
-##### Request parameters
+#### 删除全部普通分块
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `document_id`: (*Path parameter*)
-  The associated document ID.
-- `"chunk_ids"`: (*Body parameter*), `list[string]`
-  The IDs of the chunks to delete.
-  - If omitted, or set to `null` or an empty array, no chunks are deleted.
-  - If an array of IDs is provided, only the chunks matching those IDs are deleted.
-- `"delete_all"`: (*Body parameter*), `boolean`
-  Whether to delete all chunks of the specified document when `"chunk_ids"` is omitted, or set to `null` or an empty array. Defaults to `false`.
+```bash
+curl --request DELETE \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "delete_all": true
+     }'
+```
 
-#### Response
+#### 请求体参数
 
-Success:
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `chunk_ids` | `string[]` | 否 | 要删除的分块 ID；服务端会去重 |
+| `delete_all` | `boolean` | 否 | 当 `chunk_ids` 缺失、为 `null` 或为空数组时，只有该值严格为 `true` 才删除全部普通分块 |
+
+请求体为空，或既没有有效 `chunk_ids` 也没有设置 `delete_all: true` 时，接口成功返回但不会删除任何分块。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0
+  "code": 0,
+  "message": "deleted 2 chunks"
 }
 ```
 
-Failure:
+如果实际删除数量与请求中的唯一分块 ID 数量不一致，接口返回错误，例如：
 
 ```json
 {
-    "code": 102,
-    "message": "rm_chunk deleted chunks 0, expect 1"
+  "code": 102,
+  "message": "rm_chunk deleted chunks 1, expect 2"
 }
 ```
 
 ---
 
-### Update chunk
+### 更新分块
 
 **PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}`
 
-Updates content or configurations for a specified chunk.
+更新分块正文或配置。更新后服务端会重新生成分词和嵌入向量。
 
-:::caution DEPRECATED
-`PUT /api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` is deprecated. Use this endpoint instead.
+:::caution 已弃用接口
+`PUT /api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}` 仅用于兼容旧调用。新调用请使用本节的 `PATCH` 接口。
 :::
 
-#### Request
-
-- Method: PATCH
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"content"`: `string`
-  - `"important_keywords"`: `list[string]`
-  - `"questions"`: `list[string]`
-  - `"positions"`: `list`
-  - `"tag_kwd"`: `list[string]`
-  - `"available"`: `boolean`
-  - `"image_base64"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PATCH \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id} \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks/{chunk_id}' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "content": "ragflow123",
-          "important_keywords": []
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "content": "更新后的分块正文",
+       "important_keywords": ["更新"],
+       "available": true
      }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `document_id`: (*Path parameter*)
-  The associated document ID.
-- `chunk_id`: (*Path parameter*)
-  The ID of the chunk to update.
-- `"content"`: (*Body parameter*), `string`
-  The text content of the chunk.
-- `"important_keywords"`: (*Body parameter*), `list[string]`
-  A list of key terms or phrases to tag with the chunk.
-- `"questions"`: (*Body parameter*), `list[string]`
-  Optional questions to use when embedding the chunk.
-- `"positions"`: (*Body parameter*), `list`
-  Updated source positions for the chunk.
-- `"tag_kwd"`: (*Body parameter*), `list[string]`
-  Updated tag keywords.
-- `"available"`: (*Body parameter*) `boolean`
-  The chunk's availability status in the dataset. Value options:
-  - `true`: Available (default)
-  - `false`: Unavailable
-- `"image_base64"`: (*Body parameter*), `string`
-  Base64-encoded image content to associate with the chunk.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `content` | `string` | 否 | 新正文；传入时不能为空。省略则保留原正文 |
+| `important_keywords` | `string[]` | 否 | 替换重要关键词列表 |
+| `questions` | `string[]` | 否 | 替换关联问题列表 |
+| `positions` | `array` | 否 | 替换来源位置数据 |
+| `tag_kwd` | `string[]` | 否 | 替换标签列表，所有元素必须为字符串 |
+| `tag_feas` | `object` | 否 | 替换标签特征分数；键为非空字符串，值为大于 `0` 的有限数值 |
+| `available` | `boolean` | 否 | 是否允许该分块参与检索 |
+| `image_base64` | `string` | 否 | 新的关联图片，仅接受有效 Base64 字符串 |
 
-#### Response
+对于使用问答分块方法的文档，正文必须包含由制表符或换行符分隔的问题和答案，否则更新会失败。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0
+  "code": 0
 }
 ```
 
-Failure:
+#### 分块不存在
 
 ```json
 {
-    "code": 102,
-    "message": "Can't find this chunk 29a2d9987e16ba331fb4d7d30d99b71d2"
+  "code": 102,
+  "message": "Can't find this chunk 29a2d9987e16ba331fb4d7d30d99b71d2"
 }
 ```
 
 ---
 
-### Update chunk availability
+### 批量切换分块可用状态
 
 **PATCH** `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
 
-Updates or switches the availability status of specified chunks, controlling whether they are available for retrieval.
+批量设置分块是否参与检索。
 
-#### Request
-
-- Method: PATCH
-- URL: `/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"chunk_ids"`: `list[string]` (*Required*)
-  - `"available_int"`: `integer` (*Optional*)
-  - `"available"`: `boolean` (*Optional*)
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PATCH \
-     --url http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/documents/{document_id}/chunks' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "chunk_ids": ["chunk_id_1", "chunk_id_2"],
-          "available_int": 1
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "chunk_ids": ["chunk_id_1", "chunk_id_2"],
+       "available": false
      }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `dataset_id`: (*Path parameter*)
-  The ID of the dataset.
-- `document_id`: (*Path parameter*)
-  The ID of the document.
-- `"chunk_ids"`: (*Body parameter*), `list[string]` (*Required*)
-  IDs of the chunks whose availability status is to be updated.
-- `"available_int"`: (*Body parameter*), `integer` (*Optional*)
-  Availability status for the specified chunks. You must provide either `"available_int"` or `"available"`. If both are provided, `"available_int"` is used.
-  - `1`: Available,
-  - `0`: Unavailable.
-- `"available"`: (*Body parameter*), `boolean` (*Optional*)
-  Availability status of the specified chunks. Used when `"available_int"` is not provided.
-  - `true`: Available,
-  - `false`: Unavailable.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `chunk_ids` | `string[]` | 是 | 要修改的分块 ID，不能为空 |
+| `available` | `boolean` | 条件必填 | `true` 表示参与检索，`false` 表示不参与检索 |
+| `available_int` | `integer` | 条件必填 | `1` 表示参与检索，`0` 表示不参与检索；与 `available` 至少提供一个 |
 
-#### Response
+同时提供 `available_int` 和 `available` 时，以 `available_int` 为准。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true
+  "code": 0,
+  "data": true
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "You don't own the dataset {dataset_id}."
-}
-```
-
-```json
-{
-    "code": 102,
-    "message": "`chunk_ids` is required."
-}
-```
-
-```json
-{
-    "code": 102,
-    "message": "`available_int` or `available` is required."
-}
-```
-
-```json
-{
-    "code": 102,
-    "message": "Document not found!"
-}
-```
-
-```json
-{
-    "code": 102,
-    "message": "Index updating failure"
-}
-```
+常见错误包括缺少 `chunk_ids`、未提供可用状态、文档不存在或索引更新失败。
 
 ---
 
-### Retrieve a metadata summary from a dataset
+### 获取知识库元数据摘要
 
 **GET** `/api/v1/datasets/{dataset_id}/metadata/summary`
 
-Aggregates metadata values across all documents in a dataset.
+汇总知识库中文档的元数据字段、值及其出现次数。
 
-#### Request
+#### 请求示例
 
-- Method: GET
-- URL: `/api/v1/datasets/{dataset_id}/metadata/summary`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/metadata/summary?doc_ids={document_id_1},{document_id_2}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
 
-##### Response
+#### 参数
 
-Success:
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `dataset_id` | 路径 | `string` | 是 | 知识库 ID |
+| `doc_ids` | 查询 | `string` | 否 | 以逗号分隔的文档 ID；省略时汇总知识库中的全部文档 |
+
+#### 成功响应
 
 ```json
 {
@@ -2671,11 +1818,11 @@ Success:
     "summary": {
       "tags": {
         "type": "string",
-        "values": [["bar", 2], ["foo", 1], ["baz", 1]]
+        "values": [["产品", 2], ["手册", 1]]
       },
       "author": {
         "type": "string",
-        "values": [["alice", 2], ["bob", 1]]
+        "values": [["张三", 2], ["李四", 1]]
       }
     }
   }
@@ -2684,96 +1831,84 @@ Success:
 
 ---
 
-### Update or delete metadata
+### 批量更新或删除文档元数据
 
 **POST** `/api/v1/datasets/{dataset_id}/metadata/update`
 
-Batch update or delete document-level metadata within a specified dataset. If both `document_ids` and `metadata_condition` are omitted, all documents within that dataset are selected. When both are provided, the intersection is used.
+批量更新或删除指定文档的元数据。该接口只修改文档级元数据，不修改分块正文。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/datasets/{dataset_id}/metadata/update`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `selector`: `object`
-  - `updates`: `list[object]`
-  - `deletes`: `list[object]`
-
-#### Request parameters
-
-- `dataset_id`: (*Path parameter*)
-  The associated dataset ID.
-- `"selector"`: (*Body parameter*), `object`, *optional*
-  A document selector:
-  - `"document_ids"`: `list[string]` *optional*
-    The associated document ID.
-  - `"metadata_condition"`: `object`, *optional*
-    - `"logic"`: Defines the logic relation between conditions if multiple conditions are provided. Options:
-      - `"and"` (default)
-      - `"or"`
-    - `"conditions"`: `list[object]` *optional*
-      Each object: `{ "name": string, "comparison_operator": string, "value": string }`
-      - `"name"`: `string` The key name to search by.
-      - `"comparison_operator"`: `string` Available options:
-        - `"is"`
-        - `"not is"`
-        - `"contains"`
-        - `"not contains"`
-        - `"in"`
-        - `"not in"`
-        - `"start with"`
-        - `"end with"`
-        - `">"`
-        - `"<"`
-        - `"≥"`
-        - `"≤"`
-        - `"empty"`
-        - `"not empty"`
-      - `"value"`: `string` The key value to search by.
-- `"updates"`: (*Body parameter*), `list[object]`, *optional*
-  Replaces metadata of the retrieved documents. Each object: `{ "key": string, "match": string, "value": string }`.
-  - `"key"`: `string` The name of the key to update.
-  - `"match"`: `string` *optional* The current value of the key to update. When omitted, the corresponding keys are updated to `"value"` regardless of their current values.
-  - `"value"`: `string` The new value to set for the specified keys.
-- `"deletes"`: (*Body parameter*), `list[object]`, *optional*
-  Deletes metadata of the retrieved documents. Each object: `{ "key": string, "value": string }`.
-  - `"key"`: `string` The name of the key to delete.
-  - `"value"`: `string` *Optional* The value of the key to delete.
-    - When provided, only keys with a matching value are deleted.
-    - When omitted, all specified keys are deleted.
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/datasets/{dataset_id}/metadata/update \
+     --url 'http://{address}/api/v1/datasets/{dataset_id}/metadata/update' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
        "selector": {
+         "document_ids": ["document_id_1", "document_id_2"],
          "metadata_condition": {
            "logic": "and",
            "conditions": [
-             {"name": "author", "comparison_operator": "is", "value": "alice"}
+             {
+               "name": "author",
+               "comparison_operator": "is",
+               "value": "张三"
+             }
            ]
          }
        },
        "updates": [
-         {"key": "tags", "match": "foo", "value": "foo_new"}
+         {"key": "tags", "match": "旧标签", "value": "新标签"}
        ],
        "deletes": [
-         {"key": "obsolete_key"},
-         {"key": "author", "value": "alice"}
+         {"key": "obsolete_key"}
        ]
      }'
 ```
 
-##### Response
+#### 请求体参数
 
-Success:
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `selector` | `object` | 否 | 文档选择条件，默认 `{}` |
+| `selector.document_ids` | `string[]` | 否 | 候选文档 ID；所有 ID 都必须属于当前知识库 |
+| `selector.metadata_condition` | `object` | 否 | 元数据过滤条件；与 `document_ids` 同时提供时取交集 |
+| `updates` | `object[]` | 否 | 更新操作列表，默认 `[]` |
+| `deletes` | `object[]` | 否 | 删除操作列表，默认 `[]` |
+
+:::caution 文档选择范围
+按照当前接口行为，`document_ids` 为空或省略时不会自动选中知识库中的全部文档，而是返回匹配数 `0`。需要实际修改文档时，请明确提供 `selector.document_ids`；`metadata_condition` 用于进一步缩小这些文档的范围。
+:::
+
+`metadata_condition` 的结构如下：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `logic` | `string` | 多个条件之间的关系，可为 `and` 或 `or`，默认 `and` |
+| `conditions` | `object[]` | 条件列表 |
+| `conditions[].name` | `string` | 元数据字段名 |
+| `conditions[].comparison_operator` | `string` | 比较运算符 |
+| `conditions[].value` | 任意 JSON 类型 | 用于比较的值；`empty` 和 `not empty` 运算符不会使用该值 |
+
+可用的 `comparison_operator` 包括：`is`、`not is`、`=`、`!=`、`≠`、`contains`、`not contains`、`in`、`not in`、`start with`、`end with`、`>`、`<`、`>=`、`<=`、`≥`、`≤`、`empty` 和 `not empty`。
+
+更新操作结构：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `key` | `string` | 是 | 要更新的元数据字段名 |
+| `value` | 任意 JSON 类型 | 是 | 新值 |
+| `match` | 任意 JSON 类型 | 否 | 仅替换当前值与其匹配的内容；省略时直接设置或追加新值 |
+
+删除操作结构：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `key` | `string` | 是 | 要删除的元数据字段名 |
+| `value` | 任意 JSON 类型 | 否 | 指定时只删除匹配的值；省略时删除整个字段 |
+
+#### 成功响应
 
 ```json
 {
@@ -2785,4102 +1920,2059 @@ Success:
 }
 ```
 
+`matched_docs` 是筛选出的文档数；`updated` 是实际发生元数据变更的文档数。
+
 ---
 
-### Retrieve chunks
+### 检索分块
 
 **POST** `/api/v1/retrieval`
 
-Retrieves chunks from specified datasets.
+从一个或多个知识库中检索与问题相关的分块。所有知识库都必须对当前 Token 可见，并且必须使用同一个嵌入模型。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/retrieval`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"question"`: `string`
-  - `"dataset_ids"`: `list[string]`
-  - `"document_ids"`: `list[string]`
-  - `"page"`: `integer`
-  - `"page_size"`: `integer`
-  - `"similarity_threshold"`: `float`
-  - `"vector_similarity_weight"`: `float`
-  - `"top_k"`: `integer`
-  - `"rerank_id"`: `string`
-  - `"keyword"`: `boolean`
-  - `"highlight"`: `boolean`
-  - `"cross_languages"`: `list[string]`
-  - `"metadata_condition"`: `object`
-  - `"use_kg"`: `boolean`
-  - `"toc_enhance"`: `boolean`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/retrieval \
+     --url 'http://{address}/api/v1/retrieval' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "question": "What is advantage of ragflow?",
-          "dataset_ids": ["b2a62730759d11ef987d0242ac120004"],
-          "document_ids": ["77df9ef4759a11ef8bdd0242ac120004"],
-          "metadata_condition": {
-            "logic": "and",
-            "conditions": [
-              {
-                "name": "author",
-                "comparison_operator": "=",
-                "value": "Toby"
-              },
-              {
-                "name": "url",
-                "comparison_operator": "not contains",
-                "value": "amd"
-              }
-            ]
-          }
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "question": "RAGFlow 有哪些特点？",
+       "dataset_ids": ["b2a62730759d11ef987d0242ac120004"],
+       "document_ids": ["77df9ef4759a11ef8bdd0242ac120004"],
+       "page": 1,
+       "page_size": 30,
+       "highlight": true,
+       "reference_metadata": {
+         "include": true,
+         "fields": ["author", "tags"]
+       }
      }'
 ```
 
-##### Request parameter
+#### 请求体参数
 
-- `"question"`: (*Body parameter*), `string`, *Required*
-  The user query or query keywords.
-- `"dataset_ids"`: (*Body parameter*) `list[string]`
-  The IDs of the datasets to search. If you do not set this argument, ensure that you set `"document_ids"`.
-- `"document_ids"`: (*Body parameter*), `list[string]`
-  The IDs of the documents to search. Ensure that all selected documents use the same embedding model. Otherwise, an error will occur. If you do not set this argument, ensure that you set `"dataset_ids"`.
-- `"page"`: (*Body parameter*), `integer`
-  Specifies the page on which the chunks will be displayed. Defaults to `1`.
-- `"page_size"`: (*Body parameter*)
-  The maximum number of chunks on each page. Defaults to `30`.
-- `"similarity_threshold"`: (*Body parameter*)
-  The minimum similarity score. Defaults to `0.2`.
-- `"vector_similarity_weight"`: (*Body parameter*), `float`
-  The weight of vector cosine similarity. Defaults to `0.3`. If x represents the weight of vector cosine similarity, then (1 - x) is the term similarity weight.
-- `"top_k"`: (*Body parameter*), `integer`
-  The number of chunks engaged in vector cosine computation. Defaults to `1024`.
-- `"use_kg"`: (*Body parameter*), `boolean`
-  Whether to search chunks related to the generated knowledge graph for multi-hop queries. Defaults to `False`. Before enabling this, ensure you have successfully constructed a knowledge graph for the specified datasets. See [here](../guides/dataset/advanced/construct_knowledge_graph.md) for details.
-- `"toc_enhance"`: (*Body parameter*), `boolean`
-  Whether to search chunks with extracted table of content. Defaults to `False`. Before enabling this, ensure you have enabled `TOC_Enhance` and successfully extracted table of contents for the specified datasets. See [here](https://ragflow.io/docs/dev/enable_table_of_contents) for details.
-- `"rerank_id"`: (*Body parameter*), `string`
-  The ID of the rerank model.
-- `"keyword"`: (*Body parameter*), `boolean`
-  Indicates whether to enable keyword-based matching:
-  - `true`: Enable keyword-based matching.
-  - `false`: Disable keyword-based matching (default).
-- `"highlight"`: (*Body parameter*), `boolean`
-  Specifies whether to enable highlighting of matched terms in the results:
-  - `true`: Enable highlighting of matched terms.
-  - `false`: Disable highlighting of matched terms (default).
-- `"cross_languages"`: (*Body parameter*) `list[string]`
-  The languages that should be translated into, in order to achieve keywords retrievals in different languages.
-- `"metadata_condition"`: (*Body parameter*), `object`
-  The metadata condition used for filtering chunks:
-  - `"logic"`: (*Body parameter*), `string`
-    - `"and"`: Return only results that satisfy *every* condition (default).
-    - `"or"`: Return results that satisfy *any* condition.
-  - `"conditions"`: (*Body parameter*), `array`
-    A list of metadata filter conditions.
-    - `"name"`: `string` - The metadata field name to filter by, e.g., `"author"`, `"company"`, `"url"`. Ensure this parameter before use. See [Set metadata](../guides/dataset/set_metadata.md) for details.
-    - `comparison_operator`: `string` - The comparison operator. Can be one of:
-      - `"contains"`
-      - `"not contains"`
-      - `"start with"`
-      - `"empty"`
-      - `"not empty"`
-      - `"="`
-      - `"≠"`
-      - `">"`
-      - `"<"`
-      - `"≥"`
-      - `"≤"`
-    - `"value"`: `string` - The value to compare.
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `question` | `string` | 是 | — | 检索问题；空字符串返回空结果 |
+| `dataset_ids` | `string[]` | 是 | — | 要检索的知识库 ID，必须为数组且不能为空 |
+| `document_ids` | `string[]` | 否 | `[]` | 限定文档范围；所有文档必须属于 `dataset_ids` 指定的知识库 |
+| `page` | `integer` | 否 | `1` | 页码 |
+| `page_size` | `integer` | 否 | `30` | 每页数量，最大为 `100` |
+| `similarity_threshold` | `number` | 否 | `0.2` | 最低综合相似度 |
+| `vector_similarity_weight` | `number` | 否 | `0.3` | 向量相似度权重；词项相似度权重为 `1 - vector_similarity_weight` |
+| `top_k` | `integer` | 否 | `1024` | 参与向量相似度计算的候选分块数，必须大于 `0` |
+| `rerank_id` | `string` | 否 | — | 重排序模型 ID |
+| `keyword` | `boolean` | 否 | `false` | 是否使用默认聊天模型扩展检索关键词 |
+| `highlight` | `boolean` | 否 | `false` | 是否在结果中返回命中词高亮 |
+| `cross_languages` | `string[]` | 否 | `[]` | 先将问题翻译为指定语言，再进行跨语言检索 |
+| `metadata_condition` | `object` | 否 | — | 按文档元数据过滤；未显式指定 `document_ids` 时生效 |
+| `use_kg` | `boolean` | 否 | `false` | 是否补充知识图谱多跳检索结果 |
+| `toc_enhance` | `boolean` | 否 | `false` | 是否使用目录增强检索 |
+| `reference_metadata` | `object` | 否 | — | 控制是否在分块结果中附带文档元数据 |
 
-#### Response
+`metadata_condition` 使用与“批量更新或删除文档元数据”相同的 `logic` 和 `conditions` 结构。
 
-Success:
+`reference_metadata` 支持以下字段：
+
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `include` | `boolean` | `false` | 是否在分块中添加 `document_metadata` |
+| `fields` | `string[]` | — | 仅返回指定元数据字段；省略时返回全部可用字段 |
+
+服务端仍兼容顶层的 `include_metadata` 和 `metadata_fields` 参数，但新调用应使用 `reference_metadata`。
+
+启用 `keyword`、`cross_languages`、`toc_enhance` 或 `use_kg` 时需要知识库工作空间中存在可用的默认聊天模型；设置 `rerank_id` 时需要存在对应的重排序模型。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chunks": [
-            {
-                "content": "ragflow content",
-                "content_ltks": "ragflow content",
-                "document_id": "5c5999ec7be811ef9cab0242ac120005",
-                "document_keyword": "1.txt",
-                "highlight": "<em>ragflow</em> content",
-                "id": "d78435d142bd5cf6704da62c778795c5",
-                "image_id": "",
-                "important_keywords": [
-                    ""
-                ],
-                "tag_kwd": [],
-                "kb_id": "c7ee74067a2c11efb21c0242ac120006",
-                "positions": [
-                    ""
-                ],
-                "similarity": 0.9669436601210759,
-                "term_similarity": 1.0,
-                "vector_similarity": 0.8898122004035864
-            }
-        ],
-        "doc_aggs": [
-            {
-                "count": 1,
-                "doc_id": "5c5999ec7be811ef9cab0242ac120005",
-                "doc_name": "1.txt"
-            }
-        ],
-        "total": 1
-    }
+  "code": 0,
+  "data": {
+    "total": 1,
+    "chunks": [
+      {
+        "id": "d78435d142bd5cf6704da62c778795c5",
+        "content": "RAGFlow 相关内容",
+        "document_id": "5c5999ec7be811ef9cab0242ac120005",
+        "document_keyword": "1.txt",
+        "dataset_id": "c7ee74067a2c11efb21c0242ac120006",
+        "highlight": "<em>RAGFlow</em> 相关内容",
+        "image_id": "",
+        "important_keywords": [],
+        "positions": [],
+        "similarity": 0.9669,
+        "term_similarity": 1.0,
+        "vector_similarity": 0.8898,
+        "document_metadata": {
+          "author": "张三",
+          "tags": ["产品"]
+        }
+      }
+    ],
+    "doc_aggs": [
+      {
+        "count": 1,
+        "doc_id": "5c5999ec7be811ef9cab0242ac120005",
+        "doc_name": "1.txt"
+      }
+    ]
+  }
 }
 ```
 
-Failure:
+#### 常见失败响应
 
 ```json
 {
-    "code": 102,
-    "message": "`datasets` is required."
+  "code": 102,
+  "message": "`dataset_ids` is required."
+}
+```
+
+```json
+{
+  "code": 100,
+  "message": "Datasets use different embedding models."
 }
 ```
 
 ---
-
-## CHAT ASSISTANT MANAGEMENT
+## 聊天助手管理
 
 ---
 
-### Create chat assistant
+本章介绍聊天助手的创建、查询、更新和删除接口。聊天会话与消息接口见“会话管理”章节。
+
+所有接口都需要：
+
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+聊天助手属于个人或团队工作空间。读取操作要求调用者对所属工作空间可见；创建和写操作还会校验相应的工作空间写权限。聊天助手引用的知识库、模型和重排模型必须能在该工作空间中使用。
+
+### 创建聊天助手
 
 **POST** `/api/v1/chats`
 
-Creates a chat assistant.
+#### 请求示例
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/chats`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"icon"`: `string`
-  - `"dataset_ids"`: `list[string]`
-  - `"llm_id"`: `string`
-  - `"llm_setting"`: `object`
-  - `"prompt_config"`: `object`
-
-##### Request example
-
-```shell
+```bash
 curl --request POST \
-     --url http://{address}/api/v1/chats \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-    "dataset_ids": ["0b2cbc8c877f11ef89070242ac120005"],
-    "name":"new_chat_1"
-}'
+  --url http://{address}/api/v1/chats \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "产品问答助手",
+    "workspace_id": "<WORKSPACE_ID>",
+    "dataset_ids": ["0b2cbc8c877f11ef89070242ac120005"]
+  }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The name of the chat assistant.
-- `"icon"`: (*Body parameter*), `string`
-  Base64 encoding of the avatar.
-- `"dataset_ids"`: (*Body parameter*), `list[string]`
-  The unique identifiers for the associated datasets. If omitted or set to `[]`, an empty chat assistant is created; datasets can be attached at a later time.
-- `"llm_id"`: (*Body parameter*), `string`
-  The identifier of the chat model. If not specified, the system defaults to the user's pre-configured chat model.
-- `"llm_setting"`: (*Body parameter*), `object`
-  A configuration object defining the LLM parameters for the assistant. The `llm_setting` object may contain the following attributes:
-  - `"model_type"`: `string`
-    A model type specifier. Only `"chat"` and `"image2text"` are recognized; any other inputs, or when omitted, are treated as `"chat"`.
-  - `"temperature"`: `float`
-    Controls the randomness of the model's predictions. A lower temperature results in more conservative responses, while a higher temperature yields more creative and diverse responses. Defaults to `0.1`.
-  - `"top_p"`: `float`
-    Also known as "nucleus sampling", this parameter sets a threshold to select a smaller set of words to sample from. It focuses on the most likely words, cutting off the less probable ones. Defaults to `0.3`
-  - `"presence_penalty"`: `float`
-    This discourages the model from repeating the same information by penalizing words that have already appeared in the conversation. Defaults to `0.4`.
-  - `"frequency penalty"`: `float`
-    Similar to the presence penalty, this reduces the model's tendency to repeat the same words frequently. Defaults to `0.7`.
-- `"prompt_config"`: (*Body parameter*), `object`
-  Instructions for the LLM to follow. A `prompt_config` object may contain the following attributes:
-  - `"system"`: `string` The prompt content.
-  - `"prologue"`: `string` The opening greeting for the user.
-  - `"parameters"`: `object[]` This argument lists the variables to use in the system prompt. Note that:
-    - `"knowledge"` is a reserved variable, which represents the retrieved chunks.
-    - All the variables in `"system"` should be curly bracketed.
-  - `"empty_response"`: `string` If nothing is retrieved in the dataset for the user's question, this will be used as the response. To allow the LLM to improvise when nothing is found, leave this blank.
-  - `"quote"`: `boolean` Whether the source of text should be displayed. Defaults to `true`.
-  - `"tts"`: `boolean`
-  - `"refine_multiturn"`: `boolean`
-  - `"use_kg"`: `boolean`
-  - `"reasoning"`: `boolean`
-  - `"cross_languages"`: `list[string]`
-  - `"tavily_api_key"`: `string`
-  - `"toc_enhance"`: `boolean`
-- `"similarity_threshold"`: (*Body parameter*), `float`
-- `"vector_similarity_weight"`: (*Body parameter*), `float`
-- `"top_n"`: (*Body parameter*), `int`
-- `"top_k"`: (*Body parameter*), `int`
-- `"rerank_id"`: (*Body parameter*), `string`
+- `name`：`string`，必填。聊天助手名称；去除首尾空白后不能为空，UTF-8 编码长度不得超过 255 字节。同一工作空间内名称不可重复。
+- `workspace_id`：`string`，可选。目标工作空间 ID；未提供时使用当前用户的个人工作空间。
+- `icon`：`string`，可选。助手图标。
+- `description`：`string`，可选，默认 `A helpful Assistant`。
+- `dataset_ids`：`array<string>`，可选，默认空数组。关联的知识库 ID。知识库必须与聊天助手属于同一工作空间，且其嵌入模型配置必须有效。
+- `llm_id`：`string`，可选。聊天模型标识或模型实例 ID。未提供时使用目标工作空间的默认聊天模型。
+- `rerank_id`：`string`，可选。重排模型标识或模型实例 ID。
+- `llm_setting`：`object`，可选。模型生成参数。
+- `prompt_config`：`object`，可选。提示词和检索行为配置。
+- `similarity_threshold`：`number`，可选，默认 `0.1`。相似度阈值。
+- `vector_similarity_weight`：`number`，可选，默认 `0.3`。向量相似度权重。
+- `top_n`：`integer`，可选，默认 `6`。传给模型的检索结果数量。
+- `top_k`：`integer`，可选，默认 `1024`。参与候选检索的数量。
 
-#### Response
+常用 `llm_setting` 字段：
 
-Success:
+- `model_type`：模型类型，通常为 `chat` 或 `image2text`。
+- `temperature`：生成随机性。
+- `top_p`：核采样阈值。
+- `presence_penalty`：出现惩罚。
+- `frequency_penalty`：频率惩罚。字段名包含下划线，不是 `frequency penalty`。
+- `max_tokens`：最大输出 Token 数；具体支持情况取决于模型提供商。
+
+常用 `prompt_config` 字段：
+
+- `system`：系统提示词。
+- `prologue`：开场白。
+- `parameters`：提示词变量列表，每项包含 `key` 和 `optional`。`knowledge` 是表示检索内容的保留变量。
+- `empty_response`：未检索到有效内容时的回答。
+- `quote`：是否返回引用。
+- `tts`：是否启用语音输出。
+- `refine_multiturn`：是否结合多轮对话优化检索问题。
+- `use_kg`：是否使用知识图谱。
+- `reasoning`：是否启用推理相关行为。
+- `cross_languages`：跨语言检索语言列表。
+- `toc_enhance`：是否启用目录增强。
+
+未提供 `prompt_config` 时，服务端会补全默认系统提示词、开场白、引用等配置。如果设置了知识库，并且系统提示词包含 `{knowledge}`，服务端会补充对应参数定义。
+
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "icon": "",
-        "create_date": "Thu, 24 Oct 2024 11:18:29 GMT",
-        "create_time": 1729768709023,
-        "dataset_ids": [
-            "527fa74891e811ef9c650242ac120006"
-        ],
-        "kb_names": [
-            "dataset_1"
-        ],
-        "description": "A helpful Assistant",
-        "id": "b1f2f15691f911ef81180242ac120003",
-        "language": "English",
-        "llm_id": "qwen-plus@Tongyi-Qianwen",
-        "llm_setting": {
-            "frequency_penalty": 0.7,
-            "presence_penalty": 0.4,
-            "temperature": 0.1,
-            "top_p": 0.3
-        },
-        "name": "12234",
-        "prompt_config": {
-            "empty_response": "Sorry! No relevant content was found in the knowledge base!",
-            "prologue": "Hi! I'm your assistant. What can I do for you?",
-            "quote": true,
-            "system": "You are an intelligent assistant...",
-            "parameters": [
-                {
-                    "key": "knowledge",
-                    "optional": false
-                }
-            ]
-        },
-        "rerank_id": "",
-        "similarity_threshold": 0.2,
-        "vector_similarity_weight": 0.3,
-        "top_n": 6,
-        "prompt_type": "simple",
-        "status": "1",
-        "tenant_id": "69736c5e723611efb51b0242ac120007",
-        "top_k": 1024,
-        "update_date": "Thu, 24 Oct 2024 11:18:29 GMT",
-        "update_time": 1729768709023
+  "code": 0,
+  "data": {
+    "id": "b1f2f15691f911ef81180242ac120003",
+    "name": "产品问答助手",
+    "tenant_id": "69736c5e723611efb51b0242ac120007",
+    "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
+    "kb_names": ["产品资料库"],
+    "llm_id": "qwen-plus@Tongyi-Qianwen",
+    "rerank_id": "",
+    "top_n": 6,
+    "top_k": 1024,
+    "similarity_threshold": 0.1,
+    "vector_similarity_weight": 0.3,
+    "capabilities": {
+      "read": true,
+      "update": true,
+      "delete": true
     }
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Duplicated chat name."
-}
-```
+创建失败时会返回非零 `code`。常见原因包括名称重复、目标工作空间不可写、模型不可用，以及引用了其他工作空间的知识库。
 
 ---
 
-### Update chat assistant
+### 更新聊天助手
 
 **PUT** `/api/v1/chats/{chat_id}`
 
-Overwrites the existing configuration for a specified chat assistant.
+更新聊天助手配置。只处理请求中出现的顶层字段；`prompt_config` 和 `llm_setting` 等对象字段会以本次提交的对象替换对应配置。若只需合并对象中的少数字段，请使用 `PATCH` 接口。
 
-Use this endpoint only when providing a complete configuration. Any fields omitted from the request will be reset to their server-side default values. For partial updates, use `PATCH /api/v1/chats/{chat_id}` instead.
-
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/chats/{chat_id}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"icon"`: `string`
-  - `"dataset_ids"`: `list[string]`
-  - `"llm_id"`: `string`
-  - `"llm_setting"`: `object`
-  - `"prompt_config"`: `object`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PUT \
-     --url http://{address}/api/v1/chats/{chat_id} \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "name":"Test",
-          "icon":"",
-          "dataset_ids":["0b2cbc8c877f11ef89070242ac120005"],
-          "llm_id":"qwen-plus@Tongyi-Qianwen",
-          "llm_setting":{"temperature":0.1,"top_p":0.3,"presence_penalty":0.4,"frequency_penalty":0.7},
-          "prompt_config":{
-               "system":"You are an intelligent assistant...",
-               "prologue":"Hi! I'\''m your assistant. What can I do for you?",
-               "parameters":[{"key":"knowledge","optional":false}],
-               "empty_response":"Sorry! No relevant content was found in the knowledge base!",
-               "quote":true
-          },
-          "similarity_threshold":0.2,
-          "vector_similarity_weight":0.3,
-          "top_n":6,
-          "top_k":1024,
-          "rerank_id":""
-     }'
-```
-
-#### Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the chat assistant to update.
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The revised name of the chat assistant.
-- `"icon"`: (*Body parameter*), `string`
-  Base64 encoding of the avatar.
-- `"dataset_ids"`: (*Body parameter*), `list[string]`
-  The IDs of the associated datasets.
-- `"llm_id"`: (*Body parameter*), `string`
-  The chat model name. If not set, the user's default chat model is used.
-- `"llm_setting"`: (*Body parameter*), `object`
-  The LLM settings for the chat assistant. An `llm_setting` object contains the following attributes:
-  - `"model_type"`: `string`
-    A model type specifier. Supported values are `"chat"` and `"image2text"`. If the field is omitted or an unrecognized value is provided, it defaults to `"chat"`.
-  - `"temperature"`: `float`
-    Controls the randomness of the model's predictions. A lower temperature results in more conservative responses, while a higher temperature yields more creative and diverse responses. Defaults to `0.1`.
-  - `"top_p"`: `float`
-    Also known as "nucleus sampling", this parameter sets a threshold to select a smaller set of words to sample from. It focuses on the most likely words, cutting off the less probable ones. Defaults to `0.3`
-  - `"presence_penalty"`: `float`
-    This discourages the model from repeating the same information by penalizing words that have already appeared in the conversation. Defaults to `0.4`.
-  - `"frequency penalty"`: `float`
-    Similar to the presence penalty, this reduces the model's tendency to repeat the same words frequently. Defaults to `0.7`.
-- `"prompt_config"`: (*Body parameter*), `object`
-- `"similarity_threshold"`: (*Body parameter*), `float`
-- `"vector_similarity_weight"`: (*Body parameter*), `float`
-- `"top_n"`: (*Body parameter*), `int`
-- `"top_k"`: (*Body parameter*), `int`
-- `"rerank_id"`: (*Body parameter*), `string`
-
-For `PUT` requests, any fields omitted from the request body are reset to their server-side default values.
-
-#### Response
-
-Success: returns the full updated chat assistant object.
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "04d0d8e28d1911efa3630242ac120006",
-        "name": "Test",
-        "description": "A helpful Assistant",
-        "icon": "",
-        "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
-        "kb_names": ["dataset_1"],
-        "llm_id": "qwen-plus@Tongyi-Qianwen",
-        "llm_setting": {
-            "frequency_penalty": 0.7,
-            "presence_penalty": 0.4,
-            "temperature": 0.1,
-            "top_p": 0.3
-        },
-        "prompt_config": {
-            "empty_response": "Sorry! No relevant content was found in the knowledge base!",
-            "prologue": "Hi! I'm your assistant. What can I do for you?",
-            "quote": true,
-            "system": "You are an intelligent assistant...",
-            "parameters": [{"key": "knowledge", "optional": false}]
-        },
-        "similarity_threshold": 0.2,
-        "vector_similarity_weight": 0.3,
-        "top_n": 6,
-        "top_k": 1024,
-        "rerank_id": "",
-        "status": "1",
-        "tenant_id": "69736c5e723611efb51b0242ac120007",
-        "create_time": 1729232406637,
-        "update_time": 1729232406638
+  --url http://{address}/api/v1/chats/{chat_id} \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "更新后的问答助手",
+    "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
+    "llm_setting": {
+      "temperature": 0.2,
+      "top_p": 0.8
     }
-}
+  }'
 ```
 
-Failure:
+#### 参数
+
+- `chat_id`：路径参数，必填。聊天助手 ID。
+- 请求体支持创建接口中的可写配置字段。
+- `workspace_id` 会被忽略；`tenant_id` 不允许提交。该接口不能移动聊天助手所属工作空间。
+- `dataset_ids`、`llm_id` 和 `rerank_id` 会按聊天助手当前工作空间重新校验。
+
+#### 成功响应
+
+成功时返回更新后的完整聊天助手对象：
 
 ```json
 {
-    "code": 102,
-    "message": "Duplicated chat name."
+  "code": 0,
+  "data": {
+    "id": "b1f2f15691f911ef81180242ac120003",
+    "name": "更新后的问答助手",
+    "dataset_ids": ["527fa74891e811ef9c650242ac120006"]
+  }
 }
 ```
 
 ---
 
-### Get chat assistant
+### 获取聊天助手详情
 
 **GET** `/api/v1/chats/{chat_id}`
 
-Retrieves a specified chat assistant.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/chats/{chat_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/chats/{chat_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url http://{address}/api/v1/chats/{chat_id} \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the chat assistant to retrieve.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "icon": "",
-        "create_date": "Fri, 18 Oct 2024 06:20:06 GMT",
-        "create_time": 1729232406637,
-        "description": "A helpful Assistant",
-        "id": "04d0d8e28d1911efa3630242ac120006",
-        "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
-        "kb_names": ["dataset_1"],
-        "language": "English",
-        "llm_id": "qwen-plus@Tongyi-Qianwen",
-        "llm_setting": {
-            "temperature": 0.1,
-            "top_p": 0.3
-        },
-        "name": "my_chat",
-        "prompt_config": {
-            "empty_response": "Sorry! No relevant content was found in the knowledge base!",
-            "prologue": "Hi! I'm your assistant. What can I do for you?",
-            "quote": true,
-            "system": "You are an intelligent assistant...",
-            "parameters": [{"key": "knowledge", "optional": false}]
-        },
-        "rerank_id": "",
-        "similarity_threshold": 0.2,
-        "vector_similarity_weight": 0.3,
-        "top_n": 6,
-        "status": "1",
-        "tenant_id": "69736c5e723611efb51b0242ac120007",
-        "update_date": "Fri, 18 Oct 2024 06:20:06 GMT",
-        "update_time": 1729232406638
+  "code": 0,
+  "data": {
+    "id": "b1f2f15691f911ef81180242ac120003",
+    "name": "产品问答助手",
+    "description": "A helpful Assistant",
+    "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
+    "kb_names": ["产品资料库"],
+    "llm_id": "qwen-plus@Tongyi-Qianwen",
+    "llm_setting": {
+      "temperature": 0.1,
+      "top_p": 0.3
+    },
+    "tenant_id": "69736c5e723611efb51b0242ac120007",
+    "workspace_type": "team",
+    "capabilities": {
+      "read": true,
+      "update": true,
+      "delete": true
     }
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "No authorization."
-}
-```
+无读取权限或资源不存在时返回非零 `code`，不会泄露不可见资源的配置。
 
 ---
 
-### Partially update chat assistant
+### 部分更新聊天助手
 
 **PATCH** `/api/v1/chats/{chat_id}`
 
-Performs a partial update on a specified chat assistant.
+部分更新聊天助手。与 `PUT` 的主要区别是：`prompt_config` 和 `llm_setting` 会与现有对象进行浅合并，未提交的对象字段保持不变。
 
-Unspecified fields are preserved, while nested objects, such as `llm_setting` and `prompt_config`, are deep-merged with the existing configuration. This is the recommended endpoint for renaming an assistant or modifying a specific subset of settings.
-
-#### Request
-
-- Method: PATCH
-- URL: `/api/v1/chats/{chat_id}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body: any subset of the fields accepted by `PUT /api/v1/chats/{chat_id}`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PATCH \
-     --url http://{address}/api/v1/chats/{chat_id} \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-    "llm_id": "gpt-4o",
-    "llm_setting": {"temperature": 0.5}
-}'
-```
-
-#### Response
-
-Success: returns the full updated chat assistant object (same structure as `PUT /api/v1/chats/{chat_id}`).
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "04d0d8e28d1911efa3630242ac120006",
-        "name": "Renamed assistant",
-        "llm_id": "qwen-plus@Tongyi-Qianwen",
-        "..."  : "..."
+  --url http://{address}/api/v1/chats/{chat_id} \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "llm_setting": {
+      "temperature": 0.4
+    },
+    "prompt_config": {
+      "prologue": "您好，请问需要查询什么？"
     }
-}
+  }'
 ```
 
-Failure:
+#### 成功响应
 
-```json
-{
-    "code": 102,
-    "message": "No authorization."
-}
-```
+成功时返回更新后的完整聊天助手对象，结构与获取详情接口一致。
 
 ---
 
-### Delete chat assistant
+### 删除单个聊天助手
 
 **DELETE** `/api/v1/chats/{chat_id}`
 
-Deletes a chat assistant by ID.
+将聊天助手标记为已删除。该接口不会通过路径删除其会话数据；调用者需要对聊天助手具有删除权限。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/chats/{chat_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/chats/{chat_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url http://{address}/api/v1/chats/{chat_id} \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the chat assistant to delete.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "No authorization."
+  "code": 0,
+  "data": true
 }
 ```
 
 ---
 
-### Delete chat assistants
+### 批量删除聊天助手
 
 **DELETE** `/api/v1/chats`
 
-Deletes chat assistants by ID.
+#### 按 ID 删除
 
-:::caution DEPRECATED
-The `chat_id` in the request body is deprecated, please use `ids` list.
+```bash
+curl --request DELETE \
+  --url http://{address}/api/v1/chats \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "ids": [
+      "b1f2f15691f911ef81180242ac120003",
+      "c2f2f15691f911ef81180242ac120004"
+    ]
+  }'
+```
+
+#### 删除全部可管理聊天助手
+
+```bash
+curl --request DELETE \
+  --url http://{address}/api/v1/chats \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{"delete_all": true}'
+```
+
+#### 请求体参数
+
+- `ids`：`array<string>`，可选。待删除聊天助手 ID；重复 ID 会作为错误返回。
+- `delete_all`：`boolean`，可选。当为 `true` 且未提供 `ids` 时，删除当前用户有权管理的全部聊天助手。
+- `chat_id`：`string`，兼容字段。未提供 `ids` 和 `delete_all` 时，可用它删除单个聊天助手；新调用建议使用路径形式的单资源删除接口。
+
+批量请求可能部分成功，此时 `data` 会包含成功数量和错误列表。
+
+```json
+{
+  "code": 0,
+  "data": {
+    "success_count": 1,
+    "errors": ["Chat(c2f2f15691f911ef81180242ac120004) not found."]
+  },
+  "message": "Partially deleted 1 chats with 1 errors"
+}
+```
+
+---
+
+### 获取聊天助手列表
+
+**GET** `/api/v1/chats`
+
+返回当前用户可见工作空间中的聊天助手。
+
+#### 请求示例
+
+```bash
+curl --get http://{address}/api/v1/chats \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=30' \
+  --data-urlencode 'keywords=产品' \
+  --data-urlencode 'orderby=update_time' \
+  --data-urlencode 'desc=true'
+```
+
+筛选指定工作空间时，可重复传递 `owner_ids`：
+
+```bash
+curl --get http://{address}/api/v1/chats \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'owner_ids=<WORKSPACE_ID_1>' \
+  --data-urlencode 'owner_ids=<WORKSPACE_ID_2>'
+```
+
+#### 查询参数
+
+- `id`：`string`，可选。按聊天助手 ID 精确筛选。
+- `name`：`string`，可选。按名称精确筛选。
+- `keywords`：`string`，可选。关键词搜索。提供 `id` 或 `name` 时会忽略该参数。
+- `owner_ids`：`array<string>`，可选。工作空间 ID，可重复传递。所有 ID 都必须属于当前用户可见范围。
+- `page`：`integer`，可选。页码；默认 `0` 表示不启用常规分页。
+- `page_size`：`integer`，可选。每页数量；默认 `0`。
+- `orderby`：`string`，默认 `create_time`。排序字段。
+- `desc`：`boolean`，默认 `true`。是否降序排列。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": {
+    "chats": [
+      {
+        "id": "b1f2f15691f911ef81180242ac120003",
+        "name": "产品问答助手",
+        "tenant_id": "69736c5e723611efb51b0242ac120007",
+        "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
+        "kb_names": ["产品资料库"],
+        "capabilities": {
+          "read": true,
+          "update": true,
+          "delete": true
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+:::caution 废弃的删除方式
+旧调用可以向 `DELETE /api/v1/chats` 提交 `{"chat_id":"..."}` 删除单个助手。新调用请使用 `DELETE /api/v1/chats/{chat_id}`。
+:::
+## 会话管理
+
+本章介绍聊天应用和智能体的会话管理、对话调用，以及语音、思维导图和相关问题接口。
+
+所有接口都需要在请求头中携带有效凭证：
+
+```http
+Authorization: Bearer <YOUR_API_KEY_OR_LOGIN_TOKEN>
+```
+
+:::note 工作空间权限
+调用方必须能够访问目标聊天应用、智能体、搜索应用及其引用的知识库。团队工作空间中的会话按照当前团队权限共享；个人工作空间中的会话默认只对创建者可见。超级管理员可以按其全局管理权限读取和管理会话。
 :::
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/chats`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]`
-  - `"delete_all"`: `boolean`
-
-##### Request example
-
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/chats \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "ids": ["test_1", "test_2"]
-     }'
-```
-
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/chats \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "delete_all": true
-     }'
-```
-
-##### Request parameters
-
-- `"ids"`: (*Body parameter*), `list[string]`
-  The IDs of the chat assistants to delete.
-  - If omitted, or set to `null` or an empty array, no chat assistants are deleted.
-  - If an array of IDs is provided, only the chat assistants matching those IDs are deleted.
-- `"delete_all"`: (*Body parameter*), `boolean`
-  Whether to delete all chat assistants owned by the current user when `"ids"` is omitted, or set to`null` or an empty array. Defaults to `false`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "ids are required"
-}
-```
-
 ---
 
-### List chat assistants
+## 聊天会话
 
-**GET** `/api/v1/chats?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&keywords={keywords}&owner_ids={owner_id}&name={chat_name}&id={chat_id}`
-
-Lists chat assistants.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/chats?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&keywords={keywords}&owner_ids={owner_id}&name={chat_name}&id={chat_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
-```bash
-curl --request GET \
-     --url http://{address}/api/v1/chats?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&keywords={keywords}&owner_ids={owner_id}&name={chat_name}&id={chat_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-##### Request parameters
-
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the chat assistants will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The number of chat assistants on each page. Defaults to `30`.
-- `orderby`: (*Filter parameter*), `string`
-  The attribute by which the results are sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved chat assistants should be sorted in descending order. Defaults to `true`.
-- `keywords`: (*Filter parameter*), `string`
-  Case-insensitive fuzzy match against chat assistant names.
-- `owner_ids`: (*Filter parameter*), `string` (repeatable)
-  Filter by owner tenant IDs. Can be specified multiple times: `?owner_ids=id1&owner_ids=id2`.
-- `id`: (*Filter parameter*), `string`
-  The ID of the chat assistant to retrieve with exact match.
-- `name`: (*Filter parameter*), `string`
-  The name of the chat assistant to retrieve with exact match.
-
-When `id` or `name` is provided, exact filtering takes precedence over `keywords`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "chats": [
-            {
-                "icon": "",
-                "create_date": "Fri, 18 Oct 2024 06:20:06 GMT",
-                "create_time": 1729232406637,
-                "description": "A helpful Assistant",
-                "id": "04d0d8e28d1911efa3630242ac120006",
-                "dataset_ids": ["527fa74891e811ef9c650242ac120006"],
-                "kb_names": ["dataset_1"],
-                "language": "English",
-                "llm_id": "qwen-plus@Tongyi-Qianwen",
-                "llm_setting": {
-                    "frequency_penalty": 0.7,
-                    "presence_penalty": 0.4,
-                    "temperature": 0.1,
-                    "top_p": 0.3
-                },
-                "name": "13243",
-                "prompt_config": {
-                    "empty_response": "Sorry! No relevant content was found in the knowledge base!",
-                    "prologue": "Hi! I'm your assistant. What can I do for you?",
-                    "quote": true,
-                    "system": "You are an intelligent assistant...",
-                    "parameters": [
-                        {
-                            "key": "knowledge",
-                            "optional": false
-                        }
-                    ]
-                },
-                "rerank_id": "",
-                "similarity_threshold": 0.2,
-                "vector_similarity_weight": 0.3,
-                "top_n": 6,
-                "prompt_type": "simple",
-                "status": "1",
-                "tenant_id": "69736c5e723611efb51b0242ac120007",
-                "update_date": "Fri, 18 Oct 2024 06:20:06 GMT",
-                "update_time": 1729232406638
-            }
-        ],
-        "total": 1
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The chat doesn't exist"
-}
-```
-
----
-
-## SESSION MANAGEMENT
-
----
-
-### Create session with chat assistant
+### 创建聊天会话
 
 **POST** `/api/v1/chats/{chat_id}/sessions`
 
-Creates a session with a chat assistant.
+为指定聊天应用创建会话。
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/chats/{chat_id}/sessions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"user_id"`: `string` (optional)
+- `chat_id`：路径参数，聊天应用 ID。
+- `name`：请求体参数，可选，会话名称，默认为 `New session`；去除首尾空白后不能为空，最长保留 255 个字符。
 
-##### Request example
+会话的所有者固定为当前认证用户，不能通过请求体指定其他用户。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "name": "new session"
-     }'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"name":"产品咨询"}'
 ```
 
-##### Request parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `"name"`: (*Body parameter*), `string`
-  The name of the chat session to create.
-- `"user_id"`: (*Body parameter*), `string`
-  Optional user-defined ID.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-        "create_date": "Fri, 11 Oct 2024 08:46:14 GMT",
-        "create_time": 1728636374571,
-        "id": "4606b4ec87ad11efbc4f0242ac120006",
-        "messages": [
-            {
-                "content": "Hi! I am your assistant, can I help you?",
-                "role": "assistant"
-            }
-        ],
-        "name": "new session",
-        "update_date": "Fri, 11 Oct 2024 08:46:14 GMT",
-        "update_time": 1728636374571
+  "code": 0,
+  "data": {
+    "id": "4606b4ec87ad11efbc4f0242ac120006",
+    "chat_id": "2ca4b22e878011ef88fe0242ac120005",
+    "name": "产品咨询",
+    "user_id": "69736c5e723611efb51b0242ac120007",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "您好，请问有什么可以帮助您？"
+      }
+    ],
+    "reference": [],
+    "capabilities": {
+      "read": true,
+      "update": true,
+      "delete": true
     }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "`name` can not be empty."
+  }
 }
 ```
 
 ---
 
-### Update chat assistant's session
+### 查询聊天会话列表
 
-**PATCH** `/api/v1/chats/{chat_id}/sessions/{session_id}`
+**GET** `/api/v1/chats/{chat_id}/sessions`
 
-Updates a session of a specified chat assistant.
+#### 请求参数
 
-:::caution DEPRECATED
-`PUT /api/v1/chats/{chat_id}/sessions/{session_id}` is deprecated. Use this endpoint instead.
+- `chat_id`：路径参数，聊天应用 ID。
+- `page`：查询参数，页码，默认为 `1`。
+- `page_size`：查询参数，每页数量，默认为 `30`；设为 `0` 时返回空数组。
+- `orderby`：查询参数，排序字段，默认为 `create_time`。
+- `desc`：查询参数，是否降序，默认为 `true`；传入 `false` 时升序。
+- `id`：查询参数，可选，按会话 ID 过滤。
+- `name`：查询参数，可选，按会话名称过滤。
+
+:::note 会话范围
+团队聊天应用和超级管理员查询时可返回该聊天应用下所有可读会话；个人聊天应用只返回当前用户自己的会话。
 :::
 
-#### Request
-
-- Method: PATCH
-- URL: `/api/v1/chats/{chat_id}/sessions/{session_id}`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-
-##### Request example
-
 ```bash
-curl --request PATCH \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions/{session_id} \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "name": "<REVISED_SESSION_NAME_HERE>"
-     }'
+curl --get \
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20' \
+  --data-urlencode 'orderby=update_time' \
+  --data-urlencode 'desc=true'
 ```
 
-##### Request Parameter
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `session_id`: (*Path parameter*)
-  The ID of the session to update.
-- `"name"`: (*Body Parameter*), `string`
-  The revised name of the session.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-        "create_date": "Fri, 11 Oct 2024 08:46:14 GMT",
-        "create_time": 1728636374571,
-        "id": "4606b4ec87ad11efbc4f0242ac120006",
-        "messages": [
-            {
-                "content": "Hi! I am your assistant, can I help you?",
-                "role": "assistant"
-            }
-        ],
-        "name": "updated session name",
-        "update_date": "Fri, 11 Oct 2024 08:46:14 GMT",
-        "update_time": 1728636374571,
-        "user_id": ""
+  "code": 0,
+  "data": [
+    {
+      "id": "4606b4ec87ad11efbc4f0242ac120006",
+      "chat_id": "2ca4b22e878011ef88fe0242ac120005",
+      "name": "产品咨询",
+      "messages": [],
+      "reference": [],
+      "capabilities": {
+        "read": true,
+        "update": true,
+        "delete": true
+      }
     }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "`name` can not be empty."
+  ]
 }
 ```
 
 ---
 
-### List chat assistant's sessions
-
-**GET** `/api/v1/chats/{chat_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={session_name}&id={session_id}&user_id={user_id}`
-
-Lists sessions associated with a specified chat assistant.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/chats/{chat_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={session_name}&id={session_id}&user_id={user_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
-```bash
-curl --request GET \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={session_name}&id={session_id}&user_id={user_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-##### Request Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the sessions will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The number of sessions on each page. Defaults to `30`. If set to `0`, an empty list is returned.
-- `orderby`: (*Filter parameter*), `string`
-  The field by which sessions should be sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved sessions should be sorted in descending order. Defaults to `true`.
-- `name`: (*Filter parameter*) `string`
-  The name of the chat session to retrieve.
-- `id`: (*Filter parameter*), `string`
-  The ID of the chat session to retrieve.
-- `user_id`: (*Filter parameter*), `string`
-  The optional user-defined ID passed in when creating session.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-            "create_date": "Fri, 11 Oct 2024 08:46:43 GMT",
-            "create_time": 1728636403974,
-            "id": "578d541e87ad11ef96b90242ac120006",
-            "messages": [
-                {
-                    "content": "Hi! I am your assistant, can I help you?",
-                    "role": "assistant"
-                }
-            ],
-            "name": "new session",
-            "reference": [],
-            "update_date": "Fri, 11 Oct 2024 08:46:43 GMT",
-            "update_time": 1728636403974,
-            "user_id": ""
-        }
-    ]
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The session doesn't exist"
-}
-```
-
----
-
-### Get chat assistant's session
+### 获取聊天会话详情
 
 **GET** `/api/v1/chats/{chat_id}/sessions/{session_id}`
 
-Gets a specific session of a specified chat assistant, including its messages, references, and avatar.
+返回会话消息、引用、聊天应用头像和权限能力。
 
-#### Request
+#### 请求参数
 
-- Method: GET
-- URL: `/api/v1/chats/{chat_id}/sessions/{session_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+- `chat_id`：路径参数，聊天应用 ID。
+- `session_id`：路径参数，会话 ID，且必须属于指定聊天应用。
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions/{session_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `session_id`: (*Path parameter*)
-  The ID of the session to retrieve.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-        "id": "4606b4ec87ad11efbc4f0242ac120006",
-        "name": "new session",
-        "avatar": "data:image/png;base64,...",
-        "messages": [
-            {
-                "content": "Hi! I am your assistant, can I help you?",
-                "role": "assistant"
-            }
-        ],
-        "reference": []
-    }
+  "code": 0,
+  "data": {
+    "id": "4606b4ec87ad11efbc4f0242ac120006",
+    "chat_id": "2ca4b22e878011ef88fe0242ac120005",
+    "name": "产品咨询",
+    "avatar": "data:image/png;base64,...",
+    "messages": [],
+    "reference": []
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Session not found!"
-}
-```
+会话不存在、不属于指定聊天应用或调用方无权读取时，接口返回错误响应。
 
 ---
 
-### Delete a message from a chat assistant's session
+### 更新聊天会话
+
+**PATCH** `/api/v1/chats/{chat_id}/sessions/{session_id}`
+
+更新会话属性。通常仅需提交 `name`。
+
+:::caution 已弃用的别名
+`PUT /api/v1/chats/{chat_id}/sessions/{session_id}` 已弃用，仅作为兼容别名保留。新调用应使用 `PATCH`。
+:::
+
+请求体不能修改 `messages`、`message`、`reference`、`id`、`chat_id`、`dialog_id` 或 `user_id`。`name` 去除首尾空白后不能为空，最长保留 255 个字符。
+
+```bash
+curl --request PATCH \
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"name":"售后咨询"}'
+```
+
+成功时返回更新后的会话对象。
+
+---
+
+### 删除聊天消息
 
 **DELETE** `/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}`
 
-Deletes a user message and its paired assistant reply from a specified chat assistant session.
+删除指定用户消息以及紧随其后的配对助手回复，同时移除对应的引用记录。
 
-#### Request
+#### 请求参数
 
-- Method: DELETE
-- URL: `/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+- `chat_id`：路径参数，聊天应用 ID。
+- `session_id`：路径参数，会话 ID。
+- `msg_id`：路径参数，需要删除的用户消息 ID。
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `session_id`: (*Path parameter*)
-  The ID of the session that owns the message.
-- `msg_id`: (*Path parameter*)
-  The ID of the message to delete.
-
-#### Response
-
-Success: returns the updated session object.
-
-```json
-{
-    "code": 0,
-    "data": {
-        "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-        "id": "4606b4ec87ad11efbc4f0242ac120006",
-        "messages": [],
-        "reference": []
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Session not found!"
-}
-```
+成功时返回删除消息后的完整会话对象。调用方需要具有该会话的修改权限。
 
 ---
 
-### Update message feedback in a chat assistant's session
+### 更新消息反馈
 
 **PUT** `/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}/feedback`
 
-Updates feedback for an assistant message in a specified chat assistant session.
+为助手消息设置赞同或反对反馈。反馈变化还会尝试应用到该消息引用的分块。
 
-#### Request
+#### 请求参数
 
-- Method: PUT
-- URL: `/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}/feedback`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"thumbup"`: `boolean`
-  - `"feedback"`: `string` (optional)
-
-##### Request example
+- `chat_id`：路径参数，聊天应用 ID。
+- `session_id`：路径参数，会话 ID。
+- `msg_id`：路径参数，助手消息 ID。
+- `thumbup`：请求体必填布尔值；`true` 表示赞同，`false` 表示反对。
+- `feedback`：请求体可选字符串，通常在反对时填写。赞同时已有的反馈文本会被移除。
 
 ```bash
 curl --request PUT \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}/feedback \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "thumbup": false,
-          "feedback": "The answer missed the cited document."
-     }'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions/{session_id}/messages/{msg_id}/feedback' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "thumbup": false,
+    "feedback": "回答遗漏了引用文档中的限制条件。"
+  }'
 ```
 
-##### Request Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `session_id`: (*Path parameter*)
-  The ID of the session that owns the message.
-- `msg_id`: (*Path parameter*)
-  The ID of the assistant message to update.
-- `"thumbup"`: (*Body parameter*), `boolean`
-  Whether the assistant message is marked as positive feedback.
-- `"feedback"`: (*Body parameter*), `string`
-  Optional feedback text, typically used when `"thumbup"` is `false`.
-
-#### Response
-
-Success: returns the updated session object.
-
-```json
-{
-    "code": 0,
-    "data": {
-        "chat_id": "2ca4b22e878011ef88fe0242ac120005",
-        "id": "4606b4ec87ad11efbc4f0242ac120006",
-        "messages": [
-            {
-                "id": "message-id",
-                "role": "assistant",
-                "content": "Here is the answer.",
-                "thumbup": false,
-                "feedback": "The answer missed the cited document."
-            }
-        ]
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Session not found!"
-}
-```
+成功时返回更新后的完整会话对象。如果 `thumbup` 不是布尔值，接口返回参数错误。
 
 ---
 
-### Delete chat assistant's sessions
+### 删除聊天会话
 
 **DELETE** `/api/v1/chats/{chat_id}/sessions`
 
-Deletes sessions of a chat assistant by ID.
+删除指定会话，或者删除当前调用方在该聊天应用下有权管理的全部会话。删除时也会尝试清理会话消息上传的附件。
 
-#### Request
+#### 请求参数
 
-- Method: DELETE
-- URL: `/api/v1/chats/{chat_id}/sessions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]`
-  - `"delete_all"`: `boolean`
-
-##### Request example
+- `chat_id`：路径参数，聊天应用 ID。
+- `ids`：请求体可选数组，需要删除的会话 ID。
+- `delete_all`：请求体可选布尔值；未提供有效 `ids` 且设为 `true` 时，删除全部可管理会话。
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "ids": ["test_1", "test_2"]
-     }'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"ids":["session_id_1","session_id_2"]}'
 ```
+
+删除全部可管理会话：
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/chats/{chat_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "delete_all": true
-     }'
+  --url 'http://{address}/api/v1/chats/{chat_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"delete_all":true}'
 ```
 
-##### Request Parameters
-
-- `chat_id`: (*Path parameter*)
-  The ID of the associated chat assistant.
-- `"ids"`: (*Body Parameter*), `list[string]`
-  The IDs of the sessions to delete.
-  - If omitted, or set to `null` or an empty array, no sessions are deleted.
-  - If an array of IDs is provided, only the sessions matching those IDs are deleted.
-- `"delete_all"`: (*Body Parameter*), `boolean`
-  Whether to delete all sessions of the specified chat assistant when `"ids"` is omitted, or set to `null` or an empty array. Defaults to `false`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The chat doesn't own the session"
-}
-```
+成功时通常返回 `data: true`；部分删除成功时，`data` 包含 `success_count` 和 `errors`。
 
 ---
 
-### Converse with chat assistant
+### 与聊天应用对话
 
 **POST** `/api/v1/chat/completions`
 
-Starts a chat completion request. The same endpoint supports three modes:
+该接口支持三种调用方式：
 
-:::caution DEPRECATED
-`POST /api/v1/chats/{chat_id}/completions` is deprecated. Use this endpoint instead.
+- 不提供 `chat_id`：直接使用当前账户的默认聊天模型，不保存聊天应用会话。
+- 提供 `chat_id`，不提供 `session_id`：使用聊天应用配置并自动创建新会话。
+- 同时提供 `chat_id` 和 `session_id`：继续已有会话。
+
+:::caution 已弃用的别名
+`POST /api/v1/chats/{chat_id}/completions` 已弃用。新调用应使用本接口，并在请求体中传入 `chat_id`。
 :::
 
-- No `chat_id`: talk directly with the tenant's default chat model.
-- With `chat_id` but no `session_id`: use that chat's configuration and automatically create a new session.
-- With both `chat_id` and `session_id`: continue an existing chat session.
+#### 请求参数
 
-:::tip NOTE
-
-- In streaming mode, not all responses include a reference, as this depends on the system's judgement.
-- In streaming mode, the last message is an empty message:
-
-  ```json
-  data:
-  {
-    "code": 0,
-    "data": true
-  }
-  ```
-
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/chat/completions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-
-  - `"messages"`: `list[object]`
-  - `"question"`: `string`
-  - `"stream"`: `boolean`
-  - `"chat_id"`: `string` (optional)
-  - `"session_id"`: `string` (optional)
-  - `"llm_id"`: `string` (optional)
-  - `"pass_all_history_messages"`: `boolean` (optional)
-  - `"legacy"`: `boolean` (optional)
-
-##### Request example
+- `messages`：请求体参数，非空消息数组。每项必须包含 `role` 和 `content`。
+- `question`：请求体参数，可代替 `messages` 传递最新问题；若同时缺少 `messages` 和 `question`，请求失败。
+- `files`：使用 `question` 时可选，附加到生成的用户消息。
+- `stream`：可选布尔值，是否使用 SSE 流式返回，默认为 `true`。
+- `chat_id`：可选，聊天应用 ID。
+- `session_id`：可选，会话 ID；提供时必须同时提供 `chat_id`。
+- `conversation_id`：`session_id` 的兼容字段。
+- `llm_id`：可选，为本次请求覆盖聊天模型；模型必须在聊天应用所属工作空间中可用。
+- `pass_all_history_messages`：可选，默认为 `false`。设为 `false` 时服务端使用已保存历史并只追加请求中的最后一条用户消息；设为 `true` 时使用请求提交的完整消息历史。
+- `pass_all_history`：`pass_all_history_messages` 的兼容字段。
+- `legacy`：可选，默认为 `false`。设为 `true` 时流式 `answer` 使用累计文本，并将思考过程恢复为 `<think>...</think>` 文本。
+- 其他模型生成参数会按照聊天模型支持情况传递，例如 `temperature`、`top_p` 和 `max_tokens`。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-          "messages": [
-              {
-                  "role": "user",
-                  "content": "Who are you?"
-              }
-          ]
-     }'
+  --url 'http://{address}/api/v1/chat/completions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "chat_id": "{chat_id}",
+    "session_id": "{session_id}",
+    "stream": false,
+    "messages": [
+      {
+        "id": "message_id",
+        "role": "user",
+        "content": "这份产品说明的适用范围是什么？"
+      }
+    ]
+  }'
 ```
 
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-          "chat_id": "{chat_id}",
-          "stream": true,
-          "session_id":"9fa7691cb85c11ef9c5f0242ac120005",
-          "messages": [
-              {
-                  "role": "user",
-                  "content": "Who are you?"
-              }
-          ]
-     }'
-```
-
-##### Request Parameters
-
-- `"messages"`: (*Body Parameter*), `list[object]`
-  The latest user message, or the conversation messages sent to the model when `pass_all_history_messages` is `true`. Either `messages` or `question` is required.
-- `"question"`: (*Body Parameter*), `string`
-  Latest user question. This is equivalent to passing `messages: [{"role": "user", "content": question}]`.
-- `"stream"`: (*Body Parameter*), `boolean`
-  Enables streaming output:
-  - `true`: Enable streaming (default).
-  - `false`: Disable streaming.
-- `"chat_id"`: (*Body Parameter*)
-  Optional chat assistant ID. If omitted, the tenant's default chat model is used directly.
-- `"session_id"`: (*Body Parameter*)
-  Optional session ID. If `chat_id` is provided but `session_id` is omitted, a new session will be generated automatically.
-- `"llm_id"`: (*Body Parameter*), `string`
-  Optional model override when a specific chat model should be used for this request.
-- `"pass_all_history_messages"`: (*Body Parameter*), `boolean`
-  When `chat_id` and `session_id` are provided, defaults to `false`, so the server uses stored session history and only the latest user message from the request. Set to `true` to replace/use the submitted full `messages` history, and overrides the stored session history.
-- `"legacy"`: (*Body Parameter*), `boolean`  
-  Defaults to `false`. Enables backward compatibility with RAGFlow v0.23.0 for streaming responses. When set to `true`:  
-  - Cumulative output: The `"answer"` field in each chunk returns the entire text generated so far, rather than just the new tokens (deltas).
-  - No reasoning markers: The `start_to_think` and `end_to_think` signals are stripped from the stream.
-
-#### Response
-
-Success without `chat_id` or `session_id`:
-
-```json
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "I am an assistant powered by the tenant's default chat model.",
-        "reference": {},
-        "audio_binary": null,
-        "id": "b01eed84b85611efa0e90242ac120005",
-        "session_id": ""
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": true
-}
-```
-
-Success with `chat_id` and `session_id`:
-
-Streaming response example with `chat_id` and `session_id`:
-
-```json
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250170.37759,
-        "final": false,
-        "start_to_think": true,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "The user just said \"hello\". I should respond warmly and ask how I can help.",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250170.3778317,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": " Let's keep it short and friendly.",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250171.101234,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250171.5262048,
-        "final": false,
-        "end_to_think": true,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "Hello! 👋 Welcome!",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250171.5266216,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": true
-}
-```
-
-For `legacy: true`, the same request keeps the thinking content inside `answer` as literal `<think>` tags, and appends the final answer after `</think>`:
-
-```json
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "<think>The user just said \"hello\".",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250170.3778317,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "<think>The user just said \"hello\". I should respond warmly and ask how I can help.",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250170.901234,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": {
-        "answer": "<think>The user just said \"hello\". I should respond warmly and ask how I can help. Let's keep it short and friendly.</think>Hello! 👋 Welcome!",
-        "reference": {
-            "chunks": []
-        },
-        "audio_binary": null,
-        "prompt": "",
-        "created_at": 1781250171.5262048,
-        "final": false,
-        "id": "76961783-1523-43f7-8148-19da08247922",
-        "session_id": "4edfabd6663211f1943e217dfc5f0165",
-        "chat_id": "d90fd732646f11f1803d2fb3c77f9b23"
-    }
-}
-data:{
-    "code": 0,
-    "message": "",
-    "data": true
-}
-```
-
-
-Failure:
+#### 非流式响应
 
 ```json
 {
-    "code": 102,
-    "message": "Please input your question."
+  "code": 0,
+  "data": {
+    "id": "message_id",
+    "session_id": "session_id",
+    "chat_id": "chat_id",
+    "answer": "该产品适用于……",
+    "reference": {
+      "chunks": [],
+      "doc_aggs": []
+    },
+    "final": true
+  }
 }
 ```
 
+#### 流式响应
+
+流式模式返回 `text/event-stream`。每条事件以 `data:` 开头，`data` 中包含本次生成的增量内容、会话 ID 和引用信息。思考模型还可能返回 `start_to_think` 或 `end_to_think` 标记。流的最后一条消息为：
+
+```text
+data:{"code":0,"message":"","data":true}
+```
+
+并非每个增量事件都包含引用信息，客户端应以最终收到的引用数据为准。
+
 ---
 
-### Create session with agent
+## 智能体会话
 
-:::danger DEPRECATED
-This method is deprecated and not recommended. You can still call it but be mindful that calling `Converse with agent` will automatically generate a session ID for the associated agent.
-:::
+### 创建智能体会话
 
 **POST** `/api/v1/agents/{agent_id}/sessions`
 
-Creates a session with an agent.
+根据智能体当前草稿或发布版本创建空会话。多数调用方也可以直接调用智能体对话接口，由服务端自动创建会话。
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/agents/{agent_id}/sessions?user_id={user_id}`
-- Headers:
-  - `'content-Type: application/json'
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - the required parameters:`str`
-  - other parameters:
-    The variables specified in the **Begin** component.
+- `agent_id`：路径参数，智能体 ID。
+- `name`：请求体可选字符串，会话名称。
+- `release`：请求体或查询参数，可选布尔值；为真时使用已发布版本，否则使用可编辑版本。
 
-##### Request example
-
-If the **Begin** component in your agent does not take required parameters:
+会话所有者固定为当前认证用户。Begin 组件变量不在此接口中提交，应在调用智能体对话接口时通过 `inputs` 传递。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/agents/{agent_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-     }'
+  --url 'http://{address}/api/v1/agents/{agent_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"name":"审批流程演示","release":false}'
 ```
 
-##### Request parameters
-
-- `agent_id`: (*Path parameter*)
-  The ID of the associated agent.
-- `user_id`: (*Filter parameter*)
-  The optional user-defined ID for parsing docs (especially images) when creating a session while uploading files.
-
-#### Response
-
-Success:
+#### 响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "agent_id": "dbb4ed366e8611f09690a55a6daec4ef",
-        "dsl": {
-            "components": {
-                "Message:EightyJobsAsk": {
-                    "downstream": [],
-                    "obj": {
-                        "component_name": "Message",
-                        "params": {
-                            "content": [
-                                "{begin@var1}{begin@var2}"
-                            ],
-                            "debug_inputs": {},
-                            "delay_after_error": 2.0,
-                            "description": "",
-                            "exception_default_value": null,
-                            "exception_goto": null,
-                            "exception_method": null,
-                            "inputs": {},
-                            "max_retries": 0,
-                            "message_history_window_size": 22,
-                            "outputs": {
-                                "content": {
-                                    "type": "str",
-                                    "value": null
-                                }
-                            },
-                            "stream": true
-                        }
-                    },
-                    "upstream": [
-                        "begin"
-                    ]
-                },
-                "begin": {
-                    "downstream": [
-                        "Message:EightyJobsAsk"
-                    ],
-                    "obj": {
-                        "component_name": "Begin",
-                        "params": {
-                            "debug_inputs": {},
-                            "delay_after_error": 2.0,
-                            "description": "",
-                            "enablePrologue": true,
-                            "enable_tips": true,
-                            "exception_default_value": null,
-                            "exception_goto": null,
-                            "exception_method": null,
-                            "inputs": {
-                                "var1": {
-                                    "name": "var1",
-                                    "optional": false,
-                                    "options": [],
-                                    "type": "line",
-                                    "value": null
-                                },
-                                "var2": {
-                                    "name": "var2",
-                                    "optional": false,
-                                    "options": [],
-                                    "type": "line",
-                                    "value": null
-                                }
-                            },
-                            "max_retries": 0,
-                            "message_history_window_size": 22,
-                            "mode": "conversational",
-                            "outputs": {},
-                            "prologue": "Hi! I'm your assistant. What can I do for you?",
-                            "tips": "Please fill in the form"
-                        }
-                    },
-                    "upstream": []
-                }
-            },
-            "globals": {
-                "sys.conversation_turns": 0,
-                "sys.files": [],
-                "sys.query": "",
-                "sys.user_id": ""
-            },
-            "graph": {
-                "edges": [
-                    {
-                        "data": {
-                            "isHovered": false
-                        },
-                        "id": "xy-edge__beginstart-Message:EightyJobsAskend",
-                        "markerEnd": "logo",
-                        "source": "begin",
-                        "sourceHandle": "start",
-                        "style": {
-                            "stroke": "rgba(151, 154, 171, 1)",
-                            "strokeWidth": 1
-                        },
-                        "target": "Message:EightyJobsAsk",
-                        "targetHandle": "end",
-                        "type": "buttonEdge",
-                        "zIndex": 1001
-                    }
-                ],
-                "nodes": [
-                    {
-                        "data": {
-                            "form": {
-                                "enablePrologue": true,
-                                "inputs": {
-                                    "var1": {
-                                        "name": "var1",
-                                        "optional": false,
-                                        "options": [],
-                                        "type": "line"
-                                    },
-                                    "var2": {
-                                        "name": "var2",
-                                        "optional": false,
-                                        "options": [],
-                                        "type": "line"
-                                    }
-                                },
-                                "mode": "conversational",
-                                "prologue": "Hi! I'm your assistant. What can I do for you?"
-                            },
-                            "label": "Begin",
-                            "name": "begin"
-                        },
-                        "dragging": false,
-                        "id": "begin",
-                        "measured": {
-                            "height": 112,
-                            "width": 200
-                        },
-                        "position": {
-                            "x": 270.64098070942583,
-                            "y": -56.320928437811176
-                        },
-                        "selected": false,
-                        "sourcePosition": "left",
-                        "targetPosition": "right",
-                        "type": "beginNode"
-                    },
-                    {
-                        "data": {
-                            "form": {
-                                "content": [
-                                    "{begin@var1}{begin@var2}"
-                                ]
-                            },
-                            "label": "Message",
-                            "name": "Message_0"
-                        },
-                        "dragging": false,
-                        "id": "Message:EightyJobsAsk",
-                        "measured": {
-                            "height": 57,
-                            "width": 200
-                        },
-                        "position": {
-                            "x": 279.5,
-                            "y": 190
-                        },
-                        "selected": true,
-                        "sourcePosition": "right",
-                        "targetPosition": "left",
-                        "type": "messageNode"
-                    }
-                ]
-            },
-            "history": [],
-            "memory": [],
-            "messages": [],
-            "path": [],
-            "retrieval": [],
-            "task_id": "dbb4ed366e8611f09690a55a6daec4ef"
-        },
-        "id": "0b02fe80780e11f084adcfdc3ed1d902",
-        "message": [
-            {
-                "content": "Hi! I'm your assistant. What can I do for you?",
-                "role": "assistant"
-            }
-        ],
-        "source": "agent",
-        "user_id": "c3fb861af27a11efa69751e139332ced"
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Agent not found."
-}
-```
-
----
-
-### Converse with agent
-
-**POST** `/api/v1/agents/chat/completions`
-
-Asks a specified agent a question to start an AI-powered conversation.
-
-Uses a single completion endpoint for all agent conversations.
-
-:::caution DEPRECATED
-`POST /api/v1/agents/{agent_id}/completions` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/agents/chat/completions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-#### Standard mode
-
-Use this mode for the native agent API.
-
-##### Body
-
-- `"agent_id"`: `string`
-- `"query"`: `string`
-- `"stream"`: `boolean`
-- `"session_id"`: `string` (optional)
-- `"inputs"`: `object` (optional)
-- `"files"`: `list[object]` (optional)
-- `"user_id"`: `string` (optional)
-- `"return_trace"`: `boolean` (optional, default `false`)
-- `"chat_template_kwargs": object` (optional)
-
-#### Streaming events to handle
-
-When `stream=true`, the server sends Server-Sent Events (SSE). A client should handle these events:
-
-- `message`: Streaming content from the **Message** components.
-- `message_end`: End of a **Message** component, which may include `reference` or `attachment`.
-- `node_finished`: A component finishes. `data.inputs`, `data.outputs`, `data.error`, and `data.elapsed_time` describe the node result. If `return_trace=true`, the same event also contains `data.trace`.
-
-The stream terminates with `[DONE]`.
-
-:::info IMPORTANT
-You can include custom parameters in the request body, but they must be defined in the [Begin](../guides/agent/agent_component_reference/begin.mdx) component first.
-:::
-
-##### Request examples
-
-If the **Begin** component does not take parameters:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/agents/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-        "agent_id": "AGENT_ID",
-        "query": "Hello",
-        "stream": false
-     }'
-```
-
-- If the **Begin** component takes parameters, include their values in the body of `"inputs"` as follows:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/agents/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-        "agent_id": "AGENT_ID",
-        "query": "",
-        "stream": false,
-        "inputs": {
-            "line_var": {
-                "type": "line",
-                "value": "I am line_var"
-            },
-            "int_var": {
-                "type": "integer",
-                "value": 1
-            },
-            "paragraph_var": {
-                "type": "paragraph",
-                "value": "a\nb\nc"
-            },
-            "option_var": {
-                "type": "options",
-                "value": "option 2"
-            },
-            "boolean_var": {
-                "type": "boolean",
-                "value": true
-            }
-        }
-     }'
-```
-
-To continue an existing session:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/agents/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-        "agent_id": "AGENT_ID",
-        "query": "Hello again",
-        "stream": true,
-        "session_id": "cb2f385cb86211efa36e0242ac120005"
-     }'
-```
-
-##### Request parameters
-
-- `agent_id`: (*Path parameter*), `string`
-  The ID of the associated agent.
-- `"question"`: (*Body Parameter*), `string`, *Required*
-  The question to start an AI-powered conversation.
-- `"stream"`: (*Body Parameter*), `boolean`
-  Indicates whether to output responses in a streaming way:
-  - `true`: Enable streaming (default).
-  - `false`: Disable streaming.
-- `"session_id"`: (*Body Parameter*)
-  The ID of the session. If it is not provided, a new session will be generated.
-- `"inputs"`: (*Body Parameter*)
-  Variables specified in the **Begin** component.
-- `"user_id"`: (*Body parameter*), `string`
-  The optional user-defined ID. Valid *only* when no `session_id` is provided.
-- `"chat_template_kwargs"`: (*Body parameter*), `object`  
-  Optional passthrough parameters for the underlying LLM's chat template. Commonly used to toggle thinking/reasoning modes on supported models (e.g., `{"enable_thinking": false}`).
-
-:::tip NOTE
-For now, this method does *not* support a file type input/variable. As a workaround, use the following to upload a file to an agent:
-`http://{address}/v1/canvas/upload/{agent_id}`
-*You will get a corresponding file ID from its response body.*
-:::
-
-##### Response
-
-Standard mode stream:
-
-```json
-data: {
-    "event": "message",
-    "message_id": "cecdcb0e83dc11f0858253708ecb6573",
-    "created_at": 1756364483,
-    "task_id": "d1f79142831f11f09cc51795b9eb07c0",
-    "data": {
-        "content": "Hello"
-    },
-    "session_id": "cd097ca083dc11f0858253708ecb6573"
-}
-
-data: {
-    "event": "message_end",
-    "message_id": "cecdcb0e83dc11f0858253708ecb6573",
-    "created_at": 1756364483,
-    "task_id": "d1f79142831f11f09cc51795b9eb07c0",
-    "data": {
-        "reference": {}
-    },
-    "session_id": "cd097ca083dc11f0858253708ecb6573"
-}
-
-data:[DONE]
-```
-
-When `extra_body.reference_metadata.include` is `true`, each reference chunk may include a `document_metadata` object.
-
-Standard mode non-stream:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "data": {
-            "content": "Hello",
-            "reference": {},
-            "trace": []
-        },
-        "message_id": "c4692a2683d911f0858253708ecb6573",
-        "session_id": "c39f6f9c83d911f0858253708ecb6573",
-        "task_id": "d1f79142831f11f09cc51795b9eb07c0"
-    }
-}
-```
-
-If one or more components produce structured output, set `return_trace=true` and inspect that component output from `trace`.
-
-#### OpenAI-compatible mode
-
-Use the same endpoint and add `"openai-compatible": true`.
-
-##### Body
-
-- `"agent_id"`: `string`
-- `"messages"`: `list[object]`
-- `"openai-compatible"`: `boolean`, must be `true`
-- `"stream"`: `boolean`
-- `"session_id"`: `string` (optional)
-- `"model"`: `string` (optional, accepted for compatibility)
-- `"chat_template_kwargs": object` (optional)
-
-##### Request examples
-
-Streaming request:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/agents/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-        "agent_id": "AGENT_ID",
-        "openai-compatible": true,
-        "stream": true,
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hello"
-            }
-        ],
-        "chat_template_kwargs": {
-            "enable_thinking": true
-        }
-     }'
-```
-
-Non-stream request with existing session:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/agents/chat/completions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data-binary '
-     {
-        "agent_id": "AGENT_ID",
-        "openai-compatible": true,
-        "stream": false,
-        "session_id": "cb2f385cb86211efa36e0242ac120005",
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hello"
-            }
-        ]
-     }'
-```
-
-##### Request parameters
-
-- `"agent_id"`: (*Body parameter*), `string`, *Required*  
-  The ID of the associated agent.
-- `"messages"`: (*Body parameter*), `list[object]`, *Required*  
-  OpenAI-style chat messages.
-- `"openai-compatible"`: (*Body parameter*), `boolean`, *Required*  
-  Must be `true` to enable OpenAI-compatible responses.
-- `"stream"`: (*Body parameter*), `boolean`  
-  Whether to return streaming chunks.
-- `"session_id"`: (*Body parameter*), `string`  
-  Optional existing session ID.
-- `"model"`: (*Body parameter*), `string`  
-  Optional compatibility field. The server still routes by `agent_id`.
-- `"chat_template_kwargs"`: (*Body parameter*), `object`  
-  Optional passthrough parameters for the underlying LLM's chat template. Commonly used to toggle thinking/reasoning modes on supported models (e.g., `{"enable_thinking": false}`).
-
-##### Response
-
-OpenAI-compatible stream:
-
-```json
-data: {
-    "id": "chatcmpl-xxx",
-    "object": "chat.completion.chunk",
-    "model": "AGENT_ID",
-    "choices": [
-        {
-            "delta": {
-                "content": "Hello"
-            },
-            "finish_reason": null,
-            "index": 0
-        }
-    ]
-}
-
-data: [DONE]
-```
-
-OpenAI-compatible non-stream:
-
-```json
-{
-    "id": "chatcmpl-xxx",
-    "object": "chat.completion",
-    "model": "AGENT_ID",
-    "choices": [
-        {
-            "finish_reason": "stop",
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": "Hello",
-                "reference": {}
-            }
-        }
+  "code": 0,
+  "data": {
+    "id": "0b02fe80780e11f084adcfdc3ed1d902",
+    "agent_id": "dbb4ed366e8611f09690a55a6daec4ef",
+    "name": "审批流程演示",
+    "source": "agent",
+    "message": [
+      {
+        "role": "assistant",
+        "content": "您好，请问有什么可以帮助您？"
+      }
     ],
-    "usage": {
-        "prompt_tokens": 6,
-        "completion_tokens": 1,
-        "total_tokens": 7
+    "dsl": {},
+    "capabilities": {
+      "read": true,
+      "update": true,
+      "delete": true
     }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Agent not found."
+  }
 }
 ```
 
 ---
 
-### List agent sessions
+### 查询智能体会话列表
 
-**GET** `/api/v1/agents/{agent_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&id={session_id}&user_id={user_id}&dsl={dsl}`
+**GET** `/api/v1/agents/{agent_id}/sessions`
 
-Lists sessions associated with a specified agent.
+#### 请求参数
 
-#### Request
+- `agent_id`：路径参数，智能体 ID。
+- `page`：查询参数，页码，默认为 `1`。
+- `page_size`：查询参数，每页数量，默认为 `30`。
+- `orderby`：查询参数，排序字段，默认为 `update_time`。
+- `desc`：查询参数，是否降序，默认为 `true`。
+- `id`：查询参数，可选，按会话 ID 过滤。
+- `keywords`：查询参数，可选，按关键词筛选。
+- `from_date`：查询参数，可选，起始日期筛选值。
+- `to_date`：查询参数，可选，结束日期筛选值。
+- `dsl`：查询参数，是否返回会话 DSL，默认为 `true`；传入 `false` 时不返回 DSL。
+- `exp_user_id`：查询参数。只要提供该参数，接口就切换为仅返回会话名称的轻量模式；其值本身不用于按用户筛选。
 
-- Method: GET
-- URL: `/api/v1/agents/{agent_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&id={session_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
+团队智能体和超级管理员可查询智能体下所有可读会话；个人智能体只返回当前用户自己的会话。
 
-##### Request example
+```bash
+curl --get \
+  --url 'http://{address}/api/v1/agents/{agent_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=20' \
+  --data-urlencode 'orderby=update_time' \
+  --data-urlencode 'desc=true' \
+  --data-urlencode 'dsl=false'
+```
+
+#### 响应
+
+智能体会话列表的 `total` 位于响应顶层，而不是 `data` 内。
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "total": 1,
+  "data": [
+    {
+      "id": "792dde22b2fa11ef97550242ac120006",
+      "agent_id": "e9e2b9c2b2f911ef801d0242ac120006",
+      "name": "审批流程演示",
+      "source": "agent",
+      "message": [],
+      "capabilities": {
+        "read": true,
+        "update": true,
+        "delete": true
+      }
+    }
+  ]
+}
+```
+
+---
+
+### 获取智能体会话详情
+
+**GET** `/api/v1/agents/{agent_id}/sessions/{session_id}`
+
+返回单个智能体会话的消息、引用、DSL、附件工作空间信息和权限能力。
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/agents/{agent_id}/sessions?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&id={session_id}&user_id={user_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+  --url 'http://{address}/api/v1/agents/{agent_id}/sessions/{session_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request Parameters
-
-- `agent_id`: (*Path parameter*)
-  The ID of the associated agent.
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the sessions will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The number of sessions on each page. Defaults to `30`.
-- `orderby`: (*Filter parameter*), `string`
-  The field by which sessions should be sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved sessions should be sorted in descending order. Defaults to `true`.
-- `id`: (*Filter parameter*), `string`
-  The ID of the agent session to retrieve.
-- `user_id`: (*Filter parameter*), `string`
-  The optional user-defined ID passed in when creating session.
-- `dsl`: (*Filter parameter*), `boolean`
-  Indicates whether to include the dsl field of the sessions in the response. Defaults to `true`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [{
-        "agent_id": "e9e2b9c2b2f911ef801d0242ac120006",
-        "dsl": {
-            "answer": [],
-            "components": {
-                "Answer:OrangeTermsBurn": {
-                    "downstream": [],
-                    "obj": {
-                        "component_name": "Answer",
-                        "params": {}
-                    },
-                    "upstream": []
-                },
-                "Generate:SocialYearsRemain": {
-                    "downstream": [],
-                    "obj": {
-                        "component_name": "Generate",
-                        "params": {
-                            "cite": true,
-                            "frequency_penalty": 0.7,
-                            "llm_id": "gpt-4o___OpenAI-API@OpenAI-API-Compatible",
-                            "message_history_window_size": 12,
-                            "parameters": [],
-                            "presence_penalty": 0.4,
-                            "prompt": "Please summarize the following paragraph. Pay attention to the numbers and do not make things up. The paragraph is as follows:\n{input}\nThis is what you need to summarize.",
-                            "temperature": 0.1,
-                            "top_p": 0.3
-                        }
-                    },
-                    "upstream": []
-                },
-                "begin": {
-                    "downstream": [],
-                    "obj": {
-                        "component_name": "Begin",
-                        "params": {}
-                    },
-                    "upstream": []
-                }
-            },
-            "graph": {
-                "edges": [],
-                "nodes": [
-                    {
-                        "data": {
-                            "label": "Begin",
-                            "name": "begin"
-                        },
-                        "height": 44,
-                        "id": "begin",
-                        "position": {
-                            "x": 50,
-                            "y": 200
-                        },
-                        "sourcePosition": "left",
-                        "targetPosition": "right",
-                        "type": "beginNode",
-                        "width": 200
-                    },
-                    {
-                        "data": {
-                            "form": {
-                                "cite": true,
-                                "frequencyPenaltyEnabled": true,
-                                "frequency_penalty": 0.7,
-                                "llm_id": "gpt-4o___OpenAI-API@OpenAI-API-Compatible",
-                                "maxTokensEnabled": true,
-                                "message_history_window_size": 12,
-                                "parameters": [],
-                                "presencePenaltyEnabled": true,
-                                "presence_penalty": 0.4,
-                                "prompt": "Please summarize the following paragraph. Pay attention to the numbers and do not make things up. The paragraph is as follows:\n{input}\nThis is what you need to summarize.",
-                                "temperature": 0.1,
-                                "temperatureEnabled": true,
-                                "topPEnabled": true,
-                                "top_p": 0.3
-                            },
-                            "label": "Generate",
-                            "name": "Generate Answer_0"
-                        },
-                        "dragging": false,
-                        "height": 105,
-                        "id": "Generate:SocialYearsRemain",
-                        "position": {
-                            "x": 561.3457829707513,
-                            "y": 178.7211182312641
-                        },
-                        "positionAbsolute": {
-                            "x": 561.3457829707513,
-                            "y": 178.7211182312641
-                        },
-                        "selected": true,
-                        "sourcePosition": "right",
-                        "targetPosition": "left",
-                        "type": "generateNode",
-                        "width": 200
-                    },
-                    {
-                        "data": {
-                            "form": {},
-                            "label": "Answer",
-                            "name": "Dialogue_0"
-                        },
-                        "height": 44,
-                        "id": "Answer:OrangeTermsBurn",
-                        "position": {
-                            "x": 317.2368194777658,
-                            "y": 218.30635555445093
-                        },
-                        "sourcePosition": "right",
-                        "targetPosition": "left",
-                        "type": "logicNode",
-                        "width": 200
-                    }
-                ]
-            },
-            "history": [],
-            "messages": [],
-            "path": [],
-            "reference": []
-        },
-        "id": "792dde22b2fa11ef97550242ac120006",
-        "message": [
-            {
-                "content": "Hi! I'm your smart assistant. What can I do for you?",
-                "role": "assistant"
-            }
-        ],
-        "source": "agent",
-        "user_id": ""
-    }]
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "You don't own the agent ccd2f856b12311ef94ca0242ac1200052."
-}
-```
+会话必须属于指定智能体，且调用方必须具有读取权限；否则返回 `Session not found!`。
 
 ---
 
-### Delete agent's sessions
+### 删除单个智能体会话
+
+**DELETE** `/api/v1/agents/{agent_id}/sessions/{session_id}`
+
+```bash
+curl --request DELETE \
+  --url 'http://{address}/api/v1/agents/{agent_id}/sessions/{session_id}' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
+```
+
+成功响应的 `data` 为删除操作结果。调用方必须具有该会话的管理权限。
+
+---
+
+### 批量删除智能体会话
 
 **DELETE** `/api/v1/agents/{agent_id}/sessions`
 
-Deletes sessions of an agent by ID.
+#### 请求参数
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/agents/{agent_id}/sessions`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]`
-  - `"delete_all"`: `boolean`
-
-##### Request example
+- `agent_id`：路径参数，智能体 ID。
+- `ids`：请求体可选数组，需要删除的会话 ID。
+- `delete_all`：请求体可选布尔值；未提供有效 `ids` 且设为 `true` 时，删除该智能体下当前调用方有权管理的全部会话。
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/agents/{agent_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '
-     {
-          "ids": ["test_1", "test_2"]
-     }'
+  --url 'http://{address}/api/v1/agents/{agent_id}/sessions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{"ids":["session_id_1","session_id_2"]}'
 ```
 
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/agents/{agent_id}/sessions \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "delete_all": true
-     }'
-```
-
-##### Request Parameters
-
-- `agent_id`: (*Path parameter*)
-  The ID of the associated agent.
-- `"ids"`: (*Body Parameter*), `list[string]`
-  The IDs of the sessions to delete.
-  - If omitted, or set to `null` or an empty array, no sessions are deleted.
-  - If an array of IDs is provided, only the sessions matching those IDs are deleted.
-- `"delete_all"`: (*Body Parameter*), `boolean`
-  Whether to delete all sessions of the specified agent when `"ids"` is omitted, or set to `null` or an empty array. Defaults to `false`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The agent doesn't own the session cbd31e52f73911ef93b232903b842af6"
-}
-```
+全部成功时返回成功响应；部分成功时 `data` 包含 `success_count` 和 `errors`。
 
 ---
 
-### Text-to-speech
+### 与智能体对话
+
+**POST** `/api/v1/agents/chat/completions`
+
+该接口同时支持原生事件格式和 OpenAI 兼容格式。调用方必须能够访问目标智能体；继续已有会话时，会话还必须属于该智能体并允许当前用户管理。
+
+:::caution 已弃用的别名
+以下接口已弃用：
+
+- `POST /api/v1/agents/{agent_id}/completions`
+- `POST /api/v1/agents_openai/{agent_id}/chat/completions`
+
+新调用应使用 `/api/v1/agents/chat/completions`，并在请求体中传入 `agent_id`。需要 OpenAI 兼容格式时，同时传入 `"openai-compatible": true`。
+:::
+
+#### 原生模式请求参数
+
+- `agent_id`：必填，智能体 ID。
+- `query`：用户输入；也接受兼容字段 `question`。
+- `stream`：可选布尔值，是否返回 SSE 流。
+- `session_id`：可选，继续已有会话；未提供时自动创建会话。
+- `name`：创建新会话时的可选名称。
+- `inputs`：可选对象，Begin 组件声明的输入变量。
+- `files`：可选数组，供智能体或 DataFlow 使用的附件信息。
+- `return_trace`：可选布尔值，默认为 `false`；为真时返回节点跟踪数据。
+- `chat_template_kwargs`：可选对象，透传给底层模型聊天模板，例如 `{"enable_thinking":false}`。
+- `custom_header`：可选字符串，传递给智能体画布运行时。
+
+```bash
+curl --request POST \
+  --url 'http://{address}/api/v1/agents/chat/completions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "agent_id": "{agent_id}",
+    "query": "请检查这份申请。",
+    "stream": false,
+    "inputs": {
+      "applicant": {
+        "type": "line",
+        "value": "张三"
+      }
+    },
+    "return_trace": true
+  }'
+```
+
+非流式响应示例：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "message_id": "c4692a2683d911f0858253708ecb6573",
+    "session_id": "c39f6f9c83d911f0858253708ecb6573",
+    "task_id": "d1f79142831f11f09cc51795b9eb07c0",
+    "data": {
+      "content": "申请符合要求。",
+      "reference": {},
+      "trace": []
+    }
+  }
+}
+```
+
+流式模式返回 SSE。常见事件包括：
+
+- `message`：Message 组件产生的增量内容。
+- `message_end`：Message 组件结束，可能包含 `reference` 或 `attachment`。
+- `node_finished`：节点执行完成；`data` 中可包含输入、输出、错误和耗时。启用 `return_trace` 时还会包含跟踪数据。
+
+流以 `data:[DONE]` 结束。
+
+#### OpenAI 兼容模式
+
+在同一接口的请求体中加入 `"openai-compatible": true`，并用 `messages` 传递非空的 OpenAI 风格消息数组。服务端取最后一条 `role=user` 消息作为问题。
+
+- `agent_id`：必填，智能体 ID。
+- `messages`：必填，非空消息数组。
+- `openai-compatible`：必须为 `true`。
+- `stream`：可选布尔值。
+- `session_id`：可选，继续已有会话。
+- `model`：可选兼容字段；实际路由仍由 `agent_id` 决定。
+- `chat_template_kwargs`：可选模型聊天模板参数。
+
+```bash
+curl --request POST \
+  --url 'http://{address}/api/v1/agents/chat/completions' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "agent_id": "{agent_id}",
+    "openai-compatible": true,
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "请检查这份申请。"
+      }
+    ]
+  }'
+```
+
+非流式响应使用 OpenAI `chat.completion` 结构；流式响应使用 `chat.completion.chunk` 结构，并以 `data: [DONE]` 结束。
+
+---
+
+## 语音与辅助生成
+
+### 文本转语音
 
 **POST** `/api/v1/chat/audio/speech`
 
-Converts text to speech audio using the tenant's default TTS model, returning a streaming audio response.
+使用当前账户的默认 TTS 模型将文本转换为 MP3 音频流。
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/chat/audio/speech`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_LOGIN_TOKEN>'`
-- Body:
-  - `"text"`: `string` *(Required)* The text to synthesize.
-
-##### Request example
+- `text`：JSON 请求体必填字符串，需要合成的文本。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chat/audio/speech \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
-     --output audio.mp3 \
-     --data '{"text": "Hello, how can I help you today?"}'
+  --url 'http://{address}/api/v1/chat/audio/speech' \
+  --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
+  --header 'Content-Type: application/json' \
+  --data '{"text":"您好，请问有什么可以帮助您？"}' \
+  --output speech.mp3
 ```
 
-#### Response
-
-Success: binary `audio/mpeg` stream with headers `Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`.
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "No default TTS model is set"
-}
-```
+成功时返回 `audio/mpeg` 流，并设置禁止缓存和代理缓冲的响应头。未配置默认 TTS 模型或模型调用失败时返回错误信息；流生成期间发生的错误可能以编码后的错误数据写入响应流。
 
 ---
 
-### Speech-to-text
+### 语音转文本
 
 **POST** `/api/v1/chat/audio/transcription`
 
-Transcribes an audio file using the tenant's default ASR (automatic speech recognition) model.
+使用当前账户的默认 ASR 模型识别音频。
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/chat/audio/transcription`
-- Headers:
-  - `'Authorization: Bearer <YOUR_LOGIN_TOKEN>'`
-- Body (multipart/form-data):
-  - `"file"`: audio file (`.wav`, `.mp3`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.webm`, `.opus`, `.wma`)
-  - `"stream"`: `string` `"true"` for SSE streaming, `"false"` (default) for a single JSON response.
+请求体使用 `multipart/form-data`：
 
-##### Request example
+- `file`：必填音频文件。支持 `.wav`、`.mp3`、`.m4a`、`.aac`、`.flac`、`.ogg`、`.webm`、`.opus` 和 `.wma`。
+- `stream`：可选字符串；`true` 表示返回 SSE 流，其他值按非流式处理，默认为 `false`。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chat/audio/transcription \
-     --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
-     --form file=@recording.wav \
-     --form stream=false
+  --url 'http://{address}/api/v1/chat/audio/transcription' \
+  --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
+  --form 'file=@./recording.wav' \
+  --form 'stream=false'
 ```
 
-#### Response
-
-Success (non-streaming):
+非流式成功响应：
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "text": "Hello, how can I help you today?"
-    }
+  "code": 0,
+  "data": {
+    "text": "您好，请问有什么可以帮助您？"
+  }
 }
 ```
 
-Success (streaming): SSE events with `data: {"event": "partial", "text": "..."}`.
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Unsupported audio format: .mp4. Allowed: .aac, .flac, .m4a, .mp3, .ogg, .opus, .wav, .webm, .wma"
-}
-```
+流式模式返回 `text/event-stream`，事件内容由 ASR 模型提供；错误事件的结构为 `{"event":"error","text":"..."}`。
 
 ---
 
-### Generate mind map
+### 生成思维导图
 
 **POST** `/api/v1/chat/mindmap`
 
-Generates a mind map from a question and a set of knowledge base IDs.
+根据问题和知识库检索结果生成树形思维导图。
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/chat/mindmap`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_LOGIN_TOKEN>'`
-- Body:
-  - `"question"`: `string` *(Required)* The central question or topic.
-  - `"kb_ids"`: `list[string]` *(Required)* Knowledge base IDs to search.
-  - `"search_id"`: `string` *(Optional)* ID of a saved search configuration to merge additional `kb_ids` and settings.
+- `question`：JSON 请求体必填字符串，中心问题或主题。
+- `kb_ids`：JSON 请求体必填数组，参与检索的知识库 ID。
+- `search_id`：JSON 请求体可选字符串，搜索应用 ID。提供后会合并该搜索应用配置的知识库和检索设置。
 
-##### Request example
+提供 `search_id` 时，调用方必须能读取该搜索应用；所有最终参与检索的知识库必须与搜索应用属于同一工作空间并允许当前用户引用。未提供 `search_id` 时，知识库必须可由当前用户的个人工作空间引用。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chat/mindmap \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
-     --data '{
-         "question": "What is retrieval-augmented generation?",
-         "kb_ids": ["kb-abc123"]
-     }'
+  --url 'http://{address}/api/v1/chat/mindmap' \
+  --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "question": "检索增强生成的核心流程是什么？",
+    "kb_ids": ["{dataset_id}"],
+    "search_id": "{search_id}"
+  }'
 ```
 
-#### Response
-
-Success:
+成功响应：
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "name": "Retrieval-Augmented Generation",
-        "children": [...]
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 500,
-    "message": "..."
+  "code": 0,
+  "data": {
+    "name": "检索增强生成",
+    "children": []
+  }
 }
 ```
 
 ---
 
-### Generate related questions
+### 生成相关问题
 
-**POST** `/api/v1/chat/recommandation`
+**POST** `/api/v1/chat/recommendation`
 
-Generates five to ten alternative question strings from the user's original query to retrieve more relevant search results.
+根据原始问题生成一组相关检索问题。问题数量由模型输出决定，并不保证固定数量。
 
-:::caution DEPRECATED
-`POST /api/v1/sessions/related_questions` is deprecated. Use this endpoint instead.
+:::caution 已弃用的别名
+`POST /api/v1/sessions/related_questions` 已弃用，仅作为兼容别名保留。新调用应使用 `/api/v1/chat/recommendation`。
 :::
 
-This operation requires a `Bearer Login Token`, which typically expires with in 24 hours. You can find it in the Request Headers in your browser easily as shown below:
-
-![Image](https://raw.githubusercontent.com/infiniflow/ragflow-docs/main/images/login_token.jpg)
-
-:::tip NOTE
-The chat model autonomously determines the number of questions to generate based on the instruction, typically between five and ten.
+:::caution 路径拼写
+`/api/v1/chat/recommandation` 不是有效接口。请使用拼写正确的 `/api/v1/chat/recommendation`。
 :::
 
-#### Request
+#### 请求参数
 
-- Method: POST
-- URL: `/api/v1/chat/recommandation`
-- Headers:
-  - `'content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_LOGIN_TOKEN>'`
-- Body:
-  - `"question"`: `string` *(Required)* The original user question.
-  - `"search_id"`: `string` *(Optional)* ID of a saved search configuration to use custom LLM settings.
+- `question`：JSON 请求体必填字符串，原始问题。
+- `search_id`：JSON 请求体可选字符串，搜索应用 ID。提供后使用该搜索应用所属工作空间的模型和生成设置；调用方必须能读取该搜索应用。
 
-##### Request example
+如果搜索应用配置了聊天应用，调用方还必须能读取该聊天应用。未配置聊天应用时，使用相应工作空间的默认聊天模型。
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/chat/recommandation \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
-     --data '{
-          "question": "What are the key advantages of Neovim over Vim?"
-     }'
+  --url 'http://{address}/api/v1/chat/recommendation' \
+  --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "question": "向量检索有哪些常见优化方式？",
+    "search_id": "{search_id}"
+  }'
 ```
 
-##### Request Parameters
-
-- `"question"`: (*Body Parameter*), `string`
-  The original user question.
-- `"search_id"`: (*Body Parameter*), `string`
-  ID of a saved search configuration to use custom LLM settings. If provided, the LLM model and generation settings from the search configuration will be used.
-
-#### Response
-
-Success:
+成功响应：
 
 ```json
 {
-    "code": 0,
-    "data": [
-        "What makes Neovim superior to Vim in terms of features?",
-        "How do the benefits of Neovim compare to those of Vim?",
-        "What advantages does Neovim offer that are not present in Vim?",
-        "In what ways does Neovim outperform Vim in functionality?",
-        "What are the most significant improvements in Neovim compared to Vim?",
-        "What unique advantages does Neovim bring to the table over Vim?",
-        "How does the user experience in Neovim differ from Vim in terms of benefits?",
-        "What are the top reasons to switch from Vim to Neovim?",
-        "What features of Neovim are considered more advanced than those in Vim?"
-    ],
-    "message": "success"
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 401,
-    "data": null,
-    "message": "<Unauthorized '401: Unauthorized'>"
+  "code": 0,
+  "data": [
+    "如何选择适合向量检索的嵌入模型？",
+    "向量索引参数如何影响召回率？",
+    "混合检索如何改善搜索结果？"
+  ]
 }
 ```
 
 ---
+## 智能体管理
 
-## AGENT MANAGEMENT
+本章介绍智能体的创建、查询、更新和删除接口。所有请求都需要 API Token。读取操作要求当前 Token 对智能体所属工作空间具有访问权限；创建、更新和删除操作要求具有相应的资源管理权限。
+
+智能体中的知识库、记忆、MCP、文件及其他资源引用必须与智能体属于同一工作空间，服务端会在创建和更新 DSL 时校验引用范围。
 
 ---
 
-### List agents
+### 获取智能体列表
 
-**GET** `/api/v1/agents?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&name={agent_name}&id={agent_id}`
+**GET** `/api/v1/agents`
 
-Lists agents.
+获取当前 Token 可见工作空间中的智能体或 DataFlow 列表。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/agents?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&title={agent_name}&id={agent_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/agents?page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&title={agent_name}&id={agent_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/agents?page=1&page_size=30&keywords=客服&canvas_category=agent&desc=true' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the agents will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The number of agents on each page. Defaults to `30`.
-- `orderby`: (*Filter parameter*), `string`
-  The attribute by which the results are sorted. Available options:
-  - `create_time` (default)
-  - `update_time`
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved agents should be sorted in descending order. Defaults to `true`.
-- `id`: (*Filter parameter*), `string`
-  The ID of the agent to retrieve.
-- `title`: (*Filter parameter*), `string`
-  The name of the agent to retrieve.
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `keywords` | `string` | 否 | `""` | 按名称等字段搜索 |
+| `page` | `integer` | 否 | `0` | 页码；`0` 通常表示不分页 |
+| `page_size` | `integer` | 否 | `0` | 每页数量，最大为 `100`；`0` 通常表示不分页 |
+| `orderby` | `string` | 否 | `create_time` | 排序字段，例如 `create_time` 或 `update_time` |
+| `desc` | `boolean` | 否 | `true` | 是否降序；仅字符串 `false` 表示升序 |
+| `owner_ids` | `string` | 否 | — | 逗号分隔的工作空间 ID，仅允许指定当前调用方可见的工作空间 |
+| `canvas_category` | `string` | 否 | — | 画布类别，例如 `Agent` 或 `DataFlow` |
+| `canvas_type` | `string` | 否 | — | 画布类型过滤条件 |
+| `tags` | `string` | 否 | — | 逗号分隔的标签列表 |
 
-#### Response
+旧文档中的 `id`、`name` 和 `title` 不是当前列表接口的筛选参数。如需读取指定智能体，请使用 `GET /api/v1/agents/{agent_id}`。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "avatar": null,
-            "canvas_type": null,
-            "create_date": "Thu, 05 Dec 2024 19:10:36 GMT",
-            "create_time": 1733397036424,
-            "description": null,
-            "dsl": {
-                "answer": [],
-                "components": {
-                    "begin": {
-                        "downstream": [],
-                        "obj": {
-                            "component_name": "Begin",
-                            "params": {}
-                        },
-                        "upstream": []
-                    }
-                },
-                "graph": {
-                    "edges": [],
-                    "nodes": [
-                        {
-                            "data": {
-                                "label": "Begin",
-                                "name": "begin"
-                            },
-                            "height": 44,
-                            "id": "begin",
-                            "position": {
-                                "x": 50,
-                                "y": 200
-                            },
-                            "sourcePosition": "left",
-                            "targetPosition": "right",
-                            "type": "beginNode",
-                            "width": 200
-                        }
-                    ]
-                },
-                "history": [],
-                "messages": [],
-                "path": [],
-                "reference": []
-            },
-            "id": "8d9ca0e2b2f911ef9ca20242ac120006",
-            "title": "123465",
-            "update_date": "Thu, 05 Dec 2024 19:10:56 GMT",
-            "update_time": 1733397056801,
-            "user_id": "69736c5e723611efb51b0242ac120007"
-        }
-    ]
+  "code": 0,
+  "data": {
+    "canvas": [
+      {
+        "id": "8d9ca0e2b2f911ef9ca20242ac120006",
+        "title": "客服智能体",
+        "description": "回答产品问题",
+        "canvas_category": "Agent",
+        "user_id": "69736c5e723611efb51b0242ac120007",
+        "dsl": {
+          "components": {},
+          "graph": {"nodes": [], "edges": []}
+        },
+        "capabilities": {
+          "read": true,
+          "update": true,
+          "delete": true
+        },
+        "create_time": 1733397036424,
+        "update_time": 1733397056801
+      }
+    ],
+    "total": 1
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "The agent doesn't exist."
-}
-```
+响应中的工作空间元数据和 `capabilities` 用于说明资源归属以及当前调用方可执行的操作，实际字段以资源配置为准。
 
 ---
 
-### Create agent
+### 获取智能体详情
+
+**GET** `/api/v1/agents/{agent_id}`
+
+获取智能体完整配置。DataFlow 详情还会包含使用该 DataFlow 的知识库列表。
+
+#### 请求示例
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/agents/{agent_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `agent_id` | 路径 | `string` | 是 | 智能体 ID |
+
+成功时 `data` 为智能体对象，包含 `dsl`、`last_publish_time`、资源归属和能力信息。无权访问或资源不存在时返回非零业务状态码及 `canvas not found.`。
+
+---
+
+### 创建智能体
 
 **POST** `/api/v1/agents`
 
-Create an agent.
+在指定工作空间创建智能体。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/agents`
-- Headers:
-  - `'Content-Type: application/json`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"title"`: `string`
-  - `"description"`: `string`
-  - `"dsl"`: `object`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/agents \
+     --url 'http://{address}/api/v1/agents' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-         "title": "Test Agent",
-         "description": "A test agent",
-         "dsl": {
-           // ... Canvas DSL here ...
-         }
+       "workspace_id": "69736c5e723611efb51b0242ac120007",
+       "title": "客服智能体",
+       "description": "回答产品问题",
+       "canvas_category": "Agent",
+       "dsl": {
+         "components": {},
+         "graph": {"nodes": [], "edges": []}
+       }
      }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `title`: (*Body parameter*), `string`, *Required*
-  The title of the agent.
-- `description`: (*Body parameter*), `string`
-  The description of the agent. Defaults to `None`.
-- `dsl`: (*Body parameter*), `object`, *Required*
-  The canvas DSL object of the agent.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `title` | `string` | 是 | 智能体名称；会去除首尾空白，同一工作空间和画布类别下不允许同名 |
+| `dsl` | `object` | 是 | 画布 DSL；服务端会规范化并检查跨工作空间引用 |
+| `workspace_id` | `string` | 否 | 目标工作空间 ID，默认使用 Token 所属工作空间；旧字段 `user_id` 仍可作为同义输入 |
+| `description` | `string` | 否 | 智能体说明 |
+| `canvas_category` | `string` | 否 | 画布类别，默认 `Agent`；创建 DataFlow 时使用对应类别 |
+| `canvas_type` | `string` | 否 | 画布类型，默认空字符串 |
+| `release` | `boolean` | 否 | 是否将当前版本标记为已发布 |
+| `avatar` | `string` | 否 | 头像数据 |
 
-#### Response
+资源权限由目标工作空间类型自动确定，客户端传入的权限值不能覆盖服务端规则。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true,
-    "message": "success"
+  "code": 0,
+  "data": {
+    "id": "58af890a2a8911f0a71a11b922ed82d6",
+    "title": "客服智能体",
+    "user_id": "69736c5e723611efb51b0242ac120007",
+    "canvas_category": "Agent",
+    "dsl": {
+      "components": {},
+      "graph": {"nodes": [], "edges": []}
+    }
+  }
 }
 ```
 
-Failure:
+#### 常见失败响应
 
 ```json
 {
-    "code": 102,
-    "message": "Agent with title test already exists."
+  "code": 101,
+  "data": false,
+  "message": "No DSL data in request."
+}
+```
+
+```json
+{
+  "code": 102,
+  "message": "客服智能体 already exists."
 }
 ```
 
 ---
 
-### Update agent
+### 更新智能体
 
 **PUT** `/api/v1/agents/{agent_id}`
 
-Update an agent by id.
+更新智能体配置。请求体中值为 `null` 的字段会被忽略；未提供的字段保持不变。
 
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/agents/{agent_id}`
-- Headers:
-  - `'Content-Type: application/json`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"title"`: `string`
-  - `"description"`: `string`
-  - `"dsl"`: `object`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PUT \
-     --url http://{address}/api/v1/agents/58af890a2a8911f0a71a11b922ed82d6 \
+     --url 'http://{address}/api/v1/agents/{agent_id}' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-         "title": "Test Agent",
-         "description": "A test agent",
-         "dsl": {
-           // ... Canvas DSL here ...
-         }
+       "title": "新版客服智能体",
+       "description": "更新后的说明",
+       "dsl": {
+         "components": {},
+         "graph": {"nodes": [], "edges": []}
+       }
      }'
 ```
 
-##### Request parameters
+#### 参数
 
-- `agent_id`: (*Path parameter*), `string`
-  The id of the agent to be updated.
-- `title`: (*Body parameter*), `string`
-  The title of the agent.
-- `description`: (*Body parameter*), `string`
-  The description of the agent.
-- `dsl`: (*Body parameter*), `object`
-  The canvas DSL object of the agent.
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `agent_id` | 路径 | `string` | 是 | 智能体 ID |
+| `title` | 请求体 | `string` | 否 | 新名称；同工作空间和画布类别下不能与其他资源重名 |
+| `description` | 请求体 | `string` | 否 | 新说明 |
+| `dsl` | 请求体 | `object` | 否 | 新画布 DSL；服务端会检查所有资源引用的工作空间 |
+| `canvas_category` | 请求体 | `string` | 否 | 画布类别 |
+| `canvas_type` | 请求体 | `string` | 否 | 画布类型；省略时当前实现会写入空字符串 |
+| `release` | 请求体 | `boolean` | 否 | 是否标记为已发布；省略时当前实现会写入 `false` |
 
-Only specify the parameter you want to change in the request body. If a parameter does not exist or is `None`, it won't be updated.
+`user_id`、`workspace_id` 和 `permission` 会被服务端忽略，不能通过此接口移动智能体或修改其工作空间归属。更新 DSL 时会同步版本记录和运行副本。
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": true,
-    "message": "success"
-}
-```
-
-Failure:
+#### 成功响应
 
 ```json
 {
-    "code": 103,
-    "message": "Only owner of canvas authorized for this operation."
+  "code": 0,
+  "data": true
 }
 ```
+
+无管理权限、DSL 无效、引用跨工作空间或名称重复时，接口返回非零业务状态码。
 
 ---
 
-### Delete agent
+### 删除智能体
 
 **DELETE** `/api/v1/agents/{agent_id}`
 
-Delete an agent by id.
+删除智能体及其关联数据。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/agents/{agent_id}`
-- Headers:
-  - `'Content-Type: application/json`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request DELETE \
-     --url http://{address}/api/v1/agents/58af890a2a8911f0a71a11b922ed82d6 \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{}'
+     --url 'http://{address}/api/v1/agents/{agent_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `agent_id` | 路径 | `string` | 是 | 要删除的智能体 ID |
 
-- `agent_id`: (*Path parameter*), `string`
-  The id of the agent to be deleted.
+如果目标是 DataFlow 且仍被知识库引用，服务端会拒绝删除，并返回引用该资源的具体信息。
 
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true,
-    "message": "success"
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 103,
-    "message": "Only owner of canvas authorized for this operation."
+  "code": 0,
+  "data": true
 }
 ```
 
 ---
+## 记忆管理
 
+---
 
+记忆用于保存对话原文以及从对话中提取的语义、事件和操作习惯。本章包含记忆配置与记忆消息接口。
 
-## MEMORY MANAGEMENT
+所有接口都需要：
 
-### Create Memory
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+记忆属于个人或团队工作空间。读取配置和消息需要对记忆具有读取权限；修改配置、写入消息、遗忘消息和修改消息状态需要写权限。团队记忆遵循当前团队协作资源权限规则。
+
+### 创建记忆
 
 **POST** `/api/v1/memories`
 
-Create a new memory.
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/memories`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"memory_type"`: `list[string]`
-  - `"embd_id"`: `string`.
-  - `"llm_id"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/memories' \
---header 'Content-Type: application/json' \
---header 'Authorization: Bearer <YOUR_API_KEY>' \
---data-raw '{
-    "name": "new_memory_1",
+curl --request POST \
+  --url http://{address}/api/v1/memories \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "客户偏好",
+    "workspace_id": "<WORKSPACE_ID>",
     "memory_type": ["raw", "semantic"],
     "embd_id": "BAAI/bge-large-zh-v1.5@BAAI",
     "llm_id": "glm-4-flash@ZHIPU-AI"
-}'
+  }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `name` : (*Body parameter*), `string`, *Required*
+- `name`：`string`，必填。记忆名称，去除首尾空白后不能为空，最大 128 个字符。名称冲突时服务端会生成不重复的名称。
+- `memory_type`：`array<string>`，必填。需要保存或提取的记忆类型，可组合使用：
+  - `raw`：原始用户输入和助手回复。
+  - `semantic`：用户或外部世界的事实性信息。
+  - `episodic`：带时间信息的事件和经历。
+  - `procedural`：技能、习惯和操作步骤。
+- `embd_id`：`string`，必填。嵌入模型标识或模型实例 ID。
+- `llm_id`：`string`，必填。用于提取记忆的聊天模型标识或模型实例 ID。
+- `workspace_id`：`string`，可选。目标工作空间 ID；未提供时使用当前用户的个人工作空间。
+- `tenant_id`：`string`，兼容字段。在未提供 `workspace_id` 时可指定目标工作空间，新调用建议使用 `workspace_id`。
 
-  The unique name of the memory to create. It must adhere to the following requirements:
+模型会按目标工作空间解析和校验。个人空间记忆的 `permissions` 固定为 `me`，团队空间记忆固定为 `team`。
 
-  - Basic Multilingual Plane (BMP) only
-  - Maximum 128 characters
-
-- `memory_type`: (*Body parameter*), `list[enum<string>]`,  *Required*
-
-  Specifies the types of memory to extract. Available options:
-
-  - `raw`: The raw dialogue content between the user and the agent . *Required by default*.
-  - `semantic`: General knowledge and facts about the user and world.
-  - `episodic`:  Time-stamped records of specific events and experiences.
-  - `procedural`: Learned skills, habits, and automated procedures.
-
-- `embd_id`: (*Body parameter*), `string`, *Required*
-
-  The name of the embedding model to use. For example: `"BAAI/bge-large-zh-v1.5@BAAI"`
-
-  - Maximum 255 characters
-  - Must follow `model_name@model_factory` format
-
-- `llm_id`: (*Body parameter*), `string`, *Required*
-
-  The name of the chat model to use. For example: `"glm-4-flash@ZHIPU-AI"`
-
-  - Maximum 255 characters
-  - Must follow `model_name@model_factory` format
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-	"code": 0,
-	"data": {
-	...your new memory here
-	},
-	"message": true
+  "code": 0,
+  "data": {
+    "id": "d6775d4eeada11f08ca284ba59bc53c7",
+    "name": "客户偏好",
+    "tenant_id": "69736c5e723611efb51b0242ac120007",
+    "memory_type": ["raw", "semantic"],
+    "storage_type": "table",
+    "embd_id": "BAAI/bge-large-zh-v1.5@BAAI",
+    "llm_id": "glm-4-flash@ZHIPU-AI",
+    "permissions": "team"
+  },
+  "message": true
 }
 ```
 
-Failure:
+---
 
-```json
-{
-    "code": 101,
-    "message": "Memory name cannot be empty or whitespace."
-}
-```
-
-
-
-### Update Memory
+### 更新记忆
 
 **PUT** `/api/v1/memories/{memory_id}`
 
-Updates configurations for a specified memory.
+只更新请求中提供的字段，不能移动记忆所属工作空间。
 
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/memories/{memory_id}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"avatar"`: `string`
-  - `"permission"`: `string`
-  - `"llm_id"`: `string`
-  - `"description"`: `string`
-  - `"memory_size"`: `int`
-  - `"forgetting_policy"`: `string`
-  - `"temperature"`: `float`
-  - `"system_promot"`: `string`
-  - `"user_prompt"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location --request PUT 'http://{address}/api/v1/memories/d6775d4eeada11f08ca284ba59bc53c7' \
---header 'Content-Type: application/json' \
---header 'Authorization: Bearer <YOUR_API_KEY>' \
---data '{
-    "name": "name_update",
-}'
+curl --request PUT \
+  --url http://{address}/api/v1/memories/{memory_id} \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "name": "更新后的客户偏好",
+    "memory_size": 8388608,
+    "temperature": 0.4
+  }'
 ```
 
-##### Request parameters
+#### 参数
 
-- `memory_id`: (*Path parameter*)
+- `memory_id`：路径参数，必填。记忆 ID。
+- `name`：`string`，可选。规则与创建接口一致。
+- `avatar`：`string | null`，可选。记忆图标。
+- `description`：`string | null`，可选。记忆描述。
+- `memory_type`：`array<string>`，可选。记忆非空时不可修改。
+- `embd_id`：`string`，可选。嵌入模型；记忆非空时不可修改。
+- `llm_id`：`string`，可选。聊天模型。
+- `memory_size`：`integer`，可选。容量上限，单位为字节，范围为 1～10485760（10 MiB），默认 5242880（5 MiB）。
+- `forgetting_policy`：`string`，可选。目前支持 `FIFO`。
+- `temperature`：`number`，可选，范围为 0～1。
+- `system_prompt`：`string | null`，可选。记忆提取系统提示词。使用默认提示词时，修改 `memory_type` 会同步生成与新类型匹配的默认提示词。
+- `user_prompt`：`string | null`，可选。附加用户提示词。
+- `permissions`：`"me" | "team"`，可选。只能提交与当前工作空间类型一致的值，不能用它改变共享范围。
 
-  The ID of the memory to update.
+:::caution 字段名称
+接口接受的权限字段是 `permissions`，不是 `permission`；系统提示词字段是 `system_prompt`，不是 `system_promot`。
+:::
 
-- `name`: (*Body parameter*), `string`, *Optional*
-
-  The revised name of the memory.
-
-  - Basic Multilingual Plane (BMP) only
-  - Maximum 128 characters, *Optional*
-
-- `avatar`: (*Body parameter*), `string`, *Optional*
-
-  The updated base64 encoding of the avatar.
-
-  - Maximum 65535 characters
-
-- `permission`: (*Body parameter*), `enum<string>`, *Optional*
-
-  The updated memory permission. Available options:
-
-  - `"me"`: (Default) Only you can manage the memory.
-  - `"team"`: All team members can manage the memory.
-
-- `llm_id`: (*Body parameter*), `string`, *Optional*
-
-  The name of the chat model to use. For example: `"glm-4-flash@ZHIPU-AI"`
-
-  - Maximum 255 characters
-  - Must follow `model_name@model_factory` format
-
-- `description`: (*Body parameter*), `string`, *Optional*
-
-  The description of the memory. Defaults to `None`.
-
-- `memory_size`: (*Body parameter*), `int`, *Optional*
-
-  Defaults to `5*1024*1024` Bytes. Accounts for each message's content + its embedding vector (≈ Content + Dimensions × 8 Bytes). Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default limit holds ~500 such messages.
-
-  - Maximum 10 * 1024 * 1024 Bytes
-
-- `forgetting_policy`: (*Body parameter*), `enum<string>`, *Optional*
-
-  Evicts existing data based on the chosen policy when the size limit is reached, freeing up space for new messages. Available options:
-
-  - `"FIFO"`: (Default) Prioritize messages with the earliest `forget_at` time for removal. When the pool of messages that have `forget_at` set is insufficient, it falls back to selecting messages in ascending order of their `valid_at` (oldest first).
-
-- `temperature`: (*Body parameter*), `float`, *Optional*
-
-  Adjusts output randomness. Lower = more deterministic; higher = more creative.
-
-  - Range [0, 1]
-
-- `system_prompt`: (*Body parameter*), `string`, *Optional*
-
-  Defines the system-level instructions and role for the AI assistant. It is automatically assembled based on the selected `memory_type` by `PromptAssembler` in `memory/utils/prompt_util.py`. This prompt sets the foundational behavior and context for the entire conversation.
-
-  - Keep the `OUTPUT REQUIREMENTS` and `OUTPUT FORMAT` parts unchanged.
-
-- `user_prompt`: (*Body parameter*), `string`, *Optional*
-
-  Represents the user's custom setting, which is the specific question or instruction the AI needs to respond to directly. Defaults to `None`.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-	"code": 0,
-	"data": {
-	...your updated memory here
-	},
-	"message": true
+  "code": 0,
+  "data": {
+    "id": "d6775d4eeada11f08ca284ba59bc53c7",
+    "name": "更新后的客户偏好",
+    "memory_size": 8388608,
+    "temperature": 0.4
+  },
+  "message": true
 }
 ```
 
-Failure:
+---
 
-```json
-{
-    "code": 101,
-    "message": "Memory name cannot be empty or whitespace."
-}
-```
+### 获取记忆列表
 
+**GET** `/api/v1/memories`
 
+返回当前用户可见工作空间中的记忆。超级管理员可按可见范围查看全部资源。
 
-### List Memory
-
-**GET** `/api/v1/memories?tenant_id={tenant_ids}&memory_type={memory_types}&storage_type={storage_type}&keywords={keywords}&page={page}&page_size={page_size}`
-
-List memories.
-
-#### Request
-
-- Method: GET
-- URL:  `/api/v1/memories?tenant_id={tenant_ids}&memory_type={memory_types}&storage_type={storage_type}&keywords={keywords}&page={page}&page_size={page_size}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/memories?keywords=&page_size=50&page=1&memory_type=semantic%2Cepisodic' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --get http://{address}/api/v1/memories \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'memory_type=semantic,episodic' \
+  --data-urlencode 'keywords=客户' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=50'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `tenant_id`: (*Filter parameter*), `string` or `list[string]`, *Optional*
+- `tenant_id`：`string`，可选。按工作空间筛选，多个 ID 可使用逗号分隔。
+- `owner_ids`：`string`，可选。`tenant_id` 的同类筛选字段；多个 ID 可使用逗号分隔。
+- `memory_type`：`string`，可选。按类型筛选，多个值使用逗号分隔。匹配包含任一指定类型的记忆。
+- `storage_type`：`string`，可选。存储类型，目前常用值为 `table`。
+- `keywords`：`string`，可选。按名称模糊搜索。
+- `page`：`integer`，默认 `1`。
+- `page_size`：`integer`，默认 `50`。
 
-  The owner's ID, supports search multiple IDs.
+请求的工作空间不在当前用户可见范围时，不返回对应数据。
 
-- `memory_type`: (*Filter parameter*), `enum<string>` or `list[enum<string>]`, *Optional*
-
-  The type of memory (as set during creation). A memory matches if its type is **included in** the provided value(s). Available options:
-
-  - `raw`
-  - `semantic`
-  - `episodic`
-  - `procedural`
-
-- `storage_type`: (*Filter parameter*), `enum<string>`, *Optional*
-
-  The storage format of messages. Available options:
-
-  - `table`: (Default)
-
-- `keywords`: (*Filter parameter*), `string`, *Optional*
-
-  The name of memory to retrieve, supports fuzzy search.
-
-- `page`: (*Filter parameter*), `int`, *Optional*
-
-  Specifies the page on which the memories will be displayed. Defaults to `1`.
-
-- `page_size`: (*Filter parameter*), `int`, *Optional*
-
-  The number of memories on each page. Defaults to `50`.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "memory_list": [
-            {
-                "avatar": null,
-                "create_date": "Tue, 06 Jan 2026 16:36:47 GMT",
-                "create_time": 1767688607040,
-                "description": null,
-                "id": "d6775d4eeada11f08ca284ba59bc53c7",
-                "memory_type": [
-                    "raw",
-                    "semantic"
-                ],
-                "name": "new_memory_1",
-                "owner_name": "Lynn",
-                "permissions": "me",
-                "storage_type": "table",
-                "tenant_id": "55777efac9df11f09cd07f49bd527ade"
-            },
-            ...other 3 memories here
-        ],
-        "total_count": 4
-    },
-    "message": true
+  "code": 0,
+  "data": {
+    "memory_list": [
+      {
+        "id": "d6775d4eeada11f08ca284ba59bc53c7",
+        "name": "客户偏好",
+        "tenant_id": "69736c5e723611efb51b0242ac120007",
+        "owner_name": "产品团队",
+        "memory_type": ["raw", "semantic"],
+        "storage_type": "table",
+        "permissions": "team",
+        "capabilities": {
+          "read": true,
+          "update": true,
+          "delete": true
+        }
+      }
+    ],
+    "total_count": 1
+  },
+  "message": true
 }
 ```
 
-Failure:
+---
 
-```json
-{
-    "code": 500,
-    "message": "Internal Server Error."
-}
-```
-
-
-
-### Get Memory Config
+### 获取记忆配置
 
 **GET** `/api/v1/memories/{memory_id}/config`
 
-Get the configuration of a specified memory.
+返回记忆的完整配置，不返回消息列表。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/memories/{memory_id}/config`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/memories/6c8983badede11f083f184ba59bc53c7/config' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --request GET \
+  --url http://{address}/api/v1/memories/{memory_id}/config \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `memory_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the memory.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "avatar": null,
-        "create_date": "Mon, 22 Dec 2025 10:32:13 GMT",
-        "create_time": 1766370733354,
-        "description": null,
-        "embd_id": "BAAI/bge-large-zh-v1.5@SILICONFLOW",
-        "forgetting_policy": "FIFO",
-        "id": "6c8983badede11f083f184ba59bc53c7",
-        "llm_id": "glm-4.5-flash@ZHIPU-AI",
-        "memory_size": 5242880,
-        "memory_type": [
-            "raw",
-            "semantic",
-            "episodic",
-            "procedural"
-        ],
-        "name": "mem1222",
-        "owner_name": null,
-        "permissions": "me",
-        "storage_type": "table",
-        "system_prompt": ...your prompt here,
-        "temperature": 0.5,
-        "tenant_id": "55777efac9df11f09cd07f49bd527ade",
-        "update_date": null,
-        "update_time": null,
-        "user_prompt": null
-    },
-    "message": true
+  "code": 0,
+  "data": {
+    "id": "d6775d4eeada11f08ca284ba59bc53c7",
+    "name": "客户偏好",
+    "memory_type": ["raw", "semantic"],
+    "storage_type": "table",
+    "memory_size": 5242880,
+    "forgetting_policy": "FIFO",
+    "temperature": 0.5,
+    "system_prompt": "...",
+    "user_prompt": null,
+    "tenant_id": "69736c5e723611efb51b0242ac120007"
+  },
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 404,
-    "data": null,
-    "message": "Memory '{memory_id}' not found."
-}
-```
-
-
-
-### Delete Memory
+### 删除记忆
 
 **DELETE** `/api/v1/memories/{memory_id}`
 
-Delete a specified memory.
+删除记忆配置及其索引消息。删除前会检查资源引用；仍被智能体等资源引用时会拒绝删除，并返回引用信息。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/memories/{memory_id}`
-- Headers:
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location --request DELETE 'http://{address}/api/v1/memories/d6775d4eeada11f08ca284ba59bc53c7' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --request DELETE \
+  --url http://{address}/api/v1/memories/{memory_id} \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `memory_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the memory to delete.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": null,
-    "message": true
+  "code": 0,
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 404,
-    "data": null,
-    "message": true
-}
-```
+### 获取记忆消息列表
 
+**GET** `/api/v1/memories/{memory_id}`
 
+分页读取指定记忆的消息和提取结果。
 
-### List messages of a memory
-
-**GET** `/api/v1/memories/{memory_id}?agent_id={agent_id}&keywords={session_id}&page={page}&page_size={page_size}`
-
-List the messages of a specified memory.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/memories/{memory_id}?agent_id={agent_id}&keywords={session_id}&page={page}&page_size={page_size}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/memories/6c8983badede11f083f184ba59bc53c?page=1' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --get http://{address}/api/v1/memories/{memory_id} \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'agent_id=<AGENT_ID>' \
+  --data-urlencode 'keywords=退款' \
+  --data-urlencode 'page=1' \
+  --data-urlencode 'page_size=50'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `memory_id`: (*Path parameter*), `string`, *Required*
+- `agent_id`：`string`，可选。按智能体 ID 筛选；可重复传递，也可用逗号分隔多个 ID。
+- `keywords`：`string`，可选。消息关键词。
+- `page`：`integer`，默认 `1`。
+- `page_size`：`integer`，默认 `50`。
 
-  The ID of the memory to show messages.
-
-- `agent_id`: (*Filter parameter*), `string` or `list[string]`, *Optional*
-
-  Filters messages by the ID of their source agent. Supports multiple values.
-
-- `session_id`: (*Filter parameter*), `string`, *Optional*
-
-  Filters messages by their session ID. This field supports fuzzy search.
-
-- `page`: (*Filter parameter*), `int`, *Optional*
-
-  Specifies the page on which the messages will be displayed. Defaults to `1`.
-
-- `page_size`: (*Filter parameter*), `int`, *Optional*
-
-  The number of messages on each page. Defaults to `50`.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "messages": {
-            "message_list": [
-                {
-                    "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-                    "agent_name": "memory_agent_1223",
-                    "extract": [
-                        {
-                            "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-                            "agent_name": "memory_agent_1223",
-                            "forget_at": "None",
-                            "invalid_at": "None",
-                            "memory_id": "6c8983badede11f083f184ba59bc53c7",
-                            "message_id": 236,
-                            "message_type": "semantic",
-                            "session_id": "65b89ab8e96411f08d4e84ba59bc53c7",
-                            "source_id": 233,
-                            "status": true,
-                            "user_id": "",
-                            "valid_at": "2026-01-04 19:56:46"
-                        },
-                        ...other extracted messages
-                    ],
-                    "forget_at": "None",
-                    "invalid_at": "None",
-                    "memory_id": "6c8983badede11f083f184ba59bc53c7",
-                    "message_id": 233,
-                    "message_type": "raw",
-                    "session_id": "65b89ab8e96411f08d4e84ba59bc53c7",
-                    "source_id": "None",
-                    "status": true,
-                    "task": {
-                        "progress": 1.0,
-                        "progress_msg": "\n2026-01-04 19:56:46 Prepared prompts and LLM.\n2026-01-04 19:57:48 Get extracted result from LLM.\n2026-01-04 19:57:48 Extracted 6 messages from raw dialogue.\n2026-01-04 19:57:48 Prepared embedding model.\n2026-01-04 19:57:48 Embedded extracted content.\n2026-01-04 19:57:48 Saved messages to storage.\n2026-01-04 19:57:48 Message saved successfully."
-                    },
-                    "user_id": "",
-                    "valid_at": "2026-01-04 19:56:42"
-                },
-                {
-                    "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-                    "agent_name": "memory_agent_1223",
-                    "extract": [],
-                    "forget_at": "None",
-                    "invalid_at": "None",
-                    "memory_id": "6c8983badede11f083f184ba59bc53c7",
-                    "message_id": 226,
-                    "message_type": "raw",
-                    "session_id": "d982a8cbe96111f08a1384ba59bc53c7",
-                    "source_id": "None",
-                    "status": true,
-                    "task": {
-                        "progress": -1.0,
-                        "progress_msg": "Failed to insert message into memory. Details: 6c8983badede11f083f184ba59bc53c7_228:{'type': 'document_parsing_exception', 'reason': \"[1:230] failed to parse field [valid_at] of type [date] in document with id '6c8983badede11f083f184ba59bc53c7_228'. Preview of field's value: ''\", 'caused_by': {'type': 'illegal_argument_exception', 'reason': 'cannot parse empty date'}}; 6c8983badede11f083f184ba59bc53c7_229:{'type': 'document_parsing_exception', 'reason': \"[1:230] failed to parse field [valid_at] of type [date] in document with id '6c8983badede11f083f184ba59bc53c7_229'. Preview of field's value: ''\", 'caused_by': {'type': 'illegal_argument_exception', 'reason': 'cannot parse empty date'}}; 6c8983badede11f083f184ba59bc53c7_230:{'type': 'document_parsing_exception', 'reason': \"[1:230] failed to parse field [valid_at] of type [date] in document with id '6c8983badede11f083f184ba59bc53c7_230'. Preview of field's value: ''\", 'caused_by': {'type': 'illegal_argument_exception', 'reason': 'cannot parse empty date'}}; 6c8983badede11f083f184ba59bc53c7_231:{'type': 'document_parsing_exception', 'reason': \"[1:230] failed to parse field [valid_at] of type [date] in document with id '6c8983badede11f083f184ba59bc53c7_231'. Preview of field's value: ''\", 'caused_by': {'type': 'illegal_argument_exception', 'reason': 'cannot parse empty date'}}; 6c8983badede11f083f184ba59bc53c7_232:{'type': 'document_parsing_exception', 'reason': \"[1:230] failed to parse field [valid_at] of type [date] in document with id '6c8983badede11f083f184ba59bc53c7_232'. Preview of field's value: ''\", 'caused_by': {'type': 'illegal_argument_exception', 'reason': 'cannot parse empty date'}}"
-                    },
-                    "user_id": "",
-                    "valid_at": "2026-01-04 19:38:26"
-                },
-                ...other 11 messages
-            ],
-            "total_count": 13
-        },
-        "storage_type": "table"
+  "code": 0,
+  "data": {
+    "messages": {
+      "message_list": [
+        {
+          "message_id": 12,
+          "memory_id": "d6775d4eeada11f08ca284ba59bc53c7",
+          "agent_id": "<AGENT_ID>",
+          "agent_name": "客服智能体",
+          "session_id": "session-001",
+          "user_input": "我偏好邮件联系",
+          "agent_response": "已记录",
+          "extract": []
+        }
+      ],
+      "total_count": 1
     },
-    "message": true
+    "storage_type": "table"
+  },
+  "message": true
 }
 ```
 
-Failure
+---
 
-```
-{
-    "code": 404,
-    "data": null,
-    "message": "Memory '{memory_id}' not found."
-}
-```
-
-
-
-### Add Message
+### 添加记忆消息
 
 **POST** `/api/v1/messages`
 
-Add a message to specified memories.
+将一轮对话提交到一个或多个记忆。服务端会异步执行记忆提取和保存；调用者必须对请求中的每个记忆都具有写权限。
 
-#### Request
-
-- Method: POST
-- URL: `/api/v1/messages`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"memory_id"`: `list[string]`
-  - `"agent_id"`: `string`
-  - `"session_id"`: `string`
-  - `"user_id"`: `string`
-  - `"user_input"`: `string`
-  - `"agent_response"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/messages' \
---header 'Content-Type: application/json' \
---header 'Authorization: Bearer <YOUR_API_KEY>' \
---data '{
-    "memory_id": ["6c8983badede11f083f184ba59bc53c7", "87ebb892df1711f08d6b84ba59bc53c7"],
-    "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-    "session_id": "bf0a50abeb8111f0917884ba59bc53c7",
-    "user_id": "55777efac9df11f09cd07f49bd527ade",
-    "user_input": "your user input here",
-    "agent_response": "your agent response here"
-
-}'
+curl --request POST \
+  --url http://{address}/api/v1/messages \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{
+    "memory_id": ["d6775d4eeada11f08ca284ba59bc53c7"],
+    "agent_id": "<AGENT_ID>",
+    "session_id": "session-001",
+    "user_input": "我偏好邮件联系",
+    "agent_response": "已记录您的偏好",
+    "user_id": "external-user-001"
+  }'
 ```
 
-##### Request parameter
+#### 请求体参数
 
-- `memory_id`: (*Body parameter*), `list[string]`, *Required*
+- `memory_id`：`string | array<string>`，必填。目标记忆 ID。
+- `agent_id`：`string`，必填。产生该消息的智能体 ID。
+- `session_id`：`string`，必填。会话 ID。
+- `user_input`：`string`，必填。用户输入。
+- `agent_response`：`string`，必填。智能体回复。
+- `user_id`：`string`，可选。通过 API Token 调用时可记录外部用户标识；网页登录态调用时服务端始终使用当前登录用户 ID，忽略客户端伪造的归属。
 
-  The IDs of the memories to save messages.
-
-- `agent_id`: (*Body parameter*), `string`, *Required*
-
-  The ID of the message's source agent.
-
-- `session_id`: (*Body parameter*), `string`, *Required*
-
-  The ID of the message's session.
-
-- `user_id`: (*Body parameter*), `string`, *Optional*
-
-  The user participating in the conversation with the agent. Defaults to `None`.
-
-- `user_input`: (*Body parameter*), `string`, *Required*
-
-  The text input provided by the user.
-
-- `agent_response`: (*Body parameter*), `string`, *Required*
-
-  The text response generated by the AI agent.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": null,
-    "message": "All add to task."
+  "code": 0,
+  "message": "Task queued"
 }
 ```
 
-Failure
+如果任一目标记忆不存在或不可写，本次请求不会绕过权限写入该记忆。
 
-```json
-{
-    "code": 500,
-    "data": null,
-    "message": "Some messages failed to add. Detail: {fail information}"
-}
-```
+---
 
-
-
-### Forget Message
+### 遗忘消息
 
 **DELETE** `/api/v1/messages/{memory_id}:{message_id}`
 
-Forget a specified message. After forgetting, this message will not be retrieved by agents, and it will also be prioritized for cleanup by the forgetting policy.
+将消息的 `forget_at` 设置为当前时间，使其进入遗忘流程。该操作不是直接按主键删除消息。
 
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/messages/{memory_id}:{message_id}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location --request DELETE 'http://{address}/api/v1/messages/6c8983badede11f083f184ba59bc53c7:272' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --request DELETE \
+  --url http://{address}/api/v1/messages/{memory_id}:{message_id} \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `memory_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the memory to which the specified message belongs.
-
-- `message_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the message to forget.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": null,
-    "message": true
+  "code": 0,
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 404,
-    "data": null,
-    "message": "Memory '{memory_id}' not found."
-}
-```
-
-
-
-### Update message status
+### 更新消息状态
 
 **PUT** `/api/v1/messages/{memory_id}:{message_id}`
 
-Update message status, enable or disable a message. Once a message is disabled, it will not be retrieved by agents.
+启用或停用指定记忆消息。
 
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/messages/{memory_id}:{message_id}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"status"`: `bool`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location --request PUT 'http://{address}/api/v1/messages/6c8983badede11f083f184ba59bc53c7:270' \
---header 'Content-Type: application/json' \
---header 'Authorization: Bearer <YOUR_API_KEY>' \
---data '{
-    "status": false
-}'
+curl --request PUT \
+  --url http://{address}/api/v1/messages/{memory_id}:{message_id} \
+  --header 'Content-Type: application/json' \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data '{"status": false}'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `memory_id`: (*Path parameter*), `string`, *Required*
+- `status`：`boolean`，必填。必须是 JSON 布尔值，不能使用字符串 `"true"` 或 `"false"`。
 
-  The ID of the memory to which the specified message belongs.
-
-- `message_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the message to enable or disable.
-
-- `status`: (*Body parameter*), `bool`, *Required*
-
-  The status of message. `True` = `enabled`, `False` = `disabled`.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": null,
-    "message": true
+  "code": 0,
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 404,
-    "data": null,
-    "message": "Memory '{memory_id}' not found."
-}
-```
+### 搜索记忆消息
 
-### Search Message
+**GET** `/api/v1/messages/search`
 
-**GET** `/api/v1/messages/search?query={question}&memory_id={memory_id}&similarity_threshold={similarity_threshold}&keywords_similarity_weight={keywords_similarity_weight}&top_n={top_n}`
+使用向量与关键词混合检索搜索一个或多个记忆。只会搜索当前用户可读的记忆；不可见 ID 会被过滤。
 
-Searches and retrieves messages from memory based on the provided `query` and other configuration parameters.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/messages/search?query={question}&memory_id={memory_id}&similarity_threshold={similarity_threshold}&keywords_similarity_weight={keywords_similarity_weight}&top_n={top_n}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/messages/search?query=%22who%20are%20you%3F%22&memory_id=6c8983badede11f083f184ba59bc53c7&similarity_threshold=0.2&keywords_similarity_weight=0.7&top_n=10' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --get http://{address}/api/v1/messages/search \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'memory_id=d6775d4eeada11f08ca284ba59bc53c7' \
+  --data-urlencode 'query=用户喜欢什么联系方式' \
+  --data-urlencode 'similarity_threshold=0.2' \
+  --data-urlencode 'keywords_similarity_weight=0.7' \
+  --data-urlencode 'top_n=5'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `question`: (*Filter parameter*), `string`, *Required*
+- `memory_id`：`string`，可选。可重复传递，也可用逗号分隔多个 ID。
+- `query`：`string`，可选。检索文本。
+- `similarity_threshold`：`number`，默认 `0.2`。
+- `keywords_similarity_weight`：`number`，默认 `0.7`。关键词相似度在混合评分中的权重。
+- `top_n`：`integer`，默认 `5`。最大返回数量。
+- `agent_id`：`string`，可选。
+- `session_id`：`string`，可选。
+- `user_id`：`string`，可选。
 
-  The search term or natural language question used to find relevant messages.
-
-- `memory_id`: (*Filter parameter*), `string` or `list[string]`, *Required*
-
-  The IDs of the memories to search.  Supports multiple values.
-
-- `agent_id`: (*Filter parameter*), `string`, *Optional*
-
-  The ID of the message's source agent. Defaults to `None`.
-
-- `session_id`: (*Filter parameter*), `string`, *Optional*
-
-  The ID of the message's session. Defaults to `None`.
-
-- `user_id`: (*Filter parameter*), `string`, *Optional*
-
-  The user participating in the conversation with the agent. Defaults to `None`.
-
-- `similarity_threshold`: (*Filter parameter*), `float`, *Optional*
-
-  The minimum cosine similarity score required for a message to be considered a match. A higher value  yields more precise but fewer results. Defaults to `0.2`.
-
-  - Range [0.0, 1.0]
-
-- `keywords_similarity_weight` : (*Filter parameter*), `float`, *Optional*
-
-  Controls the influence of keyword matching versus semantic (embedding-based) matching in the final relevance score. A value of 0.5 gives them equal weight. Defaults to `0.7`.
-
-  - Range [0.0, 1.0]
-
-- `top_n`: (*Filter parameter*), `int`, *Optional*
-
-  The maximum number of most relevant messages to return. This limits the result set size for efficiency. Defaults to `10`.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-            "content": "User Input: who am I?\nAgent Response: To address the question \"who am I?\", let's follow the logical steps outlined in the instructions:\n\n1. **Understand the User's Request**: The user is asking for a clarification or identification of their own self. This is a fundamental question about personal identity.\n\n2. **Decompose the Request**: The request is quite simple and doesn't require complex decomposition. The core task is to provide an answer that identifies the user in some capacity.\n\n3. **Execute the Subtask**:\n   - **Identify the nature of the question**: The user is seeking to understand their own existence or their sense of self.\n   - **Assess the context**: The context is not explicitly given, so the response will be general.\n   - **Provide a response**: The answer should acknowledge the user's inquiry into their identity.\n\n4. **Validate Accuracy and Consistency**: The response should be consistent with the general understanding of the question. Since the user has not provided specific details about their identity, the response should be broad and open-ended.\n\n5. **Summarize the Final Result**: The user is asking \"who am I?\" which is an inquiry into their own identity. The answer is that the user is the individual who is asking the question. Without more specific information, a detailed description of their identity cannot be provided.\n\nSo, the final summary would be:\n\nThe user is asking the question \"who am I?\" to seek an understanding of their own identity. The response to this question is that the user is the individual who is posing the question. Without additional context or details, a more comprehensive description of the user's identity cannot be given.",
-            "forget_at": "None",
-            "invalid_at": "None",
-            "memory_id": "6c8983badede11f083f184ba59bc53c7",
-            "message_id": 61,
-            "message_type": "raw",
-            "session_id": "ebf8025de52211f0b56684ba59bc53c7",
-            "source_id": "None",
-            "status": true,
-            "user_id": "",
-            "valid_at": "2025-12-30 09:57:49"
-        },
-        ...other 2 matched messages here
-    ],
-    "message": true
+  "code": 0,
+  "data": [
+    {
+      "memory_id": "d6775d4eeada11f08ca284ba59bc53c7",
+      "message_id": 12,
+      "content": "用户偏好邮件联系",
+      "similarity": 0.86
+    }
+  ],
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 500,
-    "message": "Internal Server Error."
-}
-```
+### 获取最近消息
 
+**GET** `/api/v1/messages`
 
+按时间获取一个或多个记忆中的最近消息。
 
-### Get Recent Messages
-
-**GET** `/api/v1/messages?memory_id={memory_id}&agent_id={agent_id}&session_id={session_id}&limit={limit}`
-
-Retrieves the most recent messages from specified memories. Typically accepts a `limit` parameter to control the number of messages returned.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/messages?memory_id={memory_id}&agent_id={agent_id}&session_id={session_id}&limit={limit}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/messages?memory_id=6c8983badede11f083f184ba59bc53c7&limit=10' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --get http://{address}/api/v1/messages \
+  --header 'Authorization: Bearer <YOUR_API_KEY>' \
+  --data-urlencode 'memory_id=d6775d4eeada11f08ca284ba59bc53c7' \
+  --data-urlencode 'limit=10'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `memory_id`: (*Filter parameter*), `string` or `list[string]`, *Required*
+- `memory_id`：`string`，必填。可重复传递，也可用逗号分隔多个 ID。
+- `agent_id`：`string`，可选。
+- `session_id`：`string`，可选。
+- `limit`：`integer`，默认 `10`。
 
-  The IDs of the memories to search.  Supports multiple values.
+不可见的记忆会被过滤；没有任何可读记忆时返回空数组。
 
-- `agent_id`: (*Filter parameter*), `string`, *Optional*
-
-  The ID of the message's source agent. Defaults to `None`.
-
-- `session_id`: (*Filter parameter*), `string`, *Optional*
-
-  The ID of the message's session. Defaults to `None`.
-
-- `limit`: (*Filter parameter*), `int`, *Optional*
-
-  Control the number of messages returned. Defaults to `10`.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-            "content": "User Input: what is pineapple?\nAgent Response: A pineapple is a tropical fruit known for its sweet, tangy flavor and distinctive, spiky appearance. Here are the key facts:\nScientific Name: Ananas comosus\nPhysical Description: It has a tough, spiky, diamond-patterned outer skin (rind) that is usually green, yellow, or brownish. Inside, the juicy yellow flesh surrounds a fibrous core.\nGrowth: Unlike most fruits, pineapples do not grow on trees. They grow from a central stem as a composite fruit, meaning they are formed from many individual berries that fuse together around the core. They grow on a short, leafy plant close to the ground.\nUses: Pineapples are eaten fresh, cooked, grilled, juiced, or canned. They are a popular ingredient in desserts, fruit salads, savory dishes (like pizzas or ham glazes), smoothies, and cocktails.\nNutrition: They are a good source of Vitamin C, manganese, and contain an enzyme called bromelain, which aids in digestion and can tenderize meat.\nSymbolism: The pineapple is a traditional symbol of hospitality and welcome in many cultures.\nAre you asking about the fruit itself, or its use in a specific context?",
-            "forget_at": "None",
-            "invalid_at": "None",
-            "memory_id": "6c8983badede11f083f184ba59bc53c7",
-            "message_id": 269,
-            "message_type": "raw",
-            "session_id": "bf0a50abeb8111f0917884ba59bc53c7",
-            "source_id": "None",
-            "status": true,
-            "user_id": "",
-            "valid_at": "2026-01-07 16:49:12"
-        },
-        ...other 9 messages here
-    ],
-    "message": true
+  "code": 0,
+  "data": [
+    {
+      "memory_id": "d6775d4eeada11f08ca284ba59bc53c7",
+      "message_id": 12,
+      "agent_id": "<AGENT_ID>",
+      "session_id": "session-001"
+    }
+  ],
+  "message": true
 }
 ```
 
-Failure
+---
 
-```json
-{
-    "code": 500,
-    "message": "Internal Server Error."
-}
-```
-
-
-
-### Get Message Content
+### 获取消息内容
 
 **GET** `/api/v1/messages/{memory_id}:{message_id}/content`
 
-Retrieves the full content and embed vector of a specific message using its unique message ID.
+返回指定消息的完整内容。调用者需要对所属记忆具有读取权限。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/messages/{memory_id}:{message_id}/content`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --location 'http://{address}/api/v1/messages/6c8983badede11f083f184ba59bc53c7:270/content' \
---header 'Authorization: Bearer <YOUR_API_KEY>'
+curl --request GET \
+  --url http://{address}/api/v1/messages/{memory_id}:{message_id}/content \
+  --header 'Authorization: Bearer <YOUR_API_KEY>'
 ```
 
-##### Request parameters
-
-- `memory_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the memory to which the specified message belongs.
-
-- `message_id`: (*Path parameter*), `string`, *Required*
-
-  The ID of the message.
-
-#### Response
-
-Success
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "agent_id": "8db9c8eddfcc11f0b5da84ba59bc53c7",
-        "content": "Pineapples are tropical fruits known for their sweet, tangy flavor and distinctive, spiky appearance",
-        "content_embed": [
-        	0.03641991,
-            ...embed vector here
-        ],
-        "forget_at": null,
-        "id": "6c8983badede11f083f184ba59bc53c7_270",
-        "invalid_at": null,
-        "memory_id": "6c8983badede11f083f184ba59bc53c7",
-        "message_id": 270,
-        "message_type": "semantic",
-        "session_id": "bf0a50abeb8111f0917884ba59bc53c7",
-        "source_id": 269,
-        "status": false,
-        "user_id": "",
-        "valid_at": "2026-01-07 16:48:37",
-        "zone_id": 0
-    },
-    "message": true
+  "code": 0,
+  "data": {
+    "memory_id": "d6775d4eeada11f08ca284ba59bc53c7",
+    "message_id": 12,
+    "user_input": "我偏好邮件联系",
+    "agent_response": "已记录您的偏好",
+    "extract": [
+      {
+        "content": "用户偏好邮件联系",
+        "memory_type": "semantic"
+      }
+    ]
+  },
+  "message": true
 }
 ```
 
-Failure
-
-```json
-{
-    "code": 404,
-    "data": null,
-    "message": "Memory '{memory_id}' not found."
-}
-```
-
-
+不存在或无权读取时返回 `NOT_FOUND` 类型的错误响应。
+## 系统接口
 
 ---
 
-## System
-
----
-
-### Check system health
+### 检查系统健康状态
 
 **GET** `/api/v1/system/healthz`
 
-Check the health status of RAGFlow's dependencies (database, Redis, document engine, object storage).
+检查数据库、Redis、文档检索引擎和对象存储是否可用。该接口不需要身份认证，适合作为容器、负载均衡器或监控系统的健康检查地址。
 
-:::caution DEPRECATED
-`GET /v1/system/healthz` is deprecated. Use this endpoint instead.
+:::caution 已弃用接口
+`GET /v1/system/healthz` 仍可通过兼容层调用，但已经弃用。新调用请使用 `GET /api/v1/system/healthz`。
 :::
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/system/healthz`
-- Headers:
-  - 'Content-Type: application/json'
-  (no Authorization required)
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --request GET
-     --url http://{address}/api/v1/system/healthz
-     --header 'Content-Type: application/json'
+curl --request GET \
+     --url 'http://{address}/api/v1/system/healthz'
 ```
 
-##### Request parameters
+该接口没有路径参数、查询参数或请求体。
 
-- `address`: (*Path parameter*), string
-  The host and port of the backend service (e.g., `localhost:7897`).
+#### 全部组件健康
 
----
+HTTP 状态码为 `200`：
 
-#### Responses
-
-- **200 OK** – All services healthy
-
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-
+```json
 {
   "db": "ok",
   "redis": "ok",
@@ -6890,12 +3982,11 @@ Content-Type: application/json
 }
 ```
 
-- **500 Internal Server Error** – At least one service unhealthy
+#### 存在异常组件
 
-```http
-HTTP/1.1 500 INTERNAL SERVER ERROR
-Content-Type: application/json
+任一依赖检查失败时，HTTP 状态码为 `500`，顶层 `status` 为 `nok`：
 
+```json
 {
   "db": "ok",
   "redis": "nok",
@@ -6911,1717 +4002,863 @@ Content-Type: application/json
 }
 ```
 
-Explanation:
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `db` | `string` | 数据库状态，值为 `ok` 或 `nok` |
+| `redis` | `string` | Redis 状态，值为 `ok` 或 `nok` |
+| `doc_engine` | `string` | 文档检索引擎状态，值为 `ok` 或 `nok` |
+| `storage` | `string` | 对象存储状态，值为 `ok` 或 `nok` |
+| `status` | `string` | 汇总状态；只有四项依赖全部为 `ok` 时才是 `ok` |
+| `_meta` | `object` | 仅为检查失败的组件提供耗时和错误详情；成功组件不会写入该对象 |
 
-- Each service is reported as "ok" or "nok".
-- The top-level `status` reflects overall health.
-- If any service is "nok", detailed error info appears in `_meta`.
+调用方应同时检查 HTTP 状态码和响应中的 `status`。该接口直接返回健康状态对象，不使用其他业务接口常见的 `{code, data, message}` 包装结构。
+
+---
+## 文件管理
+
+本章介绍工作空间文件、智能体运行附件以及文件版本提交接口。除特别说明外，所有接口都需要 API Token；Token 只能访问其所属工作空间内的文件。读取操作需要文件读取权限，创建、移动、重命名、删除和提交操作需要对应工作空间的写入权限。
+
+### 已弃用的文件接口
+
+以下兼容别名仍可调用，但新接入应使用右侧正式接口：
+
+| 已弃用接口 | 正式接口 |
+| --- | --- |
+| **POST** `/api/v1/file/upload` | **POST** `/api/v1/files`，使用 `multipart/form-data` |
+| **POST** `/api/v1/file/create` | **POST** `/api/v1/files`，使用 JSON |
+| **GET** `/api/v1/file/list` | **GET** `/api/v1/files` |
+| **GET** `/api/v1/file/root_folder` | **GET** `/api/v1/files`，省略 `parent_id` |
+| **GET** `/api/v1/file/parent_folder?file_id=...` | **GET** `/api/v1/files/{file_id}/parent` |
+| **GET** `/api/v1/file/all_parent_folder?file_id=...` | **GET** `/api/v1/files/{file_id}/ancestors` |
+| **GET** `/api/v1/file/get/{file_id}` | **GET** `/api/v1/files/{file_id}` |
+| **POST** `/api/v1/file/mv` | **POST** `/api/v1/files/move` |
+| **POST** `/api/v1/file/rename` | **POST** `/api/v1/files/move`，使用 `new_name` |
+| **POST** `/api/v1/file/rm` | **DELETE** `/api/v1/files` |
+| **POST** `/api/v1/file/convert` | **POST** `/api/v1/files/link-to-datasets` |
+| **POST** `/api/v1/file/upload_info` | **POST** `/api/v1/documents/upload` |
+| **POST** `/v1/document/upload_info` | **POST** `/api/v1/documents/upload` |
+| **GET** `/api/v1/document/download/{id}` | **GET** `/api/v1/agents/attachments/{id}/download` |
+| **GET** `/v1/document/download/{id}` | **GET** `/api/v1/agents/attachments/{id}/download` |
 
 ---
 
-## FILE MANAGEMENT
-
----
-
-### Upload file
+### 上传工作空间文件
 
 **POST** `/api/v1/files`
 
-Uploads one or multiple files to the system.
+使用 `multipart/form-data` 上传一个或多个文件。同一接口在使用 JSON 请求体时用于创建文件夹或虚拟文件。
 
-:::caution DEPRECATED
-`POST /api/v1/file/upload` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/files`
-- Headers:
-  - `'Content-Type: multipart/form-data'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Form:
-  - `'file=@{FILE_PATH}'`
-  - `'parent_id'`: `string` (optional)
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/files \
-     --header 'Content-Type: multipart/form-data' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --form 'file=@./test1.txt' \
-     --form 'file=@./test2.pdf' \
-     --form 'parent_id={folder_id}'
+     --url 'http://{address}/api/v1/files' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --form 'workspace_id={workspace_id}' \
+     --form 'parent_id={folder_id}' \
+     --form 'file=@./report.pdf' \
+     --form 'file=@./notes.txt'
 ```
 
-##### Request parameters
+#### 表单参数
 
-- `'file'`: (*Form parameter*), `file`, *Required*
-  The file(s) to upload. Multiple files can be uploaded in a single request.
-- `'parent_id'`: (*Form parameter*), `string`
-  The parent folder ID where the file will be uploaded. If not specified, files will be uploaded to the root folder.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | `file`，可重复 | 是 | 要上传的文件，至少一个；文件名不能为空 |
+| `workspace_id` | `string` | 否 | 目标工作空间，默认 Token 所属工作空间 |
+| `parent_id` | `string` | 否 | 父文件夹 ID，默认目标工作空间根目录；必须属于同一工作空间 |
 
-#### Response
+服务端会执行工作空间及配额校验，保留上传文件携带的相对目录层级，并自动处理同目录重名。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": [
-        {
-            "id": "b330ec2e91ec11efbc510242ac120004",
-            "name": "test1.txt",
-            "size": 17966,
-            "type": "doc",
-            "parent_id": "527fa74891e811ef9c650242ac120006",
-            "location": "test1.txt",
-            "create_time": 1729763127646
-        }
-    ]
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 400,
-    "message": "No file part!"
+  "code": 0,
+  "data": [
+    {
+      "id": "b330ec2e91ec11efbc510242ac120004",
+      "name": "report.pdf",
+      "size": 17966,
+      "type": "pdf",
+      "parent_id": "527fa74891e811ef9c650242ac120006",
+      "location": "report.pdf",
+      "tenant_id": "7c8983badede11f083f184ba59bc53c7"
+    }
+  ]
 }
 ```
 
 ---
 
-### Upload document
-
-**POST** `/api/v1/documents/upload`
-
-Uploads a file and creates the respective document.
-
-:::caution DEPRECATED
-`POST /v1/document/upload_info` and `POST /api/v1/file/upload_info` are deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/documents/upload`
-- Headers:
-  - `'Content-Type: multipart/form-data'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Form:
-  - `'file=@{FILE_PATH}'` (mutually exclusive with `url`)
-- Query:
-  - `url`: URL to crawl and convert to a runtime attachment (mutually exclusive with `file`).
-
-##### Request example
-
-Upload a local file:
-
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/documents/upload \
-     --header 'Content-Type: multipart/form-data' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --form 'file=@./test1.pdf'
-```
-
-Crawl a URL:
-
-```bash
-curl --request POST \
-     --url 'http://{address}/api/v1/documents/upload?url=https://example.com/page' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
-```
-
-##### Request parameters
-
-- `'file'`: (*Form parameter*), `file`, *Optional*
-  The file to upload. Mutually exclusive with `url`; either `file` or `url` must be provided.
-- `url`: (*Query parameter*), `string`, *Optional*
-  A URL to crawl and store as an attachment. Mutually exclusive with `file`; either `url` or `file` must be provided.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-      "created_at": 1772451421.7924063,
-      "created_by": "be951084066611f18f5f00155d2f98f4",
-      "extension": "pdf",
-      "id": "2143a03d162c11f1b80f00155d334d02",
-      "mime_type": "application/pdf",
-      "name": "test1.pdf",
-      "preview_url": null,
-      "size": 49705
-    },
-    "message": "success"
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 400,
-    "message": "Provide either multipart file(s) or ?url=...!"
-}
-```
-
----
-
-### Download attachment
-
-**GET** `/api/v1/agents/attachments/{attachment_id}/download`
-
-:::caution DEPRECATED
-The previous endpoints `GET /v1/document/download/{doc_id}` and `GET /api/v1/document/download/{doc_id}` are deprecated. Use this endpoint instead.
-:::
-
-Downloads a runtime attachment previously uploaded for use in the agent system.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/agents/attachments/{attachment_id}/download`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Query parameter:
-  - `ext`: `string` (Optional)
-
-##### Request example
-
-```bash
-curl --request GET \
-     --url 'http://{address}/api/v1/agents/attachments/{attachment_id}/download?ext=pdf' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --output ./downloaded_attachment.pdf
-```
-
-##### Request parameters
-
-- `attachment_id`: (*Path parameter*), `string`, *Required*
-  The attachment ID whose file should be downloaded.
-- `ext`: (*Query parameter*), `string`, *Optional*
-  A file extension hint specifying the response's Content-Type. Defaults to `"markdown"`. Available values:
-  - `"markdown"`
-  - `"html"`
-  - `"pdf"`
-  - `"docx"`
-  - `"xlsx"`
-  - `"csv"`
-
-#### Response
-
-Success:
-
-Returns the file content as a binary stream with the relevant Content-Type header.
-
-Failure:
-
-```json
-{
-    "code": 500,
-    "message": "Internal server error"
-}
-```
-
----
-
-### Create file or folder
+### 创建文件夹或虚拟文件
 
 **POST** `/api/v1/files`
 
-Creates a new file or folder in the system.
-
-:::caution DEPRECATED
-`POST /api/v1/file/create` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/files`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"name"`: `string`
-  - `"parent_id"`: `string` (optional)
-  - `"type"`: `string`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/files \
+     --url 'http://{address}/api/v1/files' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-          "name": "New Folder",
-          "type": "folder",
-          "parent_id": "{folder_id}"
+       "workspace_id": "7c8983badede11f083f184ba59bc53c7",
+       "name": "项目资料",
+       "parent_id": "527fa74891e811ef9c650242ac120006",
+       "type": "folder"
      }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The name of the file or folder to create.
-- `"parent_id"`: (*Body parameter*), `string`
-  The parent folder ID. If not specified, the file/folder will be created in the root folder.
-- `"type"`: (*Body parameter*), `string`
-  The type of the file to create. Available options:
-  - `"folder"`: Create a folder
-  - `"virtual"`: Create a virtual file
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 是 | 名称，去除首尾空白后长度为 1 至 255 个字符 |
+| `parent_id` | `string` | 否 | 父文件夹 ID，默认工作空间根目录 |
+| `type` | `string` | 否 | 值为 `folder` 时创建文件夹；其他值或省略时创建 `virtual` 类型文件 |
+| `workspace_id` | `string` | 否 | 目标工作空间 ID，必须是 32 个字符；默认 Token 所属工作空间 |
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "b330ec2e91ec11efbc510242ac120004",
-        "name": "New Folder",
-        "type": "folder",
-        "parent_id": "527fa74891e811ef9c650242ac120006",
-        "size": 0,
-        "create_time": 1729763127646
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 409,
-    "message": "Duplicated folder name in the same folder."
-}
-```
+同一父目录下不允许创建同名文件夹或虚拟文件。
 
 ---
 
-### List files
+### 获取文件列表
 
-**GET** `/api/v1/files?parent_id={parent_id}&keywords={keywords}&page={page}&page_size={page_size}&orderby={orderby}&desc={desc}`
+**GET** `/api/v1/files`
 
-Lists files and folders under a specific folder.
+分页获取指定文件夹的直接子项。
 
-:::caution DEPRECATED
-`GET /api/v1/file/list` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/files?parent_id={parent_id}&keywords={keywords}&page={page}&page_size={page_size}&orderby={orderby}&desc={desc}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/files?parent_id={folder_id}&page=1&page_size=15' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/files?workspace_id={workspace_id}&parent_id={folder_id}&page=1&page_size=15&orderby=create_time&desc=true' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `parent_id`: (*Filter parameter*), `string`
-  The folder ID to list files from. If not specified, the root folder is used by default.
-- `keywords`: (*Filter parameter*), `string`
-  Search keyword to filter files by name.
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page on which the files will be displayed. Defaults to `1`.
-- `page_size`: (*Filter parameter*), `integer`
-  The number of files on each page. Defaults to `15`.
-- `orderby`: (*Filter parameter*), `string`
-  The field by which files should be sorted. Available options:
-  - `create_time` (default)
-- `desc`: (*Filter parameter*), `boolean`
-  Indicates whether the retrieved files should be sorted in descending order. Defaults to `true`.
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `workspace_id` | `string` | 否 | Token 所属工作空间 | 要浏览的可见工作空间 |
+| `parent_id` | `string` | 否 | 工作空间根目录 | 父文件夹 ID |
+| `keywords` | `string` | 否 | `""` | 名称搜索关键词 |
+| `page` | `integer` | 否 | `1` | 页码，最小为 `1` |
+| `page_size` | `integer` | 否 | `15` | 每页数量，范围为 `1` 至 `100` |
+| `orderby` | `string` | 否 | `create_time` | 排序字段 |
+| `desc` | `boolean` | 否 | `true` | 是否降序 |
 
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "total": 10,
-        "files": [
-            {
-                "id": "b330ec2e91ec11efbc510242ac120004",
-                "name": "test1.txt",
-                "type": "doc",
-                "size": 17966,
-                "parent_id": "527fa74891e811ef9c650242ac120006",
-                "create_time": 1729763127646
-            }
-        ],
-        "parent_folder": {
-            "id": "527fa74891e811ef9c650242ac120006",
-            "name": "Parent Folder"
-        }
+  "code": 0,
+  "data": {
+    "total": 1,
+    "files": [
+      {
+        "id": "b330ec2e91ec11efbc510242ac120004",
+        "name": "report.pdf",
+        "type": "pdf",
+        "size": 17966,
+        "parent_id": "527fa74891e811ef9c650242ac120006"
+      }
+    ],
+    "parent_folder": {
+      "id": "527fa74891e811ef9c650242ac120006",
+      "name": "项目资料",
+      "type": "folder"
     }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 404,
-    "message": "Folder not found!"
+  }
 }
 ```
 
 ---
 
-### Get parent folder
+### 获取父文件夹
 
 **GET** `/api/v1/files/{file_id}/parent`
 
-Retrieves the immediate parent folder information of a specified file.
-
-:::caution DEPRECATED
-`GET /api/v1/file/parent_folder?file_id=...` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/files/{file_id}/parent`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/files/{file_id}/parent' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/files/{file_id}/parent?workspace_id={workspace_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
-
-- `file_id`: (*Path parameter*), `string`, *Required*
-  The ID of the file whose immediate parent folder to retrieve.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "parent_folder": {
-            "id": "527fa74891e811ef9c650242ac120006",
-            "name": "Parent Folder"
-        }
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 404,
-    "message": "Folder not found!"
-}
-```
+成功响应的 `data.parent_folder` 为直接父文件夹对象。文件不存在、跨工作空间或无读取权限时返回非零业务状态码。
 
 ---
 
-### Get all parent folders
+### 获取所有上级文件夹
 
 **GET** `/api/v1/files/{file_id}/ancestors`
 
-Retrieves all parent folders of a specified file in the folder hierarchy.
-
-:::caution DEPRECATED
-`GET /api/v1/file/all_parent_folder?file_id=...` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/files/{file_id}/ancestors`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/files/{file_id}/ancestors' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/files/{file_id}/ancestors?workspace_id={workspace_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
-
-- `file_id`: (*Path parameter*), `string`, *Required*
-  The ID of the file whose parent folders to retrieve.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "parent_folders": [
-            {
-                "id": "527fa74891e811ef9c650242ac120006",
-                "name": "Parent Folder 1"
-            },
-            {
-                "id": "627fa74891e811ef9c650242ac120007",
-                "name": "Parent Folder 2"
-            }
-        ]
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 404,
-    "message": "Folder not found!"
-}
-```
+成功响应的 `data.parent_folders` 是上级文件夹对象数组。
 
 ---
 
-### Delete files
-
-**DELETE** `/api/v1/files`
-
-Deletes one or multiple files or folders.
-
-:::caution DEPRECATED
-`POST /api/v1/file/rm` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/files`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"ids"`: `list[string]`
-
-##### Request example
-
-```bash
-curl --request DELETE \
-     --url http://{address}/api/v1/files \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "ids": ["file_id_1", "file_id_2"]
-     }'
-```
-
-##### Request parameters
-
-- `"ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the files or folders to delete.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "success_count": 2
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Partially deleted 1 files with 1 errors",
-    "data": {
-        "success_count": 1,
-        "errors": [
-            "No authorization for file file1"
-        ]
-    }
-}
-```
-
----
-
-### Download file
+### 下载文件
 
 **GET** `/api/v1/files/{file_id}`
 
-Downloads a file from the system.
-
-:::caution DEPRECATED
-`GET /api/v1/file/get/{file_id}` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/files/{file_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+下载工作空间中的普通文件。
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/files/{file_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --output ./downloaded_file.txt
+     --url 'http://{address}/api/v1/files/{file_id}?workspace_id={workspace_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --output './downloaded-file'
 ```
 
-##### Request parameters
-
-- `file_id`: (*Path parameter*), `string`, *Required*
-  The ID of the file to download.
-
-#### Response
-
-Success:
-
-Returns the file content as a binary stream with appropriate Content-Type headers.
-
-Failure:
-
-```json
-{
-    "code": 404,
-    "message": "Document not found!"
-}
-```
+成功时直接返回文件流，并根据文件扩展名设置安全的响应头，不使用 `{code, data, message}` JSON 包装。目标是文件夹、文件为空或无读取权限时返回 JSON 错误。
 
 ---
 
-### Move or rename files
+### 移动或重命名文件
 
 **POST** `/api/v1/files/move`
 
-Moves and/or renames files or folders. Follows Linux `mv` semantics: at least one of `dest_file_id` or `new_name` must be provided.
+遵循类似 `mv` 的语义：仅提供 `dest_file_id` 表示移动；仅提供 `new_name` 表示原地重命名；两者同时提供表示移动并重命名。
 
-:::caution DEPRECATED
-The previous endpoints `POST /api/v1/file/mv` and `POST /api/v1/file/rename` are deprecated. Use this endpoint instead.
-:::
-
-- `dest_file_id` only: move files to a new folder, names unchanged.
-- `new_name` only: rename a single file or folder in place, no storage operation.
-- Both: move and rename simultaneously.
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/files/move`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"src_file_ids"`: `list[string]`, *Required*
-  - `"dest_file_id"`: `string`, *Optional*
-  - `"new_name"`: `string`, *Optional*
-
-##### Request examples
-
-Move files to a folder:
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/files/move \
+     --url 'http://{address}/api/v1/files/move' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-          "src_file_ids": ["file_id_1", "file_id_2"],
-          "dest_file_id": "{destination_folder_id}"
+       "workspace_id": "7c8983badede11f083f184ba59bc53c7",
+       "src_file_ids": ["b330ec2e91ec11efbc510242ac120004"],
+       "dest_file_id": "527fa74891e811ef9c650242ac120006",
+       "new_name": "new-report.pdf"
      }'
 ```
 
-Rename a file in place:
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `src_file_ids` | `string[]` | 是 | 源文件或文件夹 ID，至少一个 |
+| `dest_file_id` | `string` | 条件必填 | 目标文件夹 ID |
+| `new_name` | `string` | 条件必填 | 新名称，长度为 1 至 255；仅能与单个源文件一起使用 |
+| `workspace_id` | `string` | 否 | 明确限定工作空间，必须是 32 个字符 |
 
-```bash
-curl --request POST \
-     --url http://{address}/api/v1/files/move \
-     --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
-     --data '{
-          "src_file_ids": ["{file_id}"],
-          "new_name": "new_name.txt"
-     }'
-```
-
-##### Request parameters
-
-- `"src_file_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the files or folders to move or rename.
-- `"dest_file_id"`: (*Body parameter*), `string`, *Optional*
-  The ID of the destination folder. Omit to rename in place.
-- `"new_name"`: (*Body parameter*), `string`, *Optional*
-  New name for the file or folder. Only valid when `src_file_ids` contains a single entry. Note: Changing file extensions is *not* supported.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": true
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 404,
-    "message": "File or Folder not found!"
-}
-```
-
-or
-
-```json
-{
-    "code": 404,
-    "message": "Parent folder not found!"
-}
-```
-
-or
-
-```json
-{
-    "code": 400,
-    "message": "The extension of file can't be changed"
-}
-```
+`dest_file_id` 和 `new_name` 至少提供一个。
 
 ---
 
-### Links files to datasets and convert to documents
+### 删除文件或文件夹
+
+**DELETE** `/api/v1/files`
+
+文件夹会递归删除。已关联知识库的文件会连同对应文档及索引数据一起处理；被其他资源引用的文件会被拒绝删除并返回引用信息。
+
+#### 请求示例
+
+```bash
+curl --request DELETE \
+     --url 'http://{address}/api/v1/files' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "workspace_id": "7c8983badede11f083f184ba59bc53c7",
+       "ids": ["b330ec2e91ec11efbc510242ac120004"]
+     }'
+```
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `ids` | `string[]` | 是 | 文件或文件夹 ID，至少一个 |
+| `workspace_id` | `string` | 否 | 限定目标工作空间，必须是 32 个字符 |
+
+成功时 `data.success_count` 为实际删除数量。批量操作部分失败时接口返回非零业务状态码，并在 `data.errors` 中列出错误。
+
+---
+
+### 将文件关联到知识库
 
 **POST** `/api/v1/files/link-to-datasets`
 
-Converts files to documents and links them to specified datasets.
+把工作空间文件转换为知识库文档。文件夹输入会展开为其中的全部最内层文件，处理任务在后台执行。
 
-:::caution DEPRECATED
-`POST /api/v1/file/convert` is deprecated. Use this endpoint instead.
-:::
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/files/link-to-datasets`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `"file_ids"`: `list[string]`
-  - `"kb_ids"`: `list[string]`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/files/link-to-datasets \
+     --url 'http://{address}/api/v1/files/link-to-datasets?mode=add' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-          "file_ids": ["file_id_1", "file_id_2"],
-          "kb_ids": ["dataset_id_1", "dataset_id_2"]
+       "file_ids": ["b330ec2e91ec11efbc510242ac120004"],
+       "kb_ids": ["527fa74891e811ef9c650242ac120006"]
      }'
 ```
 
-##### Request parameters
+| 参数 | 位置 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `file_ids` | 请求体 | `string[]` | 是 | — | 文件或文件夹 ID |
+| `kb_ids` | 请求体 | `string[]` | 是 | — | 目标知识库 ID |
+| `mode` | 查询 | `string` | 否 | `replace` | `add` 仅补充缺失关联；`replace` 先移除这些文件已有的知识库文档关联，再建立新关联 |
 
-- `"file_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the files to convert. If a folder ID is provided, all files within that folder will be converted.
-- `"kb_ids"`: (*Body parameter*), `list[string]`, *Required*
-  The IDs of the target datasets.
+文件和目标知识库必须属于同一工作空间，调用方必须同时具有文件写权限和知识库修改权限。服务端会在调度后台任务前检查知识库文件数及存储配额。
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "id": "file2doc_id_1",
-            "file_id": "file_id_1",
-            "document_id": "document_id_1"
-        }
-    ]
-}
-```
-
-Failure:
+成功响应：
 
 ```json
 {
-    "code": 404,
-    "message": "File not found!"
-}
-```
-
-or
-
-```json
-{
-    "code": 404,
-    "message": "Can't find this dataset!"
+  "code": 0,
+  "data": true
 }
 ```
 
 ---
 
-### Create commit
+## 智能体运行附件
+
+### 上传运行附件
+
+**POST** `/api/v1/documents/upload`
+
+上传供智能体运行时使用的附件，或抓取一个 URL 并保存为附件。该接口不会直接把附件加入知识库。
+
+#### 上传本地文件
+
+```bash
+curl --request POST \
+     --url 'http://{address}/api/v1/documents/upload' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --form 'file=@./report.pdf'
+```
+
+#### 从 URL 创建附件
+
+```bash
+curl --request POST \
+     --url 'http://{address}/api/v1/documents/upload?url=https%3A%2F%2Fexample.com%2Fpage' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+`file` 和查询参数 `url` 必须且只能提供一种。可以一次上传多个 `file`；单文件返回对象，多文件返回对象数组。URL 会经过安全检查，不能用于访问受限网络地址。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": {
+    "id": "2143a03d162c11f1b80f00155d334d02",
+    "name": "report.pdf",
+    "extension": "pdf",
+    "mime_type": "application/pdf",
+    "size": 49705,
+    "created_by": "be951084066611f18f5f00155d2f98f4",
+    "created_at": 1772451421.7924063,
+    "preview_url": null
+  }
+}
+```
+
+---
+
+### 预览运行附件
+
+**GET** `/api/v1/agents/attachments/{attachment_id}/preview`
+
+以内联方式返回附件内容。
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/agents/attachments/{attachment_id}/preview?workspace_id={workspace_id}&agent_id={agent_id}&ext=pdf&filename=report.pdf' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+### 下载运行附件
+
+**GET** `/api/v1/agents/attachments/{attachment_id}/download`
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/agents/attachments/{attachment_id}/download?workspace_id={workspace_id}&agent_id={agent_id}&ext=pdf&filename=report.pdf' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --output './report.pdf'
+```
+
+#### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `workspace_id` | `string` | 否 | 附件所属工作空间；指定时必须同时提供可访问的 `agent_id` |
+| `agent_id` | `string` | 条件必填 | 用于校验团队智能体及附件的工作空间访问权限 |
+| `ext` | `string` | 否 | 文件扩展名提示，用于解析响应类型 |
+| `mime_type` | `string` | 否 | MIME 类型提示 |
+| `filename` | `string` | 否 | 下载文件名提示 |
+| `disposition` | `string` | 否 | 仅下载接口支持；设置为 `inline` 时以内联方式返回 |
+
+成功时直接返回文件流。附件不存在时返回 JSON 错误。
+
+---
+
+## 文件版本提交
+
+文件版本接口支持三组作用域路径：
+
+- `/api/v1/folders/{folder_id}/...`：文件夹及其子树的文件快照。
+- `/api/v1/workspace/{folder_id}/...`：文件夹作用域的同义路径，其中路径参数实际是根文件夹 ID。
+- `/api/v1/datasets/{dataset_id}/...`：知识库页面或产物的提交历史；该作用域使用知识库 ID，与普通工作空间文件快照不是同一历史集合。
+
+以下各节以 `/folders/{folder_id}` 为例。将路径前缀替换为 `/workspace/{folder_id}` 或 `/datasets/{dataset_id}` 可调用对应作用域。读取接口要求作用域可读，创建提交要求作用域可写。
+
+### 创建提交
 
 **POST** `/api/v1/folders/{folder_id}/commits`
 
-Creates a new snapshot commit for the specified folder.  
-This endpoint also supports:
-- `/api/v1/workspace/{workspace_id}/commits` (alias, workspace_id == folder_id)
-- `/api/v1/datasets/{dataset_id}/commits` (resolves dataset to its folder)
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/folders/{folder_id}/commits`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-  - `'message'`: `string` (required)  
-    The commit message.
-  - `'files'`: `list[object]` (required)  
-    The list of file changes. Each file change is an object with the following fields:
-
-##### Request example
-
 ```bash
 curl --request POST \
-     --url http://{address}/api/v1/folders/{folder_id}/commits \
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-          "message": "update config files",
-          "files": [
-               {"file_id": "file_uuid", "file_name": "config.json", "operation": "modify", "content": "{\"key\": \"value\"}"},
-               {"file_id": "file_uuid", "file_name": "readme.md", "operation": "add", "content": "# New README"}
-          ]
+       "message": "更新配置文件",
+       "files": [
+         {
+           "file_id": "file_uuid",
+           "file_name": "config.json",
+           "operation": "modify",
+           "content": "{\"key\":\"value\"}"
+         }
+       ]
      }'
 ```
 
-##### Request parameters
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `message` | `string` | 是 | 提交说明 |
+| `files` | `object[]` | 是 | 文件变更列表 |
+| `files[].file_id` | `string` | 是 | 文件标识 |
+| `files[].operation` | `string` | 是 | `add`、`modify`、`delete` 或 `rename` |
+| `files[].file_name` | `string` | 条件必填 | 新增或命名相关操作使用的文件名 |
+| `files[].content` | `string` | 条件必填 | `add` 或 `modify` 的文件内容 |
+| `files[].content_hash` | `string` | 否 | 已计算的内容哈希 |
+| `files[].old_name` | `string` | 条件必填 | 重命名前名称 |
+| `files[].new_name` | `string` | 条件必填 | 重命名后名称 |
 
-- `"message"`: (*Body parameter*), `string`, *Required*  
-  The commit message describing the changes.
-- `"files"`: (*Body parameter*), `list[object]`, *Required*  
-  Each file change object supports the following fields:
-
-  | Field | Type | Required | Description |
-  |-------|------|----------|-------------|
-  | `file_id` | `string` | Yes | The file ID |
-  | `file_name` | `string` | Only for add/rename | The file name |
-  | `operation` | `string` | Yes | `"add"`, `"modify"`, `"delete"`, or `"rename"` |
-  | `content` | `string` | Only for add/modify | The file content |
-  | `old_name` | `string` | Only for rename | The old file name |
-  | `new_name` | `string` | Only for rename | The new file name |
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "commit_uuid",
-        "folder_id": "folder_uuid",
-        "parent_id": null,
-        "message": "update config files",
-        "author_id": "user_uuid",
-        "file_count": 2,
-        "tree_state": "{\"file_uuid\": {\"hash\": \"abcd1234\", \"location\": \".objects/abcd1234\", \"name\": \"config.json\", \"size\": 1024, \"status\": \"1\", \"parent_id\": \"folder_uuid\"}}",
-        "create_time": 1718200000000
-    }
-}
-```
-
-:::note
-`tree_state` is a JSON string containing a flat map of file entries. Each entry includes `parent_id` to track which sub-folder the file belonged to at commit time. Sub-folders are inferred from `parent_id` values.
-:::
-
-Failure:
-
-```json
-{
-    "code": 101,
-    "message": "required argument are missing: message"
-}
-```
+成功时返回提交对象，包括 `id`、`folder_id`、`parent_id`、`message`、`author_id`、`file_count`、`tree_state` 和 `create_time`。`tree_state` 是保存完整文件快照的 JSON 字符串。
 
 ---
 
-### List commits
+### 获取提交列表
 
 **GET** `/api/v1/folders/{folder_id}/commits`
 
-Lists all commits for the specified folder with pagination.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits`
-- `/api/v1/datasets/{dataset_id}/commits`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Query:
-  - `'page'`: `int` (optional, default: 1)
-  - `'page_size'`: `int` (optional, default: 15)
-  - `'order_by'`: `string` (optional, default: `"create_time"`)
-  - `'desc'`: `bool` (optional, default: `true`)
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/folders/{folder_id}/commits?page=1&page_size=15' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits?page=1&page_size=15&order_by=create_time&desc=true' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `page` | `integer` | 否 | `1` | 页码 |
+| `page_size` | `integer` | 否 | `15` | 每页数量 |
+| `order_by` | `string` | 否 | `create_time` | 排序字段；注意这里使用下划线形式 `order_by` |
+| `desc` | `boolean` | 否 | `true` | 是否降序 |
+| `slug` | `string` | 否 | — | 仅列出指定页面标识的提交，主要用于知识库页面提交历史 |
 
-- `"page"`: (*Query parameter*), `int`, *Optional*  
-  Page number. Defaults to 1.
-- `"page_size"`: (*Query parameter*), `int`, *Optional*  
-  Number of items per page. Defaults to 15.
-- `"order_by"`: (*Query parameter*), `string`, *Optional*  
-  Sort field. Defaults to `"create_time"`.
-- `"desc"`: (*Query parameter*), `bool`, *Optional*  
-  Sort descending. Defaults to `true`.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "total": 2,
-        "page": 1,
-        "page_size": 15,
-        "commits": [
-            {
-                "id": "commit_uuid",
-                "folder_id": "folder_uuid",
-                "parent_id": null,
-                "message": "first commit",
-                "author_id": "user_uuid",
-                "file_count": 3,
-                "create_time": 1718200000000
-            }
-        ]
-    }
-}
-```
+成功响应的 `data` 包含 `total`、`page`、`page_size` 和 `commits`。
 
 ---
 
-### Get commit
+### 获取提交详情
 
 **GET** `/api/v1/folders/{folder_id}/commits/{commit_id}`
 
-Retrieves the details of a specific commit, including its file changes.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits/{commit_id}`
-- `/api/v1/datasets/{dataset_id}/commits/{commit_id}`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits/{commit_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/folders/{folder_id}/commits/{commit_id} \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
-
-- `"folder_id"`: (*Path parameter*), `string`, *Required*  
-  The folder ID.
-- `"commit_id"`: (*Path parameter*), `string`, *Required*  
-  The commit ID.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "commit_uuid",
-        "folder_id": "folder_uuid",
-        "parent_id": null,
-        "message": "added config files",
-        "author_id": "user_uuid",
-        "file_count": 2,
-        "create_time": 1718200000000,
-        "files": [
-            {
-                "file_id": "file_uuid",
-                "operation": "add",
-                "old_hash": null,
-                "new_hash": "abcd1234",
-                "old_name": null,
-                "new_name": null
-            }
-        ]
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Commit not found in workspace"
-}
-```
+普通文件提交返回提交基本信息及 `files` 变更数组。知识库页面提交会返回页面标题、说明、内容和差异等扩展字段。提交必须属于 URL 指定的作用域，否则返回 `Commit not found in workspace`。
 
 ---
 
-### List commit files
+### 获取提交文件列表
 
 **GET** `/api/v1/folders/{folder_id}/commits/{commit_id}/files`
 
-Lists the file changes associated with a specific commit.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits/{commit_id}/files`
-- `/api/v1/datasets/{dataset_id}/commits/{commit_id}/files`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits/{commit_id}/files`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/files \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/files' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "id": "item_uuid",
-            "file_id": "file_uuid",
-            "operation": "add",
-            "old_hash": null,
-            "new_hash": "abcd1234",
-            "old_location": null,
-            "new_location": ".objects/abcd1234",
-            "old_name": null,
-            "new_name": null
-        }
-    ]
-}
-```
+成功时 `data` 是文件变更数组，每项包含 `id`、`file_id`、`operation`、新旧哈希、新旧存储位置和新旧名称。
 
 ---
 
-### Diff commits
+### 比较两个提交
 
-**GET** `/api/v1/folders/{folder_id}/commits/diff?from={commit_id}&to={commit_id}`
-
-Compares two commits and returns the differences.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits/diff?from=...&to=...`
-- `/api/v1/datasets/{dataset_id}/commits/diff?from=...&to=...`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits/diff`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Query:
-  - `'from'`: `string` (required)  
-    The source commit ID.
-  - `'to'`: `string` (required)  
-    The target commit ID.
-
-##### Request example
+**GET** `/api/v1/folders/{folder_id}/commits/diff`
 
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/folders/{folder_id}/commits/diff?from=from_commit_id&to=to_commit_id' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits/diff?from={from_commit_id}&to={to_commit_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
-
-- `"from"`: (*Query parameter*), `string`, *Required*  
-  The source commit ID.
-- `"to"`: (*Query parameter*), `string`, *Required*  
-  The target commit ID.
-
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "file_id": "file_uuid",
-            "file_name": "config.json",
-            "operation": "modify",
-            "old_hash": "abc123",
-            "new_hash": "def456",
-            "old_location": ".objects/abc123",
-            "new_location": ".objects/def456"
-        }
-    ]
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Commit not found in workspace"
-}
-```
+查询参数 `from` 和 `to` 均为必填提交 ID，且两个提交都必须属于当前作用域。成功时返回变更数组，操作类型可能为 `add`、`modify`、`delete` 或 `rename`。
 
 ---
 
-### Get uncommitted changes
+### 获取未提交变更
 
 **GET** `/api/v1/folders/{folder_id}/changes`
 
-Returns the uncommitted changes for the specified folder (similar to `git status`).  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/changes`
-- `/api/v1/datasets/{dataset_id}/changes`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/changes`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/folders/{folder_id}/changes \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/changes' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "file_id": "file_uuid",
-            "file_name": "new.txt",
-            "operation": "add"
-        },
-        {
-            "file_id": "file_uuid",
-            "file_name": "config.json",
-            "operation": "modify"
-        },
-        {
-            "file_id": "file_uuid",
-            "file_name": "old.md",
-            "operation": "delete"
-        }
-    ]
-}
-```
+接口递归比较当前文件树与最新提交，返回包含 `file_id`、`file_name` 和 `operation` 的变更数组。
 
 ---
 
-### Get commit tree
+### 获取提交时的文件树
 
 **GET** `/api/v1/folders/{folder_id}/commits/{commit_id}/tree`
 
-Retrieves the full folder tree snapshot as it existed at a specific commit.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits/{commit_id}/tree`
-- `/api/v1/datasets/{dataset_id}/commits/{commit_id}/tree`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits/{commit_id}/tree`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/tree \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/tree' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-#### Response
-
-Success:
-
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "folder_uuid",
-        "name": "workspace_name",
-        "type": "folder",
-        "children": [
-            {
-                "id": "file_uuid",
-                "name": "config.json",
-                "type": "file",
-                "hash": "abcd1234",
-                "size": 1024,
-                "status": "1",
-                "location": ".objects/abcd1234"
-            },
-            {
-                "id": "sub_folder_uuid",
-                "name": "sub_folder_name",
-                "type": "folder",
-                "children": [
-                    {
-                        "id": "file_uuid_2",
-                        "name": "nested.txt",
-                        "type": "file",
-                        "hash": "ef5678",
-                        "size": 512,
-                        "status": "1",
-                        "location": ".objects/ef5678"
-                    }
-                ]
-            }
-        ]
-    }
-}
-```
+成功时 `data` 为提交时的递归文件树，文件节点包含名称、哈希、大小、状态和存储位置。
 
 ---
 
-### Get commit file content
+### 获取提交中的文件内容
 
 **GET** `/api/v1/folders/{folder_id}/commits/{commit_id}/files/{file_id}/content`
 
-Retrieves the file content as it existed at a specific commit.  
-Also available at:
-- `/api/v1/workspace/{workspace_id}/commits/{commit_id}/files/{file_id}/content`
-- `/api/v1/datasets/{dataset_id}/commits/{commit_id}/files/{file_id}/content`
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/folders/{folder_id}/commits/{commit_id}/files/{file_id}/content`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
-
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/files/{file_id}/content \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/folders/{folder_id}/commits/{commit_id}/files/{file_id}/content' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-#### Response
-
-Success:
+成功响应：
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "content": "file content as it existed in that commit"
-    }
+  "code": 0,
+  "data": {
+    "content": "提交时的文件文本内容"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "File not found in this commit"
-}
-```
+二进制内容会以 UTF-8 解码并使用替换字符处理无法解码的字节，因此该接口更适合读取文本文件。
 
 ---
 
-### Get file version history
+### 获取文件版本历史
 
 **GET** `/api/v1/files/{file_id}/versions`
 
-Returns the version history for a specific file across all commits.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/files/{file_id}/versions`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+获取指定文件出现在各次提交中的版本记录。
 
 ```bash
 curl --request GET \
-     --url http://{address}/api/v1/files/{file_id}/versions \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/files/{file_id}/versions' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-#### Response
+成功时 `data` 为版本数组，通常包含 `commit_id`、`operation`、`hash`、`create_time` 和提交说明。文件不存在或当前用户无读取权限时返回 `File not found`。
 
-Success:
+---
+## 搜索应用管理
 
-```json
-{
-    "code": 0,
-    "data": [
-        {
-            "commit_id": "commit_uuid",
-            "operation": "modify",
-            "hash": "def456",
-            "create_time": 1718200000000,
-            "message": "updated file"
-        },
-        {
-            "commit_id": "commit_uuid",
-            "operation": "add",
-            "hash": "abc123",
-            "create_time": 1718100000000,
-            "message": "initial commit"
-        }
-    ]
-}
-```
+本章介绍搜索应用的创建、查询、更新、删除和问答接口。所有接口都需要身份认证；搜索应用及其引用的知识库必须位于同一工作空间。
 
 ---
 
-## SEARCH APP MANAGEMENT
-
-### Create search app
+### 创建搜索应用
 
 **POST** `/api/v1/searches`
 
-Creates a search app.
-
-#### Request
-
-- Method: POST
-- URL: `/api/v1/searches`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-
-```json
-{
-    "name": "my_search_app",
-    "description": "optional description"
-}
-```
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request POST \
      --url 'http://{address}/api/v1/searches' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
      --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-         "name": "my_search_app",
-         "description": "My first search app"
+       "workspace_id": "7c8983badede11f083f184ba59bc53c7",
+       "name": "产品资料搜索",
+       "description": "搜索产品知识库",
+       "search_config": {
+         "kb_ids": ["527fa74891e811ef9c650242ac120006"],
+         "similarity_threshold": 0.2,
+         "vector_similarity_weight": 0.3,
+         "top_k": 1024
+       }
      }'
 ```
 
-##### Request parameters
+#### 请求体参数
 
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The name of the search app. Must be unique and no longer than 255 characters.
-- `"description"`: (*Body parameter*), `string`
-  A brief description of the search app.
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 是 | 搜索应用名称；去除首尾空白后不能为空，UTF-8 编码长度不能超过 255 字节；重名时服务端会生成不重复名称 |
+| `description` | `string` | 否 | 应用说明，默认空字符串 |
+| `workspace_id` | `string` | 否 | 目标工作空间 ID，默认当前用户的个人工作空间；旧字段 `tenant_id` 也可作为创建时的同义输入 |
+| `search_config` | `object` | 否 | 检索配置，默认 `{}` |
 
-#### Response
+常用 `search_config` 字段：
 
-Success:
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `kb_ids` | `string[]` | 知识库 ID；必须与搜索应用属于同一工作空间 |
+| `similarity_threshold` | `number` | 最低综合相似度，常用默认值为 `0.2` |
+| `vector_similarity_weight` | `number` | 向量相似度权重，常用默认值为 `0.3` |
+| `top_k` | `integer` | 参与向量计算的候选分块数，常用默认值为 `1024` |
+| `rerank_id` | `string` | 重排序模型 ID |
+| `use_rerank` | `boolean` | 前端配置中用于表示是否启用重排序 |
+
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "search_id": "b330ec2e91ec11efbc510242ac120006"
-    }
+  "code": 0,
+  "data": {
+    "search_id": "b330ec2e91ec11efbc510242ac120006"
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Search name can't be empty."
-}
-```
+如果目标工作空间不可写、名称无效或 `search_config.kb_ids` 跨工作空间，接口返回非零业务状态码。
 
 ---
 
-### List search apps
+### 获取搜索应用列表
 
-**GET** `/api/v1/searches?keywords={keywords}&page={page}&page_size={page_size}&orderby={orderby}&desc={desc}&owner_ids={owner_ids}`
+**GET** `/api/v1/searches`
 
-Lists search apps for the current user.
+获取当前用户可见工作空间中的搜索应用。
 
-#### Request
-
-- Method: GET
-- URL: `/api/v1/searches`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/searches?page=1&page_size=20' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/searches?page=1&page_size=20&keywords=产品&owner_ids=7c8983badede11f083f184ba59bc53c7' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+#### 查询参数
 
-- `keywords`: (*Filter parameter*), `string`
-  Search keyword to filter search apps by name.
-- `page`: (*Filter parameter*), `integer`
-  Specifies the page number. Defaults to `0` (no pagination).
-- `page_size`: (*Filter parameter*), `integer`
-  The number of items per page. Defaults to `0` (no pagination).
-- `orderby`: (*Filter parameter*), `string`
-  The field to sort by. Defaults to `create_time`.
-- `desc`: (*Filter parameter*), `boolean`
-  Whether to sort in descending order. Defaults to `true`.
-- `owner_ids`: (*Filter parameter*), `string` (repeatable)
-  Filter by owner tenant IDs. Can be specified multiple times: `?owner_ids=id1&owner_ids=id2`.
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `keywords` | `string` | 否 | `""` | 按名称等字段搜索 |
+| `page` | `integer` | 否 | `0` | 页码；`0` 表示不分页 |
+| `page_size` | `integer` | 否 | `0` | 每页数量，最大为 `100`；`0` 表示不分页 |
+| `orderby` | `string` | 否 | `create_time` | 排序字段 |
+| `desc` | `boolean` | 否 | `true` | 是否降序；仅字符串 `false` 表示升序 |
+| `owner_ids` | 重复的 `string` | 否 | — | 按工作空间过滤，可多次传入；所有值都必须是当前用户可见的工作空间 ID |
 
-#### Response
+`owner_ids` 应使用重复查询参数，例如 `?owner_ids=id1&owner_ids=id2`，而不是逗号分隔字符串。
 
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "total": 2,
-        "search_apps": [
-            {
-                "id": "b330ec2e91ec11efbc510242ac120006",
-                "name": "my_search_app",
-                "description": "My first search app",
-                "tenant_id": "7c8983badede11f083f184ba59bc53c7",
-                "create_time": 1729763127646
-            }
-        ]
-    }
+  "code": 0,
+  "data": {
+    "search_apps": [
+      {
+        "id": "b330ec2e91ec11efbc510242ac120006",
+        "name": "产品资料搜索",
+        "description": "搜索产品知识库",
+        "tenant_id": "7c8983badede11f083f184ba59bc53c7",
+        "search_config": {
+          "kb_ids": ["527fa74891e811ef9c650242ac120006"]
+        },
+        "capabilities": {
+          "read": true,
+          "update": true,
+          "delete": true
+        },
+        "create_time": 1729763127646
+      }
+    ],
+    "total": 1
+  }
 }
 ```
 
 ---
 
-### Get search app
+### 获取搜索应用详情
 
 **GET** `/api/v1/searches/{search_id}`
 
-Gets the details of a search app.
-
-#### Request
-
-- Method: GET
-- URL: `/api/v1/searches/{search_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request GET \
-     --url 'http://{address}/api/v1/searches/b330ec2e91ec11efbc510242ac120006' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/searches/{search_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `search_id` | 路径 | `string` | 是 | 搜索应用 ID |
 
-- `search_id`: (*Path parameter*), `string`, *Required*
-  The ID of the search app to retrieve.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": {
-        "id": "b330ec2e91ec11efbc510242ac120006",
-        "name": "my_search_app",
-        "description": "My first search app",
-        "tenant_id": "7c8983badede11f083f184ba59bc53c7",
-        "search_config": {},
-        "create_time": 1729763127646
+  "code": 0,
+  "data": {
+    "id": "b330ec2e91ec11efbc510242ac120006",
+    "name": "产品资料搜索",
+    "description": "搜索产品知识库",
+    "tenant_id": "7c8983badede11f083f184ba59bc53c7",
+    "search_config": {
+      "kb_ids": ["527fa74891e811ef9c650242ac120006"],
+      "similarity_threshold": 0.2,
+      "vector_similarity_weight": 0.3,
+      "top_k": 1024
+    },
+    "capabilities": {
+      "read": true,
+      "update": true,
+      "delete": true
     }
+  }
 }
 ```
 
-Failure:
-
-```json
-{
-    "code": 102,
-    "message": "Can't find this Search App!"
-}
-```
+资源不存在或无权读取时，接口返回非零业务状态码。
 
 ---
 
-### Update search app
+### 更新搜索应用
 
 **PUT** `/api/v1/searches/{search_id}`
 
-Updates a search app.
+更新名称和检索配置。传入的 `search_config` 会与现有配置做浅合并，未传入的现有配置项会保留。
 
-#### Request
-
-- Method: PUT
-- URL: `/api/v1/searches/{search_id}`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-- Body:
-
-```json
-{
-    "name": "updated_name",
-    "search_config": {"top_k": 5}
-}
-```
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request PUT \
-     --url 'http://{address}/api/v1/searches/b330ec2e91ec11efbc510242ac120006' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>' \
+     --url 'http://{address}/api/v1/searches/{search_id}' \
      --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-         "name": "updated_name",
-         "search_config": {"top_k": 5}
+       "name": "产品资料高级搜索",
+       "description": "使用重排序优化结果",
+       "search_config": {
+         "kb_ids": ["527fa74891e811ef9c650242ac120006"],
+         "rerank_id": "BAAI/bge-reranker-v2-m3@BAAI",
+         "top_k": 512
+       }
      }'
 ```
 
-##### Request parameters
+#### 参数
 
-- `search_id`: (*Path parameter*), `string`, *Required*
-  The ID of the search app to update.
-- `"name"`: (*Body parameter*), `string`, *Required*
-  The new name of the search app.
-- `"search_config"`: (*Body parameter*), `object`, *Required*
-  Configuration fields to update. Merged with the existing config.
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `search_id` | 路径 | `string` | 是 | 搜索应用 ID |
+| `name` | 请求体 | `string` | 是 | 新名称，不能为空且不能与同工作空间中的其他搜索应用重名 |
+| `search_config` | 请求体 | `object` | 是 | 要合并的检索配置；`kb_ids` 必须是数组且只能引用同工作空间知识库 |
+| `description` | 请求体 | `string` | 否 | 新说明 |
 
-#### Response
+`workspace_id` 会被服务端忽略，不能通过更新接口移动搜索应用。`search_id`、`tenant_id`、`created_by`、`id` 和时间字段也不能被客户端覆盖。
 
-Success:
+#### 成功响应
 
-```json
-{
-    "code": 0,
-    "data": {
-        "id": "b330ec2e91ec11efbc510242ac120006",
-        "name": "updated_name",
-        "search_config": {"top_k": 5},
-        "create_time": 1729763127646
-    }
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 109,
-    "message": "No authorization."
-}
-```
+成功时 `data` 返回更新后的完整搜索应用对象，并包含资源归属和 `capabilities` 信息。
 
 ---
 
-### Delete search app
+### 删除搜索应用
 
 **DELETE** `/api/v1/searches/{search_id}`
 
-Deletes a search app.
-
-#### Request
-
-- Method: DELETE
-- URL: `/api/v1/searches/{search_id}`
-- Headers:
-  - `'Authorization: Bearer <YOUR_API_KEY>'`
-
-##### Request example
+#### 请求示例
 
 ```bash
 curl --request DELETE \
-     --url 'http://{address}/api/v1/searches/b330ec2e91ec11efbc510242ac120006' \
-     --header 'Authorization: Bearer <YOUR_API_KEY>'
+     --url 'http://{address}/api/v1/searches/{search_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
 ```
 
-##### Request parameters
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `search_id` | 路径 | `string` | 是 | 搜索应用 ID |
 
-- `search_id`: (*Path parameter*), `string`, *Required*
-  The ID of the search app to delete.
-
-#### Response
-
-Success:
+#### 成功响应
 
 ```json
 {
-    "code": 0,
-    "data": true
-}
-```
-
-Failure:
-
-```json
-{
-    "code": 109,
-    "message": "No authorization."
+  "code": 0,
+  "data": true
 }
 ```
 
 ---
 
-### Search completion
+### 使用搜索应用问答
 
 **POST** `/api/v1/searches/{search_id}/completions`
 
-Generates an answer using the saved search app configuration and returns the result as a Server-Sent Events stream.
+使用搜索应用保存的配置生成答案，并以 Server-Sent Events（SSE）流返回结果。
 
-#### Request
+`POST /api/v1/searches/{search_id}/completion` 是当前同时提供的单数形式别名，两者行为相同；新调用建议统一使用复数形式 `/completions`。
 
-- Method: POST
-- URL: `/api/v1/searches/{search_id}/completions`
-- Headers:
-  - `'Content-Type: application/json'`
-  - `'Authorization: Bearer <YOUR_LOGIN_TOKEN>'`
-- Body:
-  - `"question"`: `string` *(Required)* The user question.
-  - `"kb_ids"`: `list[string]` *(Optional)* Fallback dataset IDs. Used only when the search app config does not already define `kb_ids`.
-
-##### Request example
+#### 请求示例
 
 ```bash
-curl --request POST \
-     --url http://{address}/api/v1/searches/{search_id}/completions \
+curl --no-buffer --request POST \
+     --url 'http://{address}/api/v1/searches/{search_id}/completions' \
      --header 'Content-Type: application/json' \
-     --header 'Authorization: Bearer <YOUR_LOGIN_TOKEN>' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
      --data '{
-         "question": "What is retrieval-augmented generation?"
+       "question": "RAGFlow 的主要功能是什么？"
      }'
 ```
 
-##### Request parameters
+#### 参数
 
-- `search_id`: (*Path parameter*), `string`, *Required*
-  The ID of the search app.
-- `"question"`: (*Body parameter*), `string`, *Required*
-  The user question.
-- `"kb_ids"`: (*Body parameter*), `list[string]`
-  Optional fallback dataset IDs when the search app config does not define them.
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `search_id` | 路径 | `string` | 是 | 搜索应用 ID |
+| `question` | 请求体 | `string` | 是 | 用户问题 |
+| `kb_ids` | 请求体 | `string[]` | 否 | 仅当搜索应用的 `search_config.kb_ids` 为空时作为后备知识库列表 |
 
-#### Response
+如果搜索应用配置和请求体都没有提供 `kb_ids`，接口会提示该字段为必填。引用的知识库失去同工作空间访问权限后，服务端也会拒绝执行。
 
-Success (streaming):
+#### 流式响应
+
+响应类型为 `text/event-stream; charset=utf-8`。每个事件以 `data:` 开头，最后一个事件的 `data` 为 `true`：
 
 ```text
-data: {"code": 0, "message": "", "data": {"answer": "...", "reference": {...}}}
+data:{"code":0,"message":"","data":{"answer":"……","reference":[]}}
 
-data: {"code": 0, "message": "", "data": true}
+data:{"code":0,"message":"","data":true}
 ```
 
-Failure:
+执行期间发生异常时，SSE 流中会返回 `code: 500` 的错误事件，随后仍发送结束事件。
 
-```json
-{
-    "code": 109,
-    "message": "No authorization."
-}
-```
+---
