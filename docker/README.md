@@ -33,14 +33,14 @@ docker/manage.sh deploy local
 # Deploy the non-hot-reload test environment with Kibana
 docker/manage.sh deploy test --kibana
 
-# Export all deployment images, including optional components
-docker/manage.sh export ragflow-images.tar.gz --optional
+# Export only the RAGFlow image
+docker/manage.sh export ragflow-image.tar.gz
 
 # Import images on an offline host
-docker/manage.sh import ragflow-images.tar.gz
+docker/manage.sh import docker/dist/ragflow-image.tar.gz
 ```
 
-The script refuses to deploy the local environment unless the `ragflow` service has positive CPU and memory limits. Pass `--volumes` to `stop` only when the environment's named volumes should also be deleted.
+Exported images are always written to `docker/dist/`; the optional export argument is a file name, not an output path. The script refuses to deploy the local environment unless the `ragflow` service has positive CPU and memory limits. Pass `--volumes` to `stop` only when the environment's named volumes should also be deleted.
 
 ## 🐬 Docker environment variables
 

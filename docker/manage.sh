@@ -41,7 +41,7 @@ Commands:
   status <local|dev|test>           Show container status.
   logs <local|dev|test> [SERVICE]   Follow environment or service logs.
   images [--optional]               List images used by the deployment.
-  export [ARCHIVE] [--optional]     Export images to .tar.gz or .tar.
+  export [FILENAME]                 Export the RAGFlow image to docker/dist/.
   import <ARCHIVE>                  Import images from .tar.gz or .tar.
   config <local|dev|test>           Render the resolved Compose config.
   help                              Show this help.
@@ -61,8 +61,8 @@ Examples:
   docker/manage.sh build
   docker/manage.sh deploy local
   docker/manage.sh deploy test --kibana
-  docker/manage.sh export ragflow-images.tar.gz --optional
-  docker/manage.sh import ragflow-images.tar.gz
+  docker/manage.sh export ragflow-image.tar.gz
+  docker/manage.sh import docker/dist/ragflow-image.tar.gz
 EOF
 }
 
@@ -266,53 +266,43 @@ list_images() {
 }
 
 export_images() {
-  local archive=""
-  local include_optional=0
+  local archive_name=""
 
   while (($#)); do
     case "$1" in
-      --optional)
-        include_optional=1
-        ;;
       -* )
         die "unknown export option: $1"
         ;;
       *)
-        [[ -z "${archive}" ]] || die "only one archive path can be specified"
-        archive="$1"
+        [[ -z "${archive_name}" ]] || die "only one archive name can be specified"
+        archive_name="$1"
         ;;
     esac
     shift
   done
 
-  archive="${archive:-ragflow-images-$(date +%Y%m%d-%H%M%S).tar.gz}"
+  archive_name="${archive_name:-ragflow-image-$(date +%Y%m%d-%H%M%S).tar.gz}"
+  [[ "${archive_name}" != */* && "${archive_name}" != *\\* && "${archive_name}" != "." && "${archive_name}" != ".." ]] || \
+    die "archive must be a file name without a directory; exports are written to docker/dist"
+
+  local export_dir="${SCRIPT_DIR}/dist"
+  local archive="${export_dir}/${archive_name}"
+  mkdir -p "${export_dir}"
   [[ ! -e "${archive}" ]] || die "archive already exists: ${archive}"
 
-  local image_arguments=()
-  if ((include_optional)); then
-    image_arguments=(--optional)
-  fi
-
-  local images=()
-  mapfile -t images < <(list_images "${image_arguments[@]}")
-  ((${#images[@]} > 0)) || die "no images resolved from Compose"
-
-  local image_name
-  for image_name in "${images[@]}"; do
-    docker image inspect "${image_name}" >/dev/null 2>&1 || die "image is not available locally: ${image_name}"
-  done
+  docker image inspect "${RAGFLOW_IMAGE}" >/dev/null 2>&1 || die "image is not available locally: ${RAGFLOW_IMAGE}"
 
   local partial_archive="${archive}.partial"
   rm -f "${partial_archive}"
   trap 'rm -f "${partial_archive}"' EXIT
 
-  log_info "Exporting ${#images[@]} images to ${archive}"
+  log_info "Exporting RAGFlow image ${RAGFLOW_IMAGE} to ${archive}"
   case "${archive}" in
     *.tar.gz | *.tgz)
-      docker save "${images[@]}" | gzip -1 >"${partial_archive}"
+      docker save "${RAGFLOW_IMAGE}" | gzip -1 >"${partial_archive}"
       ;;
     *.tar)
-      docker save --output "${partial_archive}" "${images[@]}"
+      docker save --output "${partial_archive}" "${RAGFLOW_IMAGE}"
       ;;
     *)
       die "archive must end in .tar.gz, .tgz, or .tar"
