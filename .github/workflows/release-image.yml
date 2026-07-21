@@ -6,7 +6,7 @@ on:
       - release
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 concurrency:
@@ -35,8 +35,6 @@ jobs:
             echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}"
             echo "GIT_COMMIT=${GIT_COMMIT}"
             echo "RELEASE_VERSION=${RAGFLOW_VERSION}.${GIT_COMMIT}"
-            echo "RELEASE_TAG=v${RAGFLOW_VERSION}.${GIT_COMMIT}"
-            echo "IMAGE_ARCHIVE=ragflow-${RAGFLOW_VERSION}.${GIT_COMMIT}.tar.gz"
           } >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx
@@ -70,28 +68,3 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Export image archive
-        shell: bash
-        run: |
-          docker pull "${IMAGE_NAME}:${RELEASE_VERSION}"
-          docker save "${IMAGE_NAME}:${RELEASE_VERSION}" | gzip -1 > "${IMAGE_ARCHIVE}"
-
-      - name: Create GitHub release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" \
-              "${IMAGE_ARCHIVE}" \
-              --clobber
-            gh release edit "${RELEASE_TAG}" --latest
-          else
-            gh release create "${RELEASE_TAG}" \
-              "${IMAGE_ARCHIVE}" \
-              --target "${GITHUB_SHA}" \
-              --title "RAGFlow ${RELEASE_VERSION}" \
-              --notes "Docker image: ${IMAGE_NAME}:${RELEASE_VERSION}" \
-              --latest
-          fi
