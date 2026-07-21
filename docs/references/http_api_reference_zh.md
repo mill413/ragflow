@@ -1,6 +1,6 @@
 # RAGFlow HTTP API 中文参考
 
-本文档面向当前内部部署版本，列出可用的 HTTP API、认证方式、通用响应结构和常见调用示例。
+本文档面向当前二次开发版本，列出可用的 HTTP API、认证方式、通用响应结构和常见调用示例。
 
 ## 快速开始
 
@@ -64,7 +64,7 @@ curl --request GET \
 | `401` | 未认证或 Token 无效 |
 | `403` | 无权访问目标工作空间或资源 |
 | `404` | 资源不存在 |
-| `500` | 服务内部错误 |
+| `500` | 服务端错误 |
 
 ## OpenAI 兼容接口
 
@@ -115,8 +115,8 @@ curl --request POST \
   --header 'Authorization: Bearer <API_TOKEN>' \
   --header 'Content-Type: application/json' \
   --data '{
-    "name": "内部制度库",
-    "description": "内部制度和流程文档",
+    "name": "制度资料库",
+    "description": "制度和流程文档",
     "chunk_method": "naive",
     "embedding_model": "<EMBEDDING_MODEL>"
   }'

@@ -14,6 +14,7 @@ export enum Routes {
   Login = '/login-next',
   Logout = '/logout',
   Home = '/home',
+  Help = '/help',
   Datasets = '/datasets',
   DatasetBase = '/dataset',
   Files = '/files',
@@ -191,6 +192,10 @@ const routeConfigOptions = [
       {
         path: Routes.Datasets,
         Component: () => import('@/pages/datasets'),
+      },
+      {
+        path: Routes.Help,
+        Component: () => import('@/pages/help'),
       },
       {
         path: Routes.DatasetBase,
