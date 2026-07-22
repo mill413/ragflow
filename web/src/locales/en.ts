@@ -166,7 +166,7 @@ export default {
           'Switch between all, personal, and team workspaces. Page content is filtered by your current selection.',
         helpTitle: 'Open the help documentation',
         helpDescription:
-          'Open the RAGFlow documentation here whenever you need help.',
+          'Open the {{appName}} documentation here whenever you need help.',
         profileTitle: 'Open your profile settings',
         profileDescription:
           'Manage your profile, teams, model providers, data sources, and other workspace settings here.',
@@ -3412,7 +3412,7 @@ Important structured information may include: names, dates, locations, events, k
 
     admin: {
       loginTitle: 'Admin console',
-      title: 'RAGFlow',
+      title: '{{appName}}',
       expandSidebar: 'Expand sidebar',
       collapseSidebar: 'Collapse sidebar',
       confirm: 'Confirm',
@@ -3667,7 +3667,7 @@ Important structured information may include: names, dates, locations, events, k
           'Delete “{{name}}”? Related data owned by this resource will also be removed. This cannot be undone.',
         deleted: 'Resource deleted',
         deleteAction: 'Delete {{name}}',
-        openInRagflow: 'Open {{name}} in RAGFlow',
+        openInRagflow: 'Open {{name}} in {{appName}}',
         previewFile: 'Preview {{name}}',
         downloadFile: 'Download {{name}}',
         originalFileUnavailable: 'The linked original file is unavailable',
@@ -3994,7 +3994,7 @@ Important structured information may include: names, dates, locations, events, k
       rootDepartments: 'Top-level departments',
       assignedDepartmentUsers: 'Assigned users',
       unassignedDepartmentUsers: 'Unassigned users',
-      openRagflow: 'Open RAGFlow as this user',
+      openRagflow: 'Open {{appName}} as this user',
       status: 'Status',
       id: 'ID',
       serviceType: 'Service type',

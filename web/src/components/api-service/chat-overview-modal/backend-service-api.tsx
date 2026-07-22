@@ -3,15 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { CopyToClipboardWithText } from '@/components/copy-to-clipboard';
 import { useTranslate } from '@/hooks/common-hooks';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 
 const BackendServiceApi = ({ show }: { show(): void }) => {
   const { t } = useTranslate('chat');
+  const { appName } = useFetchAppConf();
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-4">
-          <CardTitle>RAGFlow API</CardTitle>
+          <CardTitle>{appName} API</CardTitle>
           <Button onClick={show}>{t('apiKey')}</Button>
         </div>
       </CardHeader>

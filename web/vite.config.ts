@@ -2,7 +2,6 @@ import { inspectorServer } from '@react-dev-inspector/vite-plugin';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
-import { createHtmlPlugin } from 'vite-plugin-html';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { appName } from './src/conf.json';
 
@@ -23,6 +22,19 @@ const inspectorBabelPlugin = (): import('vite').Plugin => ({
       }),
       map: null,
     };
+  },
+});
+
+const runtimeConfigPlugin = (
+  configuredAppName: string,
+): import('vite').Plugin => ({
+  name: 'runtime-config',
+  configureServer(server) {
+    server.middlewares.use('/conf.json', (_request, response) => {
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.setHeader('Cache-Control', 'no-store');
+      response.end(JSON.stringify({ appName: configuredAppName }));
+    });
   },
 });
 
@@ -153,6 +165,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       inspectorBabelPlugin(),
       react(),
+      runtimeConfigPlugin(env.APP_NAME?.trim() || appName),
       viteStaticCopy({
         targets: [
           {
@@ -164,13 +177,6 @@ export default defineConfig(({ mode }) => {
             dest: './',
           },
         ],
-      }),
-      createHtmlPlugin({
-        inject: {
-          data: {
-            title: appName,
-          },
-        },
       }),
       inspectorServer(),
     ],

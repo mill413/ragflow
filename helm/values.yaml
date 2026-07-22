@@ -11,6 +11,10 @@ global:
   imagePullSecrets: []
 
 env:
+  # Browser title and user-facing product name. Prefer setting this during
+  # deployment instead of committing a deployment-specific value here.
+  # APP_NAME: ""
+
   # The type of doc engine to use.
   # Available options:
   # - `elasticsearch` (default)
