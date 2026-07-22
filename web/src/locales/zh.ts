@@ -3519,6 +3519,7 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
           duration: '耗时',
           error: '错误信息',
           messageTimeline: '消息过程',
+          thinkingProcess: '思考过程',
           references: '知识库引用',
           roles: {
             user: '用户',
