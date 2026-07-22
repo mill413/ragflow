@@ -37,6 +37,7 @@ export const enum ChatApiAction {
   UpdateChat = 'updateChat',
   PatchChat = 'patchChat',
   FetchChat = 'fetchChat',
+  OptimizePrompt = 'optimizePrompt',
   FetchSessionList = 'fetchSessionList',
   FetchSession = 'fetchSession',
   FetchSessionManually = 'fetchSessionManually',
@@ -216,6 +217,37 @@ export const useUpdateChat = () => {
   });
 
   return { data, loading, updateChat: mutateAsync };
+};
+
+export const useOptimizeChatPrompt = () => {
+  const {
+    data,
+    isPending: loading,
+    mutateAsync,
+  } = useMutation({
+    mutationKey: [ChatApiAction.OptimizePrompt],
+    mutationFn: async ({
+      chatId,
+      prompt,
+      llmId,
+    }: {
+      chatId: string;
+      prompt: string;
+      llmId?: string;
+    }) => {
+      const { data } = await chatService.optimizeChatPrompt(
+        {
+          url: api.optimizeChatPrompt(chatId),
+          data: { prompt, llm_id: llmId },
+        },
+        true,
+      );
+      if (data.code !== 0) throw new Error(data.message);
+      return data.data.optimized_prompt as string;
+    },
+  });
+
+  return { data, loading, optimizePrompt: mutateAsync };
 };
 
 export const usePatchChat = () => {

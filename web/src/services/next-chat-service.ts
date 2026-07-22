@@ -5,6 +5,7 @@ const {
   createChat,
   listChats,
   getChat,
+  optimizeChatPrompt,
   updateChat,
   patchChat,
   deleteChat,
@@ -35,6 +36,10 @@ const methods = {
   getChat: {
     url: getChat,
     method: 'get',
+  },
+  optimizeChatPrompt: {
+    url: optimizeChatPrompt,
+    method: 'post',
   },
   updateChat: {
     url: updateChat,
