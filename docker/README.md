@@ -126,7 +126,7 @@ The [.env](./.env) file contains important environment variables for Docker.
 ### Maximum file size
 
 - `MAX_CONTENT_LENGTH`
-  The maximum file size for each uploaded file, in bytes. You can uncomment this line if you wish to change the 128M file size limit. After making the change, ensure you update `client_max_body_size` in nginx/nginx.conf correspondingly.
+  The maximum total size of one upload request, in bytes. It defaults to 2 GiB (`2147483648`). Keep `client_max_body_size` in `nginx/nginx.conf` aligned with this value.
 
 ### Doc bulk size
 

@@ -648,7 +648,12 @@ export default {
       changeSpecificCategory: '更改特定类别',
       uploadTitle: '点击或拖拽文件至此区域即可上传',
       uploadDescription:
-        '支持单次或批量上传。本地部署的单次上传文件总大小上限为 1GB，单次批量上传文件数不超过 32，单个账户不限文件数量。对于 cloud.ragflow.io：每次上传的总文件大小限制为 10MB，每个文件不得超过 10MB，每个账户最多可上传 128 个文件。严禁上传违禁文件。',
+        '支持单次或批量上传。单次上传文件总大小上限为 2GB，单次批量上传文件数不超过 50。',
+      uploadQuotaDescription:
+        '支持单次或批量上传。单次上传文件总大小上限为 2GB，单次批量上传文件数不超过 50。当前知识库配额：文件 {{fileUsed}} / {{fileLimit}}，存储 {{storageUsed}} / {{storageLimit}}。',
+      uploadQuotaUnavailable:
+        '支持单次或批量上传。单次上传文件总大小上限为 2GB，单次批量上传文件数不超过 50。暂时无法获取当前知识库配额，上传时将由服务端校验。',
+      quotaUnlimited: '不限',
       chunk: '解析块',
       bulk: '批量',
       cancel: '取消',
@@ -1977,7 +1982,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       parseOnCreation: '创建时解析',
       uploadTitle: '点击或拖拽文件至此区域即可上传',
       uploadDescription:
-        '支持单次或批量上传。 本地部署的单次上传文件总大小上限为 1GB，单次批量上传文件数不超过 32，单个账户不限文件数量。对于 cloud.ragflow.io：每次上传的总文件大小限制为 10MB，每个文件不得超过 10MB，每个账户最多可上传 128 个文件。严禁上传违禁文件。',
+        '支持单次或批量上传。单次上传文件总大小上限为 2GB，单次批量上传文件数不超过 50。',
       file: '文件',
       directory: '文件夹',
       local: '本地上传',

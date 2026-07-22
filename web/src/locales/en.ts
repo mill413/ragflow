@@ -683,7 +683,12 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       changeSpecificCategory: 'Change specific category',
       uploadTitle: 'Drag and drop your file here to upload',
       uploadDescription:
-        'Supports single or batch file upload. For a locally deployed RAGFlow: the total file size limit per upload is 1GB, with a batch upload limit of 32 files. There is no cap on the total number of files per account. For cloud.ragflow.io, the total file size limit per upload is 10MB, with each file not exceeding 10MB and a maximum of 128 files per account.',
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch.',
+      uploadQuotaDescription:
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch. Current dataset quota: {{fileUsed}} / {{fileLimit}} files; {{storageUsed}} / {{storageLimit}} storage used.',
+      uploadQuotaUnavailable:
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch. The current dataset quota is unavailable and will be validated by the server.',
+      quotaUnlimited: 'Unlimited',
       chunk: 'Chunk',
       bulk: 'Bulk',
       cancel: 'Cancel',
@@ -2220,7 +2225,7 @@ Example: Virtual Hosted Style`,
       directory: 'Directory',
       uploadTitle: 'Drag and drop your file here to upload',
       uploadDescription:
-        'Supports single or batch file upload. For a locally deployed RAGFlow: the total file size limit per upload is 1GB, with a batch upload limit of 32 files. There is no cap on the total number of files per account. For cloud.ragflow.io, the total file size limit per upload is 10MB, with each file not exceeding 10MB and a maximum of 128 files per account.',
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch.',
       local: 'Local uploads',
       s3: 'S3 uploads',
       preview: 'Preview',
