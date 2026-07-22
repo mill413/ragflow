@@ -99,9 +99,12 @@ spec:
         {{- with .Values.mysql.image.pullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
-        envFrom:
-          - secretRef:
-              name: {{ include "ragflow.fullname" . }}-env-config
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "ragflow.fullname" . }}-env-config
+                key: MYSQL_ROOT_PASSWORD
         args:
           - --max_connections=1000
           - --character-set-server=utf8mb4
