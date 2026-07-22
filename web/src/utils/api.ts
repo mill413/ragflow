@@ -237,6 +237,8 @@ export default {
   createChat: `${restAPIv1}/chats`,
   listChats: `${restAPIv1}/chats`,
   getChat: (chatId: string) => `${restAPIv1}/chats/${chatId}`,
+  optimizeChatPrompt: (chatId: string) =>
+    `${restAPIv1}/chats/${chatId}/prompt/optimize`,
   updateChat: (chatId: string) => `${restAPIv1}/chats/${chatId}`,
   patchChat: (chatId: string) => `${restAPIv1}/chats/${chatId}`,
   deleteChat: (chatId: string) => `${restAPIv1}/chats/${chatId}`,

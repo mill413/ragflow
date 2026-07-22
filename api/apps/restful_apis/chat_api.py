@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 
+import asyncio
 import json
 import logging
 import math
@@ -28,7 +29,12 @@ from quart import Response, request
 from api.apps import current_user, login_required
 from api.apps.restful_apis._generation_params import merge_generation_config, pop_generation_config
 from api.db import WorkspaceType
-from api.db.joint_services.tenant_model_service import get_api_key, get_tenant_default_model_by_type, resolve_model_config
+from api.db.joint_services.tenant_model_service import (
+    get_api_key,
+    get_model_config_by_id,
+    get_tenant_default_model_by_type,
+    resolve_model_config,
+)
 from api.db.services.chunk_feedback_service import ChunkFeedbackService
 from api.db.services.conversation_service import ConversationService, structure_answer
 from api.db.services.dialog_service import DialogService, gen_mindmap, rag_agent
@@ -114,6 +120,16 @@ _DEFAULT_DIRECT_CHAT_PROMPT_CONFIG = {
 _DEFAULT_RERANK_MODELS = {"BAAI/bge-reranker-v2-m3", "maidalun1020/bce-reranker-base_v1"}
 _READONLY_FIELDS = {"id", "tenant_id", "created_by", "create_time", "create_date", "update_time", "update_date"}
 _PERSISTED_FIELDS = set(DialogService.model._meta.fields)
+_PROMPT_VARIABLE_PATTERN = re.compile(r"(?<!\{)\{[A-Za-z_][A-Za-z0-9_.-]*\}(?!\})")
+_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS = 30
+_PROMPT_OPTIMIZER_SYSTEM = """You are a system prompt editor. Improve the supplied system prompt so that it is precise, structured, concise, and easy for a language model to follow.
+
+Requirements:
+1. Preserve the original intent, constraints, output language, and every variable placeholder exactly, including {knowledge} and any other {variable}.
+2. Do not invent business facts, tools, variables, or capabilities.
+3. Resolve ambiguity and repetition without weakening any existing restriction.
+4. Return only the complete optimized prompt. Do not add explanations, analysis, labels, or Markdown code fences.
+"""
 
 
 def _build_chat_response(chat, user_id=None):
@@ -141,6 +157,31 @@ def _resolve_kb_names(kb_ids):
 
 def _has_knowledge_placeholder(prompt_config):
     return "{knowledge}" in (prompt_config or {}).get("system", "")
+
+
+def _prompt_variables(prompt):
+    return set(_PROMPT_VARIABLE_PATTERN.findall(prompt or ""))
+
+
+def _strip_prompt_code_fence(prompt):
+    prompt = (prompt or "").strip()
+    match = re.fullmatch(r"```(?:[A-Za-z0-9_-]+)?\s*\n?(.*?)\n?```", prompt, flags=re.DOTALL)
+    return match.group(1).strip() if match else prompt
+
+
+def _get_prompt_model_config(chat, llm_id=None, tenant_llm_id=None):
+    llm_id = llm_id or chat.llm_id
+    tenant_llm_id = tenant_llm_id or (
+        getattr(chat, "tenant_llm_id", None) if llm_id == chat.llm_id else None
+    )
+    if tenant_llm_id:
+        try:
+            return get_model_config_by_id(chat.tenant_id, LLMType.CHAT, tenant_llm_id)
+        except LookupError:
+            pass
+    if llm_id:
+        return resolve_model_config(chat.tenant_id, LLMType.CHAT, llm_id)
+    return get_tenant_default_model_by_type(chat.tenant_id, LLMType.CHAT)
 
 
 def _validate_name(name, *, required=True):
@@ -570,6 +611,69 @@ async def get_chat(chat_id):
         return get_json_result(data=_build_chat_response(chat, current_user.id))
     except Exception as ex:
         return server_error_response(ex)
+
+
+@manager.route("/chats/<chat_id>/prompt/optimize", methods=["POST"])  # noqa: F821
+@login_required
+async def optimize_chat_prompt(chat_id):
+    chat = await _get_accessible_chat(chat_id, manage=True)
+    if not chat:
+        return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+
+    try:
+        req = await get_request_json()
+        prompt = req.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return get_data_error_result(message="System prompt must not be empty.")
+        if len(prompt) > 65535:
+            return get_data_error_result(message="System prompt is too long.")
+
+        llm_id = req.get("llm_id")
+        tenant_llm_id = req.get("tenant_llm_id")
+        model_config = await thread_pool_exec(
+            _get_prompt_model_config,
+            chat,
+            llm_id,
+            tenant_llm_id,
+        )
+        if not model_config:
+            return get_data_error_result(message="No chat model is configured for this workspace.")
+
+        chat_model = LLMBundle(chat.tenant_id, model_config)
+        try:
+            optimized_prompt = await asyncio.wait_for(
+                chat_model.async_chat(
+                    _PROMPT_OPTIMIZER_SYSTEM,
+                    [{"role": "user", "content": prompt}],
+                    {"temperature": 0.2},
+                ),
+                timeout=_PROMPT_OPTIMIZATION_TIMEOUT_SECONDS,
+            )
+        finally:
+            chat_model.close()
+
+        optimized_prompt = _strip_prompt_code_fence(optimized_prompt)
+        if not optimized_prompt:
+            return get_data_error_result(message="The model returned an empty optimized prompt.")
+
+        original_variables = _prompt_variables(prompt)
+        optimized_variables = _prompt_variables(optimized_prompt)
+        missing_variables = sorted(original_variables - optimized_variables)
+        if missing_variables:
+            return get_data_error_result(
+                message=f"The optimized prompt omitted variables: {', '.join(missing_variables)}"
+            )
+        unexpected_variables = sorted(optimized_variables - original_variables)
+        if unexpected_variables:
+            return get_data_error_result(
+                message=f"The optimized prompt introduced variables: {', '.join(unexpected_variables)}"
+            )
+        return get_json_result(data={"optimized_prompt": optimized_prompt})
+    except asyncio.TimeoutError:
+        return get_data_error_result(message="Prompt optimization timed out after 30 seconds.")
+    except Exception as ex:
+        logging.exception("Failed to optimize the prompt for chat %s", chat_id)
+        return get_data_error_result(message=f"Prompt optimization failed: {ex}")
 
 
 @manager.route("/chats/<chat_id>", methods=["PUT"])  # noqa: F821
