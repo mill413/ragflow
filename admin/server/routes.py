@@ -45,6 +45,7 @@ from api.common.exceptions import AdminException
 from common.exceptions import ResourceInUseException
 from common.versions import get_ragflow_version
 from api.utils.api_utils import generate_confirmation_token
+from api.db.services.workspace_parser_service import WorkspaceParserService
 from common.log_utils import get_log_levels, set_log_level
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
@@ -712,6 +713,26 @@ def list_model_workspaces():
         return success_response(AdminModelMgr.list_workspaces())
     except Exception as e:
         logging.exception("Failed to list model workspaces")
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/workspaces/<workspace_id>/chunk-methods/<parser_id>", methods=["PATCH"])
+@login_required
+@check_admin_auth
+def update_workspace_chunk_method(workspace_id, parser_id):
+    try:
+        data = request.get_json() or {}
+        if not isinstance(data.get("enabled"), bool):
+            return error_response("enabled must be a boolean", 400)
+        return success_response(
+            WorkspaceParserService.set_enabled(workspace_id, parser_id, data["enabled"])
+        )
+    except LookupError as e:
+        return error_response(str(e), 404)
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logging.exception("Failed to update workspace chunk method")
         return error_response(str(e), 500)
 
 

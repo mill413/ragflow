@@ -23,8 +23,12 @@ docker/ragflow-logs/
 
 # ── Docker runtime data ─────────────────────────────────────────────────────
 docker/data/
+docker/dist/
 docker/oceanbase/
 docker/seekdb/
+
+# ── Version-control metadata ────────────────────────────────────────────
+.git/
 
 # ── Go and C++ build outputs ────────────────────────────────────────────────
 internal/binding/cpp/build/

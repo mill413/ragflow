@@ -84,13 +84,20 @@ export const useFetchUserInfo = (): ResponseGetType<IUserInfo> => {
 // Stop using this interface to retrieve the default model; instead, directly call `useFetchDefaultModelDictionary`.
 export const useFetchTenantInfo = (
   showEmptyModelWarn = false,
+  workspaceId?: string,
 ): ResponseGetType<ITenantInfo> => {
   const { data, isFetching: loading } = useQuery({
-    queryKey: [UserSettingApiAction.TenantInfo, showEmptyModelWarn],
+    queryKey: [
+      UserSettingApiAction.TenantInfo,
+      showEmptyModelWarn,
+      workspaceId,
+    ],
     initialData: {},
     gcTime: 0,
     queryFn: async () => {
-      const { data: res } = await userService.getTenantInfo();
+      const { data: res } = await userService.getTenantInfo(
+        workspaceId ? { workspace_id: workspaceId } : undefined,
+      );
       if (res.code === 0) {
         // llm_id is chat_id
         // asr_id is speech2txt
@@ -110,11 +117,13 @@ export const useFetchTenantInfo = (
   return { data, loading };
 };
 
-export const useSelectParserList = (): Array<{
+export const useSelectParserList = (
+  workspaceId?: string,
+): Array<{
   value: string;
   label: string;
 }> => {
-  const { data: tenantInfo } = useFetchTenantInfo(true);
+  const { data: tenantInfo } = useFetchTenantInfo(true, workspaceId);
   const { t } = useTranslation();
 
   // Detect backend runtime language (Go vs Python) so we can choose
@@ -202,7 +211,12 @@ export const useSelectParserList = (): Array<{
 
     return filteredArray.map((x) => {
       const arr = x.split(':');
-      return { value: arr[0], label: arr[1] };
+      const key = `knowledgeConfiguration.parserLabel.${arr[0]}`;
+      const translated = t(key);
+      return {
+        value: arr[0],
+        label: translated !== key ? translated : arr[1] || arr[0],
+      };
     });
   }, [tenantInfo, defaultParsers, backendLang, pipelineListData, t]);
 

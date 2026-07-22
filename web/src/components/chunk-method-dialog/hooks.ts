@@ -50,6 +50,7 @@ const ParserListMap = new Map([
       'qa',
       'table',
       'knowledge_graph',
+      'custom_chunk',
     ],
   ],
   [
@@ -63,13 +64,14 @@ const ParserListMap = new Map([
       'qa',
       'table',
       'knowledge_graph',
+      'custom_chunk',
     ],
   ],
   [
     ['md', 'mdx'],
-    ['naive', 'qa', 'knowledge_graph'],
+    ['naive', 'qa', 'knowledge_graph', 'custom_chunk'],
   ],
-  [['json'], ['naive', 'knowledge_graph']],
+  [['json'], ['naive', 'knowledge_graph', 'custom_chunk']],
   [['eml'], ['email']],
 ]);
 

@@ -48,6 +48,7 @@ class TestGetParser:
             "resume",
             "one",
             "tag",
+            "custom_chunk",
         ],
     )
     def test_get_parser_returns_non_none(self, parser_id):

@@ -137,6 +137,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
 
   useEffect(() => {
     form.setValue('pipeline_id', '');
+    form.setValue(ChunkMethodName, '');
   }, [selectedWorkspaceId, form]);
 
   return (
@@ -191,7 +192,10 @@ export function InputForm({ onOk }: IModalProps<any>) {
         <EmbeddingModelItem line={2} isEdit={false} />
         <ParseTypeItem />
         {parseType === ParseType.BuiltIn && (
-          <ChunkMethodItem name={ChunkMethodName}></ChunkMethodItem>
+          <ChunkMethodItem
+            name={ChunkMethodName}
+            workspaceId={selectedWorkspaceId}
+          ></ChunkMethodItem>
         )}
         {parseType === ParseType.Pipeline && (
           <DataFlowSelect

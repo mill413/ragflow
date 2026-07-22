@@ -859,6 +859,7 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       tableColumnRolesReparseTip:
         'Re-parse existing documents for the new column roles to take effect.',
       parserLabel: {
+        custom_chunk: 'Test Chunking',
         naive: 'General',
         general: 'General',
         qa: 'Q&A',
@@ -886,6 +887,7 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       dialogueExamplesTitle: 'view',
       methodEmpty:
         'This will display a visual explanation of the dataset categories',
+      customChunk: `<p>Validates an extended built-in chunk method and workspace visibility control.</p><p>Supports <b>TXT, Markdown, CSV, and JSON</b> files, splitting by a delimiter and merging sections toward the target token count.</p>`,
       book: `<p>Supported file formats are <b>DOCX</b>, <b>PDF</b>, <b>TXT</b>.</p><p>
       For each book in PDF, please set the <i>page ranges</i> to remove unwanted information and reduce analysis time.</p>`,
       laws: `<p>Supported file formats are <b>DOCX</b>, <b>PDF</b>, <b>TXT</b>.</p><p>

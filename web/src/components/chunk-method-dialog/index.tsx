@@ -206,6 +206,7 @@ export function ChunkMethodDialog({
 
   const showMaxTokenNumber =
     selectedTag === DocumentParserType.Naive ||
+    selectedTag === DocumentParserType.CustomChunk ||
     selectedTag === DocumentParserType.KnowledgeGraph;
 
   const showEntityTypes = selectedTag === DocumentParserType.KnowledgeGraph;
@@ -300,7 +301,12 @@ export function ChunkMethodDialog({
           >
             <div className="space-y-6">
               <ParseTypeItem />
-              {parseType === ParseType.BuiltIn && <ChunkMethodItem />}
+              {parseType === ParseType.BuiltIn && (
+                <ChunkMethodItem
+                  documentExtension={documentExtension}
+                  workspaceId={knowledgeDetails.tenant_id}
+                />
+              )}
 
               {parseType === ParseType.BuiltIn && (
                 <CompilationTemplateFormField

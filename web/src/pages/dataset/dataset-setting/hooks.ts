@@ -14,8 +14,8 @@ import { formSchema } from './form-schema';
 // The value that does not need to be displayed in the analysis method Select
 const HiddenFields = ['email', 'picture', 'audio'];
 
-export function useSelectChunkMethodList() {
-  const parserList = useSelectParserList();
+export function useSelectChunkMethodList(workspaceId?: string) {
+  const parserList = useSelectParserList(workspaceId);
 
   return parserList.filter((x) => !HiddenFields.some((y) => y === x.value));
 }

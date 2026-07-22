@@ -1066,9 +1066,14 @@ class DocumentService(CommonService):
     def run(cls, tenant_id: str, doc: dict, kb_table_num_map: dict):
         from api.db.services.task_service import queue_dataflow, queue_tasks
         from api.db.services.file2document_service import File2DocumentService
+        from api.db.services.workspace_parser_service import WorkspaceParserService
 
         doc["tenant_id"] = tenant_id
         doc_parser = doc.get("parser_id", ParserType.NAIVE)
+        chunking_config = cls.get_chunking_config(doc["id"])
+        if not chunking_config:
+            raise LookupError(f"Document({doc['id']}) not found.")
+        WorkspaceParserService.require_allowed(chunking_config["tenant_id"], doc_parser)
         if doc_parser == ParserType.TABLE:
             kb_id = doc.get("kb_id")
             if not kb_id:

@@ -33,17 +33,18 @@ from timeit import default_timer as timer
 from typing import Any, Dict, List
 
 import xxhash
+
+from api.db.services.task_service import TaskService
+from api.db.services.workspace_parser_service import WorkspaceParserService
 from common import settings
 from common.connection_utils import timeout
 from common.constants import PAGERANK_FLD, TAG_FLD
-from common.misc_utils import thread_pool_exec
 from common.float_utils import normalize_overlapped_percent
+from common.misc_utils import thread_pool_exec
 from rag.nlp import search
+from rag.svr.task_executor_refactor.constants import GRAPH_RAPTOR_FAKE_DOC_ID
 from rag.svr.task_executor_refactor.task_context import TaskContext
 from rag.utils.base64_image import image2id
-
-from api.db.services.task_service import TaskService
-from rag.svr.task_executor_refactor.constants import GRAPH_RAPTOR_FAKE_DOC_ID
 
 # Re-export for backward compatibility
 from rag.svr.task_executor_refactor.chunk_builder import (
@@ -117,6 +118,7 @@ class ChunkService:
         ctx.recording_context.record("parser_id", ctx.parser_id)
 
         # Get parser
+        WorkspaceParserService.require_allowed(ctx.tenant_id, ctx.parser_id)
         chunker = get_parser(ctx.parser_id)
 
         # record config for compare
