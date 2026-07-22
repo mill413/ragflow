@@ -55,6 +55,7 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: elasticsearch
 spec:
+  serviceName: {{ include "ragflow.fullname" . }}-es
   replicas: 1
   selector:
     matchLabels:
