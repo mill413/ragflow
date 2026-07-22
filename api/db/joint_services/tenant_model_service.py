@@ -274,10 +274,10 @@ def _resolve_shared_model_by_name(tenant_id: str, model_name: str, model_type: s
 
 
 def resolve_model_config(tenant_id, model_type: str | enum.Enum, model_ref: str):
-    try:
+    exists, _ = TenantModelService.get_by_id(model_ref)
+    if exists:
         return get_model_config_by_id(tenant_id, model_type, model_ref)
-    except LookupError:
-        return get_model_config_from_provider_instance(tenant_id, model_type, model_ref)
+    return get_model_config_from_provider_instance(tenant_id, model_type, model_ref)
 
 
 def get_model_config_from_provider_instance(tenant_id, model_type: str | enum.Enum, model_name: str):

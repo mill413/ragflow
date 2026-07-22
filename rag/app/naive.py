@@ -36,6 +36,7 @@ from api.db.joint_services.tenant_model_service import (
     ensure_opendataloader_from_env,
     ensure_paddleocr_from_env,
     get_first_provider_model_name,
+    get_model_type_by_id,
     resolve_model_config,
     get_tenant_default_model_by_type,
 )
@@ -990,7 +991,19 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
             layout_recognizer = "DeepDOC" if layout_recognizer else "PlainText"
 
         name = layout_recognizer.strip().lower()
-        parser = PARSERS.get(name, by_plaintext)
+        parser = PARSERS.get(name)
+        if parser is None and parser_model_name is None:
+            try:
+                model_types = get_model_type_by_id(layout_recognizer)
+            except LookupError:
+                pass
+            else:
+                if LLMType.OCR.value in model_types:
+                    model_config = resolve_model_config(kwargs.get("tenant_id"), LLMType.OCR, layout_recognizer)
+                    name = model_config["llm_factory"].strip().lower()
+                    parser_model_name = layout_recognizer
+                    parser = PARSERS.get(name)
+        parser = parser or by_plaintext
         callback(0.1, "Start to parse.")
 
         sections, tables, pdf_parser = parser(
