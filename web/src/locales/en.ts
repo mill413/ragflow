@@ -3786,6 +3786,7 @@ Important structured information may include: names, dates, locations, events, k
           duration: 'Duration',
           error: 'Error',
           messageTimeline: 'Message timeline',
+          thinkingProcess: 'Thinking process',
           references: 'Knowledge base references',
           roles: {
             user: 'User',

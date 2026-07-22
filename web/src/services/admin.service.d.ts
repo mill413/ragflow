@@ -322,7 +322,8 @@ declare namespace AdminService {
   export type ManagedChatMessage = {
     id?: string;
     role: string;
-    content: string;
+    content: unknown;
+    reasoning_content?: unknown;
     created_at?: number;
   };
 
