@@ -166,7 +166,7 @@ export default {
           'Switch between all, personal, and team workspaces. Page content is filtered by your current selection.',
         helpTitle: 'Open the help documentation',
         helpDescription:
-          'Open the RAGFlow documentation here whenever you need help.',
+          'Open the {{appName}} documentation here whenever you need help.',
         profileTitle: 'Open your profile settings',
         profileDescription:
           'Manage your profile, teams, model providers, data sources, and other workspace settings here.',
@@ -683,7 +683,12 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       changeSpecificCategory: 'Change specific category',
       uploadTitle: 'Drag and drop your file here to upload',
       uploadDescription:
-        'Supports single or batch file upload. For a locally deployed RAGFlow: the total file size limit per upload is 1GB, with a batch upload limit of 32 files. There is no cap on the total number of files per account. For cloud.ragflow.io, the total file size limit per upload is 10MB, with each file not exceeding 10MB and a maximum of 128 files per account.',
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch.',
+      uploadQuotaDescription:
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch. Current dataset quota: {{fileUsed}} / {{fileLimit}} files; {{storageUsed}} / {{storageLimit}} storage used.',
+      uploadQuotaUnavailable:
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch. The current dataset quota is unavailable and will be validated by the server.',
+      quotaUnlimited: 'Unlimited',
       chunk: 'Chunk',
       bulk: 'Bulk',
       cancel: 'Cancel',
@@ -1157,6 +1162,21 @@ This auto-tagging feature enhances retrieval by adding another layer of domain-s
       systemMessage: 'Please input!',
       systemTip:
         'Your prompts or instructions for the LLM, including but not limited to its role, the desired length, tone, and language of its answers. If your model has native support for reasoning, you can add //no_thinking add the prompt to stop reasoning.',
+      optimizePrompt: 'Optimize prompt',
+      reoptimizePrompt: 'Optimize again',
+      optimizePromptTitle: 'Optimize system prompt',
+      optimizePromptDescription:
+        'The result is not saved automatically. You can edit it before applying it to the current form.',
+      currentPrompt: 'Current prompt',
+      optimizedPrompt: 'Optimized prompt',
+      optimizingPrompt: 'Optimizing the prompt…',
+      optimizedPromptPlaceholder:
+        'Select “Optimize prompt” to generate a result',
+      applyOptimizedPrompt: 'Apply optimized prompt',
+      restoreDefaultPrompt: 'Restore default prompt',
+      optimizePromptEmptyTip: 'Enter a system prompt first',
+      optimizePromptModelTip: 'Select a chat model first',
+      optimizePromptUnsavedTip: 'Save the chat app first',
       topN: 'Top N',
       topNTip: `Not all chunks with similarity score above the 'similarity threshold' will be sent to the LLM. This selects 'Top N' chunks from the retrieved ones.`,
       variable: 'Variable',
@@ -2205,7 +2225,7 @@ Example: Virtual Hosted Style`,
       directory: 'Directory',
       uploadTitle: 'Drag and drop your file here to upload',
       uploadDescription:
-        'Supports single or batch file upload. For a locally deployed RAGFlow: the total file size limit per upload is 1GB, with a batch upload limit of 32 files. There is no cap on the total number of files per account. For cloud.ragflow.io, the total file size limit per upload is 10MB, with each file not exceeding 10MB and a maximum of 128 files per account.',
+        'Supports single or batch upload. The total size per upload is limited to 2 GB, with up to 50 files per batch.',
       local: 'Local uploads',
       s3: 'S3 uploads',
       preview: 'Preview',
@@ -3397,7 +3417,7 @@ Important structured information may include: names, dates, locations, events, k
 
     admin: {
       loginTitle: 'Admin console',
-      title: 'RAGFlow',
+      title: '{{appName}}',
       expandSidebar: 'Expand sidebar',
       collapseSidebar: 'Collapse sidebar',
       confirm: 'Confirm',
@@ -3652,7 +3672,7 @@ Important structured information may include: names, dates, locations, events, k
           'Delete “{{name}}”? Related data owned by this resource will also be removed. This cannot be undone.',
         deleted: 'Resource deleted',
         deleteAction: 'Delete {{name}}',
-        openInRagflow: 'Open {{name}} in RAGFlow',
+        openInRagflow: 'Open {{name}} in {{appName}}',
         previewFile: 'Preview {{name}}',
         downloadFile: 'Download {{name}}',
         originalFileUnavailable: 'The linked original file is unavailable',
@@ -3979,7 +3999,7 @@ Important structured information may include: names, dates, locations, events, k
       rootDepartments: 'Top-level departments',
       assignedDepartmentUsers: 'Assigned users',
       unassignedDepartmentUsers: 'Unassigned users',
-      openRagflow: 'Open RAGFlow as this user',
+      openRagflow: 'Open {{appName}} as this user',
       status: 'Status',
       id: 'ID',
       serviceType: 'Service type',

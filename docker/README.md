@@ -98,6 +98,8 @@ The [.env](./.env) file contains important environment variables for Docker.
 
 ### RAGFlow
 
+- `APP_NAME`
+  Sets the browser title and user-facing product name at container startup. The same image can be reused with different names without rebuilding it.
 - `SVR_HTTP_PORT`
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
@@ -124,7 +126,7 @@ The [.env](./.env) file contains important environment variables for Docker.
 ### Maximum file size
 
 - `MAX_CONTENT_LENGTH`
-  The maximum file size for each uploaded file, in bytes. You can uncomment this line if you wish to change the 128M file size limit. After making the change, ensure you update `client_max_body_size` in nginx/nginx.conf correspondingly.
+  The maximum total size of one upload request, in bytes. It defaults to 2 GiB (`2147483648`). Keep `client_max_body_size` in `nginx/nginx.conf` aligned with this value.
 
 ### Doc bulk size
 

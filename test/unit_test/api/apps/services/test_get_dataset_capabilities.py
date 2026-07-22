@@ -35,6 +35,12 @@ def test_get_dataset_includes_actor_capabilities(monkeypatch):
     workspace = SimpleNamespace(name="Team")
     creator = SimpleNamespace(nickname="Creator", avatar="avatar")
     expected_capabilities = {"read": True, "update": False, "delete": False}
+    expected_quota = {
+        "file_count_limit": 10,
+        "storage_bytes_limit": 1024,
+        "file_count_used": 2,
+        "storage_bytes_used": 256,
+    }
 
     monkeypatch.setattr(dataset_api_service.KnowledgebaseService, "accessible", lambda *_args: True)
     monkeypatch.setattr(dataset_api_service.KnowledgebaseService, "get_by_id", lambda _dataset_id: (True, knowledgebase))
@@ -42,6 +48,7 @@ def test_get_dataset_includes_actor_capabilities(monkeypatch):
     monkeypatch.setattr(dataset_api_service.Connector2KbService, "list_connectors", lambda _dataset_id: [])
     monkeypatch.setattr(dataset_api_service.TenantService, "get_by_id", lambda _workspace_id: (True, workspace))
     monkeypatch.setattr(dataset_api_service.UserService, "get_by_id", lambda _user_id: (True, creator))
+    monkeypatch.setattr(dataset_api_service.ResourceQuotaService, "get_dataset_quota", lambda _dataset_id: expected_quota)
     monkeypatch.setattr(dataset_api_service.WorkspaceAccessService, "get_workspace_type", lambda _workspace_id: "team")
     monkeypatch.setattr(
         dataset_api_service.WorkspaceAccessService,
@@ -55,6 +62,7 @@ def test_get_dataset_includes_actor_capabilities(monkeypatch):
     assert result["capabilities"] == expected_capabilities
     assert result["workspace_name"] == "Team"
     assert result["creator_name"] == "Creator"
+    assert result["quota"] == expected_quota
 
 
 def test_update_dataset_ignores_workspace_changes(monkeypatch):

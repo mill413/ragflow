@@ -195,7 +195,9 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
                     <ChatBasicSetting
                       workspaceId={data.tenant_id}
                     ></ChatBasicSetting>
-                    <ChatPromptEngine></ChatPromptEngine>
+                    <ChatPromptEngine
+                      readOnly={data?.capabilities?.update !== true}
+                    ></ChatPromptEngine>
                   </section>
                 </ScrollArea>
 

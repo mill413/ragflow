@@ -38,6 +38,7 @@ services:
       # - --no-json-response
     env_file: .env
     environment:
+      APP_NAME: ${APP_NAME:-RAGFlow}
       API_PROXY_SCHEME: python
       DOC_ENGINE: elasticsearch
       ES_HOST: es01

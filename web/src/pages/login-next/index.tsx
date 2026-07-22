@@ -1,5 +1,6 @@
 import SvgIcon from '@/components/svg-icon';
 import { useAuth } from '@/hooks/auth-hooks';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import {
   useLogin,
   useLoginChannels,
@@ -246,6 +247,7 @@ function LoginFormContent({
 }
 
 const Login = () => {
+  const { appName } = useFetchAppConf();
   const [title, setTitle] = useState('login');
   const navigate = useNavigate();
   const { login, loading: signLoading } = useLogin();
@@ -384,7 +386,7 @@ const Login = () => {
                 className="size-8 mr-[12] cursor-pointer"
               />
             </div>
-            <div className="text-xl font-bold self-center">RAGFlow</div>
+            <div className="text-xl font-bold self-center">{appName}</div>
           </div>
           <h1 className="text-[36px] font-medium  text-center mb-2">
             {t('title')}

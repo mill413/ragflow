@@ -57,7 +57,7 @@ if __name__ == "__main__":
     app.config["SESSION_PERMANENT"] = False
     app.config["SESSION_TYPE"] = "filesystem"
     app.config["SESSION_COOKIE_NAME"] = "ragflow_admin_session"
-    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024))
+    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 2 * 1024 * 1024 * 1024))
     app.config["SECRET_KEY"] = settings.get_secret_key()
     Session(app)
     logging.info(f"RAGFlow admin version: {get_ragflow_version()}")

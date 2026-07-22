@@ -1,4 +1,5 @@
 import { FileUploader } from '@/components/file-uploader';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import { RAGFlowFormItem } from '@/components/ragflow-form';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
@@ -60,6 +61,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   onUpload,
 }) => {
   const { t } = useTranslation();
+  const { appName } = useFetchAppConf();
   const [activeTab, setActiveTab] = useState('upload');
 
   // Upload form with react-hook-form
@@ -645,8 +647,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
         t('skills.validation.valid') || 'Valid skill format',
       );
 
-      // 4. Upload to RAGFlow
-      setGitProgress('Uploading to RAGFlow...');
+      setGitProgress(`Uploading to ${appName}...`);
       const skillName =
         validation.name || repo.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
 
@@ -670,6 +671,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
     gitVersion,
     gitPlatform,
     gitToken,
+    appName,
     t,
     parseGitUrl,
     fetchGitDirectoryContents,
