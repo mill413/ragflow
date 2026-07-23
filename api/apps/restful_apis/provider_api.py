@@ -327,7 +327,6 @@ async def create_provider_instance(tenant_id: str = None, provider_id_or_name: s
             - api_key
             - base_url
             - region
-            - model_info
           properties:
             instance_name:
               type: string
@@ -594,7 +593,6 @@ async def update_provider_instance(tenant_id: str = None, provider_id_or_name: s
             - api_key
             - base_url
             - region
-            - model_info
           properties:
             instance_name:
               type: string
@@ -642,7 +640,7 @@ async def update_provider_instance(tenant_id: str = None, provider_id_or_name: s
         return get_error_argument_result(message="instance_id_or_name is required")
     if not data:
         return get_error_argument_result(message="Request body is required")
-    required_keys = ["instance_name", "api_key", "base_url", "model_info"]
+    required_keys = ["instance_name", "api_key", "base_url"]
     missing = [k for k in required_keys if k not in data]
     if missing:
         return get_error_argument_result(message=f"Missing required fields: {', '.join(missing)}")
@@ -651,7 +649,7 @@ async def update_provider_instance(tenant_id: str = None, provider_id_or_name: s
     api_key = data["api_key"]
     base_url = data["base_url"]
     region = data.get("region", "default")
-    model_info = data["model_info"]
+    model_info = data.get("model_info")
     verify = data.get("verify", True)
 
     try:

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
+import { ReadOnlyResourceNotice } from '@/components/read-only-resource-notice';
 import { Plus } from 'lucide-react';
 import { ProfileSettingWrapperCard } from '../components/user-setting-header';
 import AddDataSourceModal from './add-datasource-modal';
@@ -106,6 +107,12 @@ const DataSource = () => {
       }
     >
       <div className="h-full p-5 overflow-x-hidden overflow-y-auto">
+        {!canRunInWritableWorkspace && (
+          <div className="mb-5">
+            <ReadOnlyResourceNotice resource={t('setting.dataSources')} />
+          </div>
+        )}
+
         <section className="flex flex-col gap-3">
           {categorizedList?.length <= 0 && (
             <div className="text-text-secondary w-full flex justify-center items-center h-20">

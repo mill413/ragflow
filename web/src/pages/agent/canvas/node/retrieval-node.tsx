@@ -1,7 +1,7 @@
 import { NodeCollapsible } from '@/components/collapse';
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { useFetchKnowledgeList } from '@/hooks/use-knowledge-request';
-import { useFetchAllMemoryList } from '@/hooks/use-memory-request';
+import { useFetchWorkspaceMemoryList } from '@/hooks/use-memory-request';
 import { BaseNode } from '@/interfaces/database/agent';
 import { NodeProps, Position } from '@xyflow/react';
 import classNames from 'classnames';
@@ -37,7 +37,7 @@ function InnerRetrievalNode({
 
   const isMemory = data.form?.retrieval_from === RetrievalFrom.Memory;
 
-  const memoryList = useFetchAllMemoryList();
+  const memoryList = useFetchWorkspaceMemoryList(ownerTenantId);
 
   return (
     <ToolBar selected={selected} id={id} label={data.label}>

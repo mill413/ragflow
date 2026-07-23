@@ -850,11 +850,6 @@ export function StandardResourceDetail({
         <AdminDetailTabsTrigger value="configuration">
           {t('admin.resourceManagementPage.resourceDetail.configuration')}
         </AdminDetailTabsTrigger>
-        {detail.resource.resource_type === 'chat' && (
-          <AdminDetailTabsTrigger value="sessions">
-            {t('admin.resourceManagementPage.chatSessions.title')}
-          </AdminDetailTabsTrigger>
-        )}
       </TabsList>
 
       <TabsContent value="overview" className="mt-0 space-y-5">
@@ -908,6 +903,15 @@ export function StandardResourceDetail({
             </div>
           </section>
         )}
+
+        {detail.resource.resource_type === 'chat' && (
+          <section className="space-y-3">
+            <div className="text-sm font-medium">
+              {t('admin.resourceManagementPage.chatSessions.title')}
+            </div>
+            <ChatSessionMonitor resourceId={detail.resource.id} />
+          </section>
+        )}
       </TabsContent>
 
       <TabsContent value="configuration" className="mt-0 space-y-3">
@@ -916,11 +920,6 @@ export function StandardResourceDetail({
           configuration={detail.configuration ?? {}}
         />
       </TabsContent>
-      {detail.resource.resource_type === 'chat' && (
-        <TabsContent value="sessions" className="mt-0">
-          <ChatSessionMonitor resourceId={detail.resource.id} />
-        </TabsContent>
-      )}
     </Tabs>
   );
 }

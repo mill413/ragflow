@@ -9,6 +9,7 @@ import { SwitchFormField } from '@/components/switch-fom-field';
 import { TavilyFormField } from '@/components/tavily-form-field';
 import { TOCEnhanceFormField } from '@/components/toc-enhance-form-field';
 import { TopNFormField } from '@/components/top-n-item';
+import { Button } from '@/components/ui/button';
 import {
   FormControl,
   FormField,
@@ -19,25 +20,74 @@ import {
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { UseKnowledgeGraphFormField } from '@/components/use-knowledge-graph-item';
 import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
 import { prefixName } from '@/utils/form';
 import { getDirAttribute } from '@/utils/text-direction';
-import { useEffect, useMemo } from 'react';
+import { RotateCcw, Sparkles } from 'lucide-react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router';
 import { DynamicVariableForm } from './dynamic-variable';
+import { PromptOptimizerDialog } from './prompt-optimizer-dialog';
 
 interface ChatPromptEngineProps {
   prefix?: string;
+  readOnly?: boolean;
 }
 
-export function ChatPromptEngine({ prefix = '' }: ChatPromptEngineProps) {
+function ActionTooltip({
+  content,
+  children,
+}: {
+  content?: string;
+  children: ReactNode;
+}) {
+  if (!content) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex cursor-not-allowed [&>button]:pointer-events-none"
+          tabIndex={0}
+        >
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{content}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function ChatPromptEngine({
+  prefix = '',
+  readOnly = false,
+}: ChatPromptEngineProps) {
   const { t } = useTranslation();
+  const { id: chatId = '' } = useParams();
   const form = useFormContext();
+  const [optimizerOpen, setOptimizerOpen] = useState(false);
+  const [promptSnapshot, setPromptSnapshot] = useState('');
   const systemPromptValue = form.watch(
     prefixName(prefix, 'prompt_config.system'),
   );
+  const llmId = form.watch(prefixName(prefix, 'llm_id'));
+
+  const optimizeDisabledReason = readOnly
+    ? t('common.readOnlySaveTip')
+    : !String(systemPromptValue || '').trim()
+      ? t('chat.optimizePromptEmptyTip')
+      : !llmId
+        ? t('chat.optimizePromptModelTip')
+        : !chatId
+          ? t('chat.optimizePromptUnsavedTip')
+          : undefined;
 
   const emptyResponseValue = form.watch(
     prefixName(prefix, 'prompt_config.empty_response'),
@@ -205,9 +255,60 @@ export function ChatPromptEngine({ prefix = '' }: ChatPromptEngineProps) {
                   dir={getDirAttribute(systemPromptValue || '')}
                 />
               </FormControl>
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
+                <ActionTooltip
+                  content={readOnly ? t('common.readOnlySaveTip') : undefined}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={readOnly}
+                    onClick={() => {
+                      form.setValue(
+                        prefixName(prefix, 'prompt_config.system'),
+                        t('chat.systemInitialValue'),
+                        { shouldDirty: true, shouldValidate: true },
+                      );
+                    }}
+                  >
+                    <RotateCcw />
+                    {t('chat.restoreDefaultPrompt')}
+                  </Button>
+                </ActionTooltip>
+                <ActionTooltip content={optimizeDisabledReason}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(optimizeDisabledReason)}
+                    onClick={() => {
+                      setPromptSnapshot(systemPromptValue);
+                      setOptimizerOpen(true);
+                    }}
+                  >
+                    <Sparkles />
+                    {t('chat.optimizePrompt')}
+                  </Button>
+                </ActionTooltip>
+              </div>
               <FormMessage />
             </FormItem>
           )}
+        />
+        <PromptOptimizerDialog
+          chatId={chatId}
+          llmId={llmId}
+          prompt={promptSnapshot}
+          open={optimizerOpen}
+          onOpenChange={setOptimizerOpen}
+          onApply={(optimizedPrompt) => {
+            form.setValue(
+              prefixName(prefix, 'prompt_config.system'),
+              optimizedPrompt,
+              { shouldDirty: true, shouldValidate: true },
+            );
+          }}
         />
         <SimilaritySliderFormField
           isTooltipShown

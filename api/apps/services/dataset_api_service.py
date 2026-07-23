@@ -26,6 +26,7 @@ from api.db.services.document_service import DocumentService, queue_raptor_o_gra
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
+from api.db.services.resource_quota_service import ResourceQuotaService
 from api.db.services.resource_reference_service import ResourceReferenceService
 from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
@@ -257,6 +258,7 @@ def get_dataset(dataset_id: str, tenant_id: str):
     response_data = remap_dictionary_keys(kb.to_dict())
     response_data["size"] = DocumentService.get_total_size_by_kb_id(dataset_id)
     response_data["connectors"] = list(Connector2KbService.list_connectors(dataset_id))
+    response_data["quota"] = ResourceQuotaService.get_dataset_quota(dataset_id)
     workspace_exists, workspace = TenantService.get_by_id(kb.tenant_id)
     creator_exists, creator = UserService.get_by_id(kb.created_by)
     response_data.update(
@@ -488,6 +490,8 @@ def list_datasets(tenant_id: str, args: dict):
         visible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(tenant_id))
         if not set(tenant_ids).issubset(visible_workspace_ids):
             return False, "No authorization."
+        personal_user_id = tenant_id if tenant_id in tenant_ids else ""
+        tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != personal_user_id]
     else:
         tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
         tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]

@@ -1,4 +1,5 @@
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -46,6 +47,7 @@ export function Header({
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const { pathname } = useLocation();
+  const { appName } = useFetchAppConf();
   const { t } = useTranslation();
   const changeLanguage = useChangeLanguage();
 
@@ -99,7 +101,11 @@ export function Header({
               aria-current={pathname === Routes.Root ? 'page' : undefined}
               className="flex size-10 shrink-0 items-center justify-center"
             >
-              <img src={'/logo.svg'} alt="RAGFlow logo" className="size-10" />
+              <img
+                src={'/logo.svg'}
+                alt={`${appName} logo`}
+                className="size-10"
+              />
             </Link>
           </div>
         </div>

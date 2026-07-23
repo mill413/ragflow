@@ -36,11 +36,12 @@ from api.db.joint_services.tenant_model_service import (
     ensure_opendataloader_from_env,
     ensure_paddleocr_from_env,
     get_first_provider_model_name,
+    get_model_type_by_id,
     resolve_model_config,
     get_tenant_default_model_by_type,
 )
-from rag.utils.file_utils import extract_embed_file, extract_links_from_pdf, extract_links_from_docx, extract_html
-from deepdoc.parser import DocxParser, EpubParser, ExcelParser, HtmlParser, JsonParser, MarkdownElementExtractor, MarkdownParser, PdfParser, TxtParser
+from rag.utils.file_utils import extract_embed_file, extract_links_from_pdf, extract_links_from_docx, extract_html, is_docx_package
+from deepdoc.parser import DocxParser, EpubParser, ExcelParser, HtmlParser, JsonParser, MarkdownElementExtractor, MarkdownParser, PdfParser, TxtParser, WpsParser
 from deepdoc.parser.figure_parser import VisionFigureParser, vision_figure_parser_docx_wrapper_naive, vision_figure_parser_pdf_wrapper
 from deepdoc.parser.pdf_parser import PlainParser, VisionParser
 from deepdoc.parser.docling_parser import DoclingParser
@@ -390,6 +391,40 @@ class Docx(DocxParser):
         line = re.sub(r"\u3000", " ", line).strip()
         return line
 
+    def __cell_to_html(self, cell):
+        parts = []
+        for child in cell._tc.iterchildren():
+            if child.tag.endswith("p"):
+                text = Paragraph(child, cell).text.strip()
+                if text:
+                    parts.append(text)
+            elif child.tag.endswith("tbl"):
+                parts.append(self.__table_to_html(DocxTable(child, cell)))
+        return "<br>".join(parts)
+
+    def __table_to_html(self, table):
+        html = "<table>"
+        for row in table.rows:
+            html += "<tr>"
+            col_idx = 0
+            try:
+                while col_idx < len(row.cells):
+                    span = 1
+                    cell = row.cells[col_idx]
+                    for next_idx in range(col_idx + 1, len(row.cells)):
+                        if cell._tc is row.cells[next_idx]._tc:
+                            span += 1
+                            col_idx = next_idx
+                        else:
+                            break
+                    col_idx += 1
+                    content = self.__cell_to_html(cell)
+                    html += f"<td>{content}</td>" if span == 1 else f"<td colspan='{span}'>{content}</td>"
+            except Exception as e:
+                logging.warning(f"Error parsing table, ignore: {e}")
+            html += "</tr>"
+        return html + "</table>"
+
     def __get_nearest_title(self, table_index, filename):
         """Get the hierarchical title structure before the table"""
         import re
@@ -583,25 +618,8 @@ class Docx(DocxParser):
                 html = "<table>"
                 if title:
                     html += f"<caption>Table Location: {title}</caption>"
-                for r in tb.rows:
-                    html += "<tr>"
-                    col_idx = 0
-                    try:
-                        while col_idx < len(r.cells):
-                            span = 1
-                            c = r.cells[col_idx]
-                            for j in range(col_idx + 1, len(r.cells)):
-                                if c.text == r.cells[j].text:
-                                    span += 1
-                                    col_idx = j
-                                else:
-                                    break
-                            col_idx += 1
-                            html += f"<td>{c.text}</td>" if span == 1 else f"<td colspan='{span}'>{c.text}</td>"
-                    except Exception as e:
-                        logging.warning(f"Error parsing table, ignore: {e}")
-                    html += "</tr>"
-                html += "</table>"
+                table_html = self.__table_to_html(tb)
+                html += table_html[len("<table>") :]
                 lines.append({"text": "", "image": None, "table": html})
                 table_idx += 1
 
@@ -940,7 +958,10 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
                     callback(0.05, error_msg)
                 continue
 
-    if re.search(r"\.docx$", filename, re.IGNORECASE):
+    is_wps = bool(re.search(r"\.wps$", filename, re.IGNORECASE))
+    if re.search(r"\.docx$", filename, re.IGNORECASE) or (
+        is_wps and is_docx_package(binary)
+    ):
         callback(0.1, "Start to parse.")
         if parser_config.get("analyze_hyperlink", False) and is_root:
             urls = extract_links_from_docx(binary)
@@ -990,7 +1011,19 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
             layout_recognizer = "DeepDOC" if layout_recognizer else "PlainText"
 
         name = layout_recognizer.strip().lower()
-        parser = PARSERS.get(name, by_plaintext)
+        parser = PARSERS.get(name)
+        if parser is None and parser_model_name is None:
+            try:
+                model_types = get_model_type_by_id(layout_recognizer)
+            except LookupError:
+                pass
+            else:
+                if LLMType.OCR.value in model_types:
+                    model_config = resolve_model_config(kwargs.get("tenant_id"), LLMType.OCR, layout_recognizer)
+                    name = model_config["llm_factory"].strip().lower()
+                    parser_model_name = layout_recognizer
+                    parser = PARSERS.get(name)
+        parser = parser or by_plaintext
         callback(0.1, "Start to parse.")
 
         sections, tables, pdf_parser = parser(
@@ -1138,6 +1171,17 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
         sections = _normalize_section_text_for_rtl_presentation_forms(sections)
         callback(0.8, "Finish parsing.")
 
+    elif is_wps:
+        callback(0.1, "Start to parse.")
+        text = WpsParser()(filename, binary)
+        sections = TxtParser.parser_txt(
+            text,
+            parser_config.get("chunk_token_num", 128),
+            parser_config.get("delimiter", "\n!?;。；！？"),
+        )
+        sections = _normalize_section_text_for_rtl_presentation_forms(sections)
+        callback(0.8, "Finish parsing.")
+
     elif re.search(r"\.doc$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
 
@@ -1161,7 +1205,9 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
             logging.warning(error_msg)
             return []
     else:
-        raise NotImplementedError("file type not supported yet(pdf, xlsx, doc, docx, txt supported)")
+        raise NotImplementedError(
+            "file type not supported yet(pdf, xlsx, doc, docx, wps, txt supported)"
+        )
 
     st = timer()
     overlapped_percent = normalize_overlapped_percent(parser_config.get("overlapped_percent", 0))

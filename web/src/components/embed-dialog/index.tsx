@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SharedFrom } from '@/constants/chat';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import {
   LanguageAbbreviation,
   LanguageAbbreviationMap,
@@ -124,6 +125,7 @@ function EmbedDialog({
   visible,
 }: IProps) {
   const { t } = useTranslation();
+  const { appName } = useFetchAppConf();
   const isDarkTheme = useIsDarkTheme();
 
   const form = useForm<z.infer<typeof FormSchema>>({
@@ -435,7 +437,7 @@ window.addEventListener('message',e=>{
                       name="widgetFooterText"
                       label="Footer text"
                     >
-                      <Input placeholder="Powered by RAGFlow"></Input>
+                      <Input placeholder={`Powered by ${appName}`}></Input>
                     </RAGFlowFormItem>
                     <RAGFlowFormItem
                       name="widgetFooterLink"

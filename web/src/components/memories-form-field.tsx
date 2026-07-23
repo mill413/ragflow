@@ -1,6 +1,6 @@
-import { useFetchAllMemoryList } from '@/hooks/use-memory-request';
+import { useFetchWorkspaceMemoryList } from '@/hooks/use-memory-request';
 import { IMemory } from '@/interfaces/database/memory';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { RAGFlowAvatar } from './ragflow-avatar';
@@ -10,6 +10,7 @@ import { MultiSelect } from './ui/multi-select';
 type MemoriesFormFieldProps = {
   label: string;
   name?: string;
+  workspaceId?: string;
 };
 
 function MemoryLabel({ text }: { text: string }) {
@@ -20,11 +21,18 @@ function MemoryLabel({ text }: { text: string }) {
   );
 }
 
-export function useDisableDifferenceEmbeddingMemory(name: string) {
+export function useDisableDifferenceEmbeddingMemory(
+  name: string,
+  workspaceId?: string,
+) {
   const form = useFormContext();
   const memoryIds = useWatch({ name, control: form.control });
-  const { data: memoryListOrigin } = useFetchAllMemoryList();
+  const { data: memoryListOrigin } = useFetchWorkspaceMemoryList(workspaceId);
   const memoryCacheRef = useRef(new Map<string, IMemory>());
+
+  useEffect(() => {
+    memoryCacheRef.current.clear();
+  }, [workspaceId]);
 
   const memoryList = useMemo(() => {
     memoryListOrigin?.forEach((memory) => {
@@ -77,9 +85,10 @@ export function useDisableDifferenceEmbeddingMemory(name: string) {
 export function MemoriesFormField({
   label,
   name = 'memory_ids',
+  workspaceId,
 }: MemoriesFormFieldProps) {
   const { t } = useTranslation();
-  const { options } = useDisableDifferenceEmbeddingMemory(name);
+  const { options } = useDisableDifferenceEmbeddingMemory(name, workspaceId);
 
   return (
     <RAGFlowFormItem name={name} label={label}>

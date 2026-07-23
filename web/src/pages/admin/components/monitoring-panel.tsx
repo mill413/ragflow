@@ -1,8 +1,9 @@
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
 import { useQuery } from '@tanstack/react-query';
+import * as echarts from 'echarts';
 import {
   Activity,
   Bot,
@@ -16,16 +17,6 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react';
-import {
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-} from 'recharts';
-import type { PieLabelRenderProps } from 'recharts';
-
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -73,17 +64,146 @@ function formatPercentage(value: number, total: number) {
   return `${percentage.toFixed(percentage >= 10 ? 1 : 2)}%`;
 }
 
-function renderStorageLabel({ name, x, y, textAnchor }: PieLabelRenderProps) {
+type StorageDistributionItem = {
+  workspace_id: string;
+  label: string;
+  storage_bytes: number;
+  percentage: string;
+  color: string;
+};
+
+function StorageDistributionChart({
+  data,
+}: {
+  data: StorageDistributionItem[];
+}) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
+
+  const showWorkspaceTooltip = (dataIndex: number) => {
+    chartInstanceRef.current?.dispatchAction({
+      type: 'highlight',
+      seriesIndex: 0,
+      dataIndex,
+    });
+    chartInstanceRef.current?.dispatchAction({
+      type: 'showTip',
+      seriesIndex: 0,
+      dataIndex,
+    });
+  };
+
+  const hideWorkspaceTooltip = (dataIndex: number) => {
+    chartInstanceRef.current?.dispatchAction({
+      type: 'downplay',
+      seriesIndex: 0,
+      dataIndex,
+    });
+    chartInstanceRef.current?.dispatchAction({ type: 'hideTip' });
+  };
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+
+    const resolveThemeColors = () => {
+      const styles = getComputedStyle(chartRef.current!);
+      const textChannels = styles.getPropertyValue('--text-primary').trim();
+      return {
+        backgroundColor:
+          styles.getPropertyValue('--bg-component').trim() || '#ffffff',
+        borderColor:
+          styles.getPropertyValue('--border-default').trim() || '#d9d9d9',
+        textColor: textChannels ? `rgb(${textChannels})` : '#161618',
+      };
+    };
+    const themeColors = resolveThemeColors();
+    const chart = echarts.init(chartRef.current, undefined, {
+      renderer: 'svg',
+    });
+    chartInstanceRef.current = chart;
+    const option: echarts.EChartsOption = {
+      tooltip: {
+        trigger: 'item',
+        confine: true,
+        backgroundColor: themeColors.backgroundColor,
+        borderColor: themeColors.borderColor,
+        textStyle: { color: themeColors.textColor },
+        formatter: (params) => {
+          if (Array.isArray(params)) return '';
+          const item = data[params.dataIndex];
+          return `${item.label}<br/>${formatDecimalBytes(item.storage_bytes, {
+            decimals: 1,
+          })} (${item.percentage})`;
+        },
+      },
+      legend: {
+        show: false,
+      },
+      series: [
+        {
+          type: 'pie',
+          radius: ['48%', '72%'],
+          center: ['50%', '42%'],
+          avoidLabelOverlap: true,
+          label: {
+            color: themeColors.textColor,
+            formatter: '{b}',
+          },
+          data: data.map((item) => ({
+            name: item.label,
+            value: item.storage_bytes,
+            itemStyle: { color: item.color },
+          })),
+        },
+      ],
+    };
+    chart.setOption(option);
+
+    const resizeObserver = new ResizeObserver(() => chart.resize());
+    resizeObserver.observe(chartRef.current);
+    const themeObserver = new MutationObserver(() => {
+      const colors = resolveThemeColors();
+      chart.setOption({
+        tooltip: {
+          backgroundColor: colors.backgroundColor,
+          borderColor: colors.borderColor,
+          textStyle: { color: colors.textColor },
+        },
+        series: [{ label: { color: colors.textColor } }],
+      });
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+    return () => {
+      resizeObserver.disconnect();
+      themeObserver.disconnect();
+      chartInstanceRef.current = null;
+      chart.dispose();
+    };
+  }, [data]);
+
   return (
-    <text
-      x={x}
-      y={y}
-      className="fill-text-primary"
-      textAnchor={textAnchor as 'start' | 'middle' | 'end' | undefined}
-      dominantBaseline="central"
-    >
-      {name}
-    </text>
+    <div className="min-w-0">
+      <div ref={chartRef} className="h-[280px] w-full" />
+      <div className="flex min-h-10 items-center gap-4 overflow-x-auto pb-1 text-sm text-text-primary">
+        {data.map((item, index) => (
+          <span
+            key={item.workspace_id}
+            className="flex shrink-0 items-center gap-1.5"
+            onMouseEnter={() => showWorkspaceTooltip(index)}
+            onMouseLeave={() => hideWorkspaceTooltip(index)}
+          >
+            <span
+              className="h-3 w-6 rounded-sm"
+              style={{ backgroundColor: item.color }}
+            />
+            <span>{item.label}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -267,7 +387,7 @@ export default function MonitoringPanel() {
         )}
       </div>
 
-      <div>
+      <div className="grid gap-4 lg:grid-cols-3">
         <Link
           to={Routes.AdminFileManagement}
           aria-label={t('admin.monitoringPage.storageDistribution')}
@@ -279,55 +399,9 @@ export default function MonitoringPanel() {
                 {t('admin.monitoringPage.storageDistribution')}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pb-5">
               {storageData.length ? (
-                <div className="h-80 min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart
-                      margin={{ top: 24, right: 100, bottom: 36, left: 100 }}
-                    >
-                      <Pie
-                        data={storageData}
-                        dataKey="storage_bytes"
-                        nameKey="label"
-                        innerRadius="48%"
-                        outerRadius="72%"
-                        cy="42%"
-                        labelLine
-                        label={renderStorageLabel}
-                      >
-                        {storageData.map((item) => (
-                          <Cell key={item.workspace_id} fill={item.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip
-                        formatter={(value, _name, item) => [
-                          `${formatDecimalBytes(Number(value), { decimals: 1 })} (${item.payload.percentage})`,
-                          item.payload.label,
-                        ]}
-                        contentStyle={{
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--border-default)',
-                          borderRadius: 8,
-                        }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        align="center"
-                        layout="horizontal"
-                        iconType="circle"
-                        wrapperStyle={{
-                          maxHeight: 36,
-                          overflowY: 'auto',
-                          color: 'var(--text-primary)',
-                        }}
-                        formatter={(value) => (
-                          <span className="text-text-primary">{value}</span>
-                        )}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <StorageDistributionChart data={storageData} />
               ) : (
                 <div className="text-sm text-text-secondary">
                   {t('admin.monitoringPage.noStorage')}
