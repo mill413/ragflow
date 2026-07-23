@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -114,11 +121,12 @@ const AdminProviderConfiguration = forwardRef<
   DynamicFormRef,
   AdminProviderConfigurationProps
 >(({ providerName, initialValues, onSubmit }, ref) => {
+  const hideWhenInstanceExists = useCallback(() => true, []);
   const { fields } = useProviderFields({
     llmFactory: providerName,
     editMode: true,
     initialValues,
-    hideWhenInstanceExists: () => true,
+    hideWhenInstanceExists,
   });
   const providerFields = useMemo(
     () => fields.filter((field) => field.name !== 'instance_name'),
@@ -243,7 +251,8 @@ export default function AdminModels() {
       } else {
         setVerificationResult({
           valid: false,
-          message: result.message || t('admin.modelManagementPage.verifyFailed'),
+          message:
+            result.message || t('admin.modelManagementPage.verifyFailed'),
         });
       }
     },

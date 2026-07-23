@@ -15,6 +15,10 @@
 #
 
 from docx import Document
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 import re
 import pandas as pd
 from collections import Counter
@@ -70,10 +74,31 @@ class RAGFlowDocxParser:
             return None
         return LazyImage(image_blobs)
 
+    def __extract_cell_content(self, cell):
+        blocks = []
+        for child in cell._tc.iterchildren():
+            if isinstance(child, CT_P):
+                text = Paragraph(child, cell).text.strip()
+                if text:
+                    blocks.append(text)
+            elif isinstance(child, CT_Tbl):
+                nested_table = Table(child, cell)
+                nested_rows = []
+                for row in nested_table.rows:
+                    values = [
+                        self.__extract_cell_content(nested_cell).strip()
+                        for nested_cell in row.cells
+                    ]
+                    if any(values):
+                        nested_rows.append(" | ".join(values))
+                if nested_rows:
+                    blocks.append("\n".join(nested_rows))
+        return "\n".join(blocks)
+
     def __extract_table_content(self, tb):
         df = []
         for row in tb.rows:
-            df.append([c.text for c in row.cells])
+            df.append([self.__extract_cell_content(c) for c in row.cells])
         return self.__compose_table_content(pd.DataFrame(df))
 
     def __compose_table_content(self, df):

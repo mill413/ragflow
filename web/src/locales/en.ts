@@ -3649,6 +3649,7 @@ Important structured information may include: names, dates, locations, events, k
         failures: 'Parse failures',
         failureDescription:
           'View files that failed to parse in datasets and their failure reasons.',
+        viewFullFailureReason: 'Click the row to view the full reason',
         sessions: 'Sessions',
         referencedDatasets: 'Datasets',
         referencedDocuments: 'Selected files',
