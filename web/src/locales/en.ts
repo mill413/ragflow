@@ -3446,17 +3446,36 @@ Important structured information may include: names, dates, locations, events, k
       },
 
       resourceQuota: {
-        title: 'Upload quota settings',
+        title: 'Resource quota settings',
         fileCount: 'File count usage',
         storage: 'File storage usage',
         fileCountLimit: 'File count limit',
         storageLimit: 'File storage limit',
+        creationLimits: 'Resource creation limits',
+        metrics: {
+          team_count: 'Teams created',
+          dataset_count: 'Datasets',
+          chat_count: 'Chats',
+          search_count: 'Searches',
+          agent_count: 'Agents',
+          memory_count: 'Memories',
+        },
+        metricLimits: {
+          team_count: 'Team limit',
+          dataset_count: 'Dataset limit',
+          chat_count: 'Chat limit',
+          search_count: 'Search limit',
+          agent_count: 'Agent limit',
+          memory_count: 'Memory limit',
+        },
         unlimited: 'Unlimited',
         invalidLimit:
           'Quota limits must be valid values greater than or equal to 0',
         help: 'Leave blank for unlimited. Set to 0 to prevent further uploads. Both workspace and dataset quotas are checked during upload.',
-        configure: 'Configure upload quota',
-        updated: 'Upload quota updated',
+        creationHelp:
+          'Leave blank for unlimited. Set to 0 to prevent creating that resource. Existing resources are retained, but no more can be created after reaching the limit.',
+        configure: 'Configure resource quota',
+        updated: 'Resource quota updated',
       },
 
       permissionType: {

@@ -118,6 +118,7 @@ async def create_dataset(user_id: str, workspace_id: str, req: dict):
 
     if not WorkspaceAccessService.can_create_knowledgebase(user_id, workspace_id):
         return False, "No authorization."
+    ResourceQuotaService.ensure_resource_creation_allowed(workspace_id, "dataset")
     workspace_type = WorkspaceAccessService.get_workspace_type(workspace_id)
     req["permission"] = TenantPermission.ME if workspace_type == WorkspaceType.PERSONAL else TenantPermission.TEAM
     e, create_dict = KnowledgebaseService.create_with_name(

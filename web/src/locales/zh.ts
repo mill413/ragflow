@@ -3183,16 +3183,35 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
       },
 
       resourceQuota: {
-        title: '上传配额设置',
+        title: '资源配额设置',
         fileCount: '文件数量用量',
         storage: '文件存储用量',
         fileCountLimit: '文件数量上限',
         storageLimit: '文件存储上限',
+        creationLimits: '资源创建上限',
+        metrics: {
+          team_count: '已创建团队',
+          dataset_count: '知识库',
+          chat_count: '聊天',
+          search_count: '搜索',
+          agent_count: '智能体',
+          memory_count: '记忆',
+        },
+        metricLimits: {
+          team_count: '团队数量上限',
+          dataset_count: '知识库数量上限',
+          chat_count: '聊天数量上限',
+          search_count: '搜索数量上限',
+          agent_count: '智能体数量上限',
+          memory_count: '记忆数量上限',
+        },
         unlimited: '不限制',
         invalidLimit: '配额必须是大于或等于 0 的有效数值',
         help: '留空表示不限制；设置为 0 表示禁止继续上传文件。上传时会同时检查工作空间和知识库配额。',
-        configure: '设置上传配额',
-        updated: '上传配额已更新',
+        creationHelp:
+          '留空表示不限制；设置为 0 表示禁止创建对应资源。已有资源不会被删除，但达到上限后无法继续创建。',
+        configure: '设置资源配额',
+        updated: '资源配额已更新',
       },
 
       permissionType: {

@@ -563,12 +563,8 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
     },
   });
   const quotaMutation = useMutation({
-    mutationFn: (
-      quota: Pick<
-        AdminService.ResourceQuota,
-        'file_count_limit' | 'storage_bytes_limit'
-      >,
-    ) => updateUserQuota(email!, quota),
+    mutationFn: (quota: AdminService.ResourceQuotaLimits) =>
+      updateUserQuota(email!, quota),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
       message.success(t('admin.resourceQuota.updated'));
@@ -738,7 +734,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
               <div className="mb-3 text-sm font-medium">
                 {t('admin.resourceQuota.title')}
               </div>
-              <ResourceQuotaCards quota={detail?.quota} />
+              <ResourceQuotaCards quota={detail?.quota} scopeType="personal" />
             </section>
 
             <section className="min-w-0 py-5">
@@ -906,6 +902,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
       <ResourceQuotaDialog
         open={quotaOpen}
         quota={detail?.quota}
+        scopeType="personal"
         saving={quotaMutation.isPending}
         onOpenChange={setQuotaOpen}
         onSave={(quota) => quotaMutation.mutate(quota)}

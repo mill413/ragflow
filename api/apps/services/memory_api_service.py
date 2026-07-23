@@ -17,6 +17,7 @@ from api.apps import current_user
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.memory_service import MemoryService
 from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.resource_quota_service import ResourceQuotaService
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService
@@ -114,6 +115,7 @@ async def create_memory(memory_info: dict):
     workspace_id = memory_info.get("workspace_id", current_user.id)
     if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
         raise ArgumentException("No authorization for the selected workspace.")
+    ResourceQuotaService.ensure_resource_creation_allowed(workspace_id, "memory")
     permissions = (
         TenantPermission.TEAM
         if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM

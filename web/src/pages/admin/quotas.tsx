@@ -17,12 +17,7 @@ import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Collapsible,
@@ -55,9 +50,7 @@ import {
 } from '@/services/admin-service';
 
 import { DetailInformationCard } from './components/detail-information-card';
-import {
-  ResourceQuotaDialog,
-} from './components/resource-quota';
+import { ResourceQuotaDialog } from './components/resource-quota';
 import { StorageSize } from './components/storage-size';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { matchesSelectedFilter } from './components/table-filter-utils';
@@ -76,20 +69,26 @@ type QuotaState = 'unlimited' | 'configured' | 'overLimit';
 const PAGE_SIZE = 20;
 
 function getQuotaState(quota: AdminService.ResourceQuota): QuotaState {
-  const overFileLimit =
-    quota.file_count_limit !== null &&
-    quota.file_count_used > quota.file_count_limit;
-  const overStorageLimit =
-    quota.storage_bytes_limit !== null &&
-    quota.storage_bytes_used > quota.storage_bytes_limit;
-  if (overFileLimit || overStorageLimit) return 'overLimit';
+  const metrics = [
+    'file_count',
+    'storage_bytes',
+    'team_count',
+    'dataset_count',
+    'chat_count',
+    'search_count',
+    'agent_count',
+    'memory_count',
+  ] as const;
   if (
-    quota.file_count_limit !== null ||
-    quota.storage_bytes_limit !== null
-  ) {
-    return 'configured';
-  }
-  return 'unlimited';
+    metrics.some((metric) => {
+      const limit = quota[`${metric}_limit`];
+      return limit !== null && quota[`${metric}_used`] > limit;
+    })
+  )
+    return 'overLimit';
+  return metrics.some((metric) => quota[`${metric}_limit`] !== null)
+    ? 'configured'
+    : 'unlimited';
 }
 
 function quotaPercentage(used: number, limit: number | null) {
@@ -249,9 +248,7 @@ function QuotaTableSection({
         setSort((current) => ({
           key,
           direction:
-            current.key === key && current.direction === 'asc'
-              ? 'desc'
-              : 'asc',
+            current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
         }))
       }
     >
@@ -279,120 +276,124 @@ function QuotaTableSection({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="overflow-x-auto border-t border-border-button">
-        <Table
-          rootClassName="max-w-full [contain:inline-size]"
-          className={showWorkspace ? 'min-w-[1080px]' : 'min-w-[960px]'}
-        >
-          <TableHeader>
-            <TableRow>
-              <TableHead>{sortButton(t('admin.name'), 'name')}</TableHead>
-              {showWorkspace && (
-                <TableHead>
-                  {sortButton(
-                    t('admin.quotaManagementPage.workspace'),
-                    'workspace_name',
+            <Table
+              rootClassName="max-w-full [contain:inline-size]"
+              className={showWorkspace ? 'min-w-[1080px]' : 'min-w-[960px]'}
+            >
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{sortButton(t('admin.name'), 'name')}</TableHead>
+                  {showWorkspace && (
+                    <TableHead>
+                      {sortButton(
+                        t('admin.quotaManagementPage.workspace'),
+                        'workspace_name',
+                      )}
+                    </TableHead>
                   )}
-                </TableHead>
-              )}
-              <TableHead className="text-center">
-                {sortButton(
-                  t('admin.quotaManagementPage.fileUsage'),
-                  'file_count_used',
-                )}
-              </TableHead>
-              <TableHead className="text-center">
-                {sortButton(
-                  t('admin.quotaManagementPage.fileLimit'),
-                  'file_count_limit',
-                )}
-              </TableHead>
-              <TableHead className="text-center">
-                {sortButton(
-                  t('admin.quotaManagementPage.storageUsage'),
-                  'storage_bytes_used',
-                )}
-              </TableHead>
-              <TableHead className="text-center">
-                {sortButton(
-                  t('admin.quotaManagementPage.storageLimit'),
-                  'storage_bytes_limit',
-                )}
-              </TableHead>
-              <TableHead className="text-center">
-                {t('admin.quotaManagementPage.state')}
-              </TableHead>
-              <TableHead className="text-center">{t('admin.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className={loading ? 'opacity-60' : undefined}>
-            {rows.length ? (
-              rows.map((quota) => (
-                <TableRow
-                  key={quota.scope_id}
-                  className="cursor-pointer"
-                  tabIndex={0}
-                  onClick={() => onView(quota)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') onView(quota);
-                  }}
-                >
-                  <TableCell>
-                    <div className="font-medium">{quota.name}</div>
-                    <div className="max-w-48 truncate text-xs text-text-secondary">
-                      {quota.email || quota.scope_id}
-                    </div>
-                  </TableCell>
-                  {showWorkspace && <TableCell>{quota.workspace_name}</TableCell>}
-                  <TableCell className="text-center">
-                    {quota.file_count_used}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {quota.file_count_limit ??
-                      t('admin.resourceQuota.unlimited')}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <StorageSize bytes={quota.storage_bytes_used} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {quota.storage_bytes_limit === null ? (
-                      t('admin.resourceQuota.unlimited')
-                    ) : (
-                      <StorageSize bytes={quota.storage_bytes_limit} />
+                  <TableHead className="text-center">
+                    {sortButton(
+                      t('admin.quotaManagementPage.fileUsage'),
+                      'file_count_used',
                     )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <QuotaStateBadge quota={quota} />
-                  </TableCell>
-                  <TableCell
-                    className="text-center"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      title={t('admin.quotaManagementPage.viewDetail')}
-                      aria-label={t('admin.quotaManagementPage.viewDetail')}
-                      onClick={() => onView(quota)}
-                    >
-                      <Eye />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      title={t('admin.resourceQuota.configure')}
-                      aria-label={t('admin.resourceQuota.configure')}
-                      onClick={() => onEdit(quota)}
-                    >
-                      <Pencil />
-                    </Button>
-                  </TableCell>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    {sortButton(
+                      t('admin.quotaManagementPage.fileLimit'),
+                      'file_count_limit',
+                    )}
+                  </TableHead>
+                  <TableHead className="text-center">
+                    {sortButton(
+                      t('admin.quotaManagementPage.storageUsage'),
+                      'storage_bytes_used',
+                    )}
+                  </TableHead>
+                  <TableHead className="text-center">
+                    {sortButton(
+                      t('admin.quotaManagementPage.storageLimit'),
+                      'storage_bytes_limit',
+                    )}
+                  </TableHead>
+                  <TableHead className="text-center">
+                    {t('admin.quotaManagementPage.state')}
+                  </TableHead>
+                  <TableHead className="text-center">
+                    {t('admin.actions')}
+                  </TableHead>
                 </TableRow>
-              ))
-            ) : (
-              <TableEmpty columnsLength={showWorkspace ? 8 : 7} />
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody className={loading ? 'opacity-60' : undefined}>
+                {rows.length ? (
+                  rows.map((quota) => (
+                    <TableRow
+                      key={quota.scope_id}
+                      className="cursor-pointer"
+                      tabIndex={0}
+                      onClick={() => onView(quota)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') onView(quota);
+                      }}
+                    >
+                      <TableCell>
+                        <div className="font-medium">{quota.name}</div>
+                        <div className="max-w-48 truncate text-xs text-text-secondary">
+                          {quota.email || quota.scope_id}
+                        </div>
+                      </TableCell>
+                      {showWorkspace && (
+                        <TableCell>{quota.workspace_name}</TableCell>
+                      )}
+                      <TableCell className="text-center">
+                        {quota.file_count_used}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {quota.file_count_limit ??
+                          t('admin.resourceQuota.unlimited')}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <StorageSize bytes={quota.storage_bytes_used} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {quota.storage_bytes_limit === null ? (
+                          t('admin.resourceQuota.unlimited')
+                        ) : (
+                          <StorageSize bytes={quota.storage_bytes_limit} />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <QuotaStateBadge quota={quota} />
+                      </TableCell>
+                      <TableCell
+                        className="text-center"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t('admin.quotaManagementPage.viewDetail')}
+                          aria-label={t('admin.quotaManagementPage.viewDetail')}
+                          onClick={() => onView(quota)}
+                        >
+                          <Eye />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title={t('admin.resourceQuota.configure')}
+                          aria-label={t('admin.resourceQuota.configure')}
+                          onClick={() => onEdit(quota)}
+                        >
+                          <Pencil />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableEmpty columnsLength={showWorkspace ? 8 : 7} />
+                )}
+              </TableBody>
+            </Table>
           </div>
           <div className="flex justify-end border-t border-border-button px-4 py-3">
             <RAGFlowPagination
@@ -425,10 +426,8 @@ export default function AdminQuotas() {
   });
 
   const mutation = useMutation({
-    mutationFn: (limits: Pick<
-      AdminService.ResourceQuota,
-      'file_count_limit' | 'storage_bytes_limit'
-    >) => updateResourceQuota(editing!.scope_type, editing!.scope_id, limits),
+    mutationFn: (limits: AdminService.ResourceQuotaLimits) =>
+      updateResourceQuota(editing!.scope_type, editing!.scope_id, limits),
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['admin/resource-quotas'] });
       queryClient.invalidateQueries({ queryKey: ['admin/userDetail'] });
@@ -570,7 +569,10 @@ export default function AdminQuotas() {
         </ScrollArea>
       </Card>
 
-      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(undefined)}>
+      <Dialog
+        open={Boolean(detail)}
+        onOpenChange={(open) => !open && setDetail(undefined)}
+      >
         <DialogContent
           className="w-[min(720px,90vw)] max-w-none overflow-hidden p-0"
           aria-describedby={undefined}
@@ -626,7 +628,10 @@ export default function AdminQuotas() {
             <Button variant="outline" onClick={() => setDetail(undefined)}>
               {t('admin.close')}
             </Button>
-            <Button disabled={!detail} onClick={() => detail && setEditing(detail)}>
+            <Button
+              disabled={!detail}
+              onClick={() => detail && setEditing(detail)}
+            >
               <Pencil />
               {t('admin.resourceQuota.configure')}
             </Button>
@@ -637,6 +642,7 @@ export default function AdminQuotas() {
       <ResourceQuotaDialog
         open={Boolean(editing)}
         quota={editing}
+        scopeType={editing?.scope_type}
         saving={mutation.isPending}
         onOpenChange={(open) => !open && setEditing(undefined)}
         onSave={(limits) => mutation.mutate(limits)}

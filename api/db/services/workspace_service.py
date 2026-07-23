@@ -710,6 +710,9 @@ class TeamService:
         name = str(name or "").strip()
         if not name or len(name) > 100:
             raise ValueError("Team name must contain between 1 and 100 characters.")
+        from api.db.services.resource_quota_service import ResourceQuotaService
+
+        ResourceQuotaService.ensure_team_creation_allowed(owner_id)
         personal_membership = TenantService.get_personal_by_user_id(owner_id)
         exists, _personal = TenantService.get_by_id(owner_id)
         if not personal_membership or not exists:

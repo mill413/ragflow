@@ -212,10 +212,7 @@ export const updateUser = (
   );
 export const updateUserQuota = (
   email: string,
-  quota: Pick<
-    AdminService.ResourceQuota,
-    'file_count_limit' | 'storage_bytes_limit'
-  >,
+  quota: AdminService.ResourceQuotaLimits,
 ) =>
   request.put<ResponseData<AdminService.ResourceQuota>>(
     `${adminGetUserDetails(email)}/quota`,
@@ -281,10 +278,7 @@ export const deleteAdminTeam = (teamId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeam(teamId));
 export const updateAdminTeamQuota = (
   teamId: string,
-  quota: Pick<
-    AdminService.ResourceQuota,
-    'file_count_limit' | 'storage_bytes_limit'
-  >,
+  quota: AdminService.ResourceQuotaLimits,
 ) =>
   request.put<ResponseData<AdminService.ResourceQuota>>(
     `${api.adminTeam(teamId)}/quota`,
@@ -387,10 +381,7 @@ export const listResourceQuotas = () =>
 export const updateResourceQuota = (
   scopeType: AdminService.ResourceQuotaScopeType,
   scopeId: string,
-  quota: Pick<
-    AdminService.ResourceQuota,
-    'file_count_limit' | 'storage_bytes_limit'
-  >,
+  quota: AdminService.ResourceQuotaLimits,
 ) =>
   request.put<ResponseData<AdminService.ResourceQuota>>(
     adminQuota(scopeType, scopeId),
