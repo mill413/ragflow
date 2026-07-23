@@ -118,6 +118,7 @@ async def create_dataset(user_id: str, workspace_id: str, req: dict):
 
     if not WorkspaceAccessService.can_create_knowledgebase(user_id, workspace_id):
         return False, "No authorization."
+    ResourceQuotaService.ensure_resource_creation_allowed(workspace_id, "dataset")
     workspace_type = WorkspaceAccessService.get_workspace_type(workspace_id)
     req["permission"] = TenantPermission.ME if workspace_type == WorkspaceType.PERSONAL else TenantPermission.TEAM
     e, create_dict = KnowledgebaseService.create_with_name(
@@ -490,6 +491,8 @@ def list_datasets(tenant_id: str, args: dict):
         visible_workspace_ids = set(WorkspaceAccessService.list_visible_workspace_ids(tenant_id))
         if not set(tenant_ids).issubset(visible_workspace_ids):
             return False, "No authorization."
+        personal_user_id = tenant_id if tenant_id in tenant_ids else ""
+        tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != personal_user_id]
     else:
         tenant_ids = WorkspaceAccessService.list_visible_workspace_ids(tenant_id)
         tenant_ids = [workspace_id for workspace_id in tenant_ids if workspace_id != tenant_id]

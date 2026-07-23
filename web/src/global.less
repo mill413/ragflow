@@ -49,6 +49,46 @@ body,
   background: #888;
 }
 
+/*
+ * Keep table scrollbars out of the way until the pointer enters the table.
+ * The scrollbar keeps its dimensions while transparent, so showing it does
+ * not resize the table or shift fixed headers and columns.
+ */
+.table-scroll-container {
+  scrollbar-color: #aaaaaa transparent;
+  scrollbar-width: thin;
+}
+
+.table-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll-container::-webkit-scrollbar-thumb {
+  background: #aaaaaa;
+}
+
+@media (hover: hover) {
+  .table-scroll-container {
+    scrollbar-color: transparent transparent;
+  }
+
+  .table-scroll-container::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  .table-scroll-container:hover {
+    scrollbar-color: #aaaaaa transparent;
+  }
+
+  .table-scroll-container:hover::-webkit-scrollbar-thumb {
+    background: #aaaaaa;
+  }
+
+  .table-scroll-container:hover::-webkit-scrollbar-thumb:hover {
+    background: #888;
+  }
+}
+
 .Highlight--scrolledTo .Highlight__part {
   background: rgb(var(--accent-primary) / 0.5) !important;
 }

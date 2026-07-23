@@ -12,6 +12,8 @@ import {
   MessageSquare,
   Settings2,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
   Timer,
   UserRound,
 } from 'lucide-react';
@@ -395,6 +397,49 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
                             <pre className="overflow-x-auto whitespace-pre-wrap break-words font-sans text-sm leading-6">
                               {answer}
                             </pre>
+                            {isAssistant &&
+                              typeof message.thumbup === 'boolean' && (
+                                <div className="mt-3 space-y-2 border-t border-border-button pt-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-text-secondary">
+                                      {t(
+                                        'admin.resourceManagementPage.chatSessions.userFeedback',
+                                      )}
+                                    </span>
+                                    <Badge
+                                      variant={
+                                        message.thumbup
+                                          ? 'success'
+                                          : 'destructive'
+                                      }
+                                      className="gap-1"
+                                    >
+                                      {message.thumbup ? (
+                                        <ThumbsUp className="size-3.5" />
+                                      ) : (
+                                        <ThumbsDown className="size-3.5" />
+                                      )}
+                                      {t(
+                                        `admin.resourceManagementPage.chatSessions.${
+                                          message.thumbup ? 'liked' : 'disliked'
+                                        }`,
+                                      )}
+                                    </Badge>
+                                  </div>
+                                  {!message.thumbup && message.feedback && (
+                                    <div className="rounded-lg bg-bg-card px-3 py-2 text-sm leading-5 text-text-secondary">
+                                      <div className="mb-1 text-xs font-medium text-text-primary">
+                                        {t(
+                                          'admin.resourceManagementPage.chatSessions.feedbackContent',
+                                        )}
+                                      </div>
+                                      <div className="whitespace-pre-wrap break-words">
+                                        {message.feedback}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                           </div>
                           {isUser && (
                             <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-primary/10">

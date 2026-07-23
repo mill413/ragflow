@@ -240,12 +240,8 @@ export default function AdminTeams() {
     },
   });
   const quotaMutation = useMutation({
-    mutationFn: (
-      quota: Pick<
-        AdminService.ResourceQuota,
-        'file_count_limit' | 'storage_bytes_limit'
-      >,
-    ) => updateAdminTeamQuota(selectedTeam!.id, quota),
+    mutationFn: (quota: AdminService.ResourceQuotaLimits) =>
+      updateAdminTeamQuota(selectedTeam!.id, quota),
     onSuccess: () => {
       invalidateTeams();
       setQuotaOpen(false);
@@ -749,7 +745,10 @@ export default function AdminTeams() {
               <div className="mb-3 text-sm font-medium">
                 {t('admin.resourceQuota.title')}
               </div>
-              <ResourceQuotaCards quota={selectedTeamDetails?.quota} />
+              <ResourceQuotaCards
+                quota={selectedTeamDetails?.quota}
+                scopeType="team"
+              />
             </section>
             <div className="flex items-center justify-between py-4">
               <div className="text-sm font-medium">
@@ -924,6 +923,7 @@ export default function AdminTeams() {
       <ResourceQuotaDialog
         open={quotaOpen}
         quota={selectedTeamDetails?.quota}
+        scopeType="team"
         saving={quotaMutation.isPending}
         onOpenChange={setQuotaOpen}
         onSave={(quota) => quotaMutation.mutate(quota)}

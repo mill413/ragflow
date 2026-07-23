@@ -40,6 +40,10 @@ from api.db.services.conversation_service import ConversationService, structure_
 from api.db.services.dialog_service import DialogService, gen_mindmap, rag_agent
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
 from api.db.services.llm_service import LLMBundle
+from api.db.services.resource_quota_service import (
+    ResourceQuotaExceededError,
+    ResourceQuotaService,
+)
 from api.db.services.search_service import SearchService
 from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
@@ -466,6 +470,7 @@ async def create():
         workspace_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
         if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
             return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+        ResourceQuotaService.ensure_resource_creation_allowed(workspace_id, "chat")
         ok, tenant = TenantService.get_by_id(workspace_id)
         if not ok:
             return get_data_error_result(message="Tenant not found!")
@@ -537,6 +542,8 @@ async def create():
         if not ok:
             return get_data_error_result(message="Failed to retrieve created chat.")
         return get_json_result(data=_build_chat_response(chat, current_user.id))
+    except ResourceQuotaExceededError as ex:
+        return get_data_error_result(message=str(ex))
     except Exception as ex:
         return server_error_response(ex)
 

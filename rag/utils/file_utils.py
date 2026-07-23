@@ -64,6 +64,20 @@ def _guess_ext(b: bytes) -> str:
     return ".bin"
 
 
+def is_docx_package(content: bytes) -> bool:
+    """Return whether content is an OOXML word-processing package."""
+
+    if not content or not _is_zip(content[:8]):
+        return False
+    try:
+        with zipfile.ZipFile(io.BytesIO(content), "r") as archive:
+            return "word/document.xml" in {
+                name.lower() for name in archive.namelist()
+            }
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 # Try to extract the real embedded payload from OLE's Ole10Native
 def _extract_ole10native_payload(data: bytes) -> bytes:
     try:

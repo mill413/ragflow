@@ -40,9 +40,33 @@ declare namespace AdminService {
   export type ResourceQuota = {
     file_count_limit: number | null;
     storage_bytes_limit: number | null;
+    team_count_limit: number | null;
+    dataset_count_limit: number | null;
+    chat_count_limit: number | null;
+    search_count_limit: number | null;
+    agent_count_limit: number | null;
+    memory_count_limit: number | null;
     file_count_used: number;
     storage_bytes_used: number;
+    team_count_used: number;
+    dataset_count_used: number;
+    chat_count_used: number;
+    search_count_used: number;
+    agent_count_used: number;
+    memory_count_used: number;
   };
+
+  export type ResourceQuotaLimits = Pick<
+    ResourceQuota,
+    | 'file_count_limit'
+    | 'storage_bytes_limit'
+    | 'team_count_limit'
+    | 'dataset_count_limit'
+    | 'chat_count_limit'
+    | 'search_count_limit'
+    | 'agent_count_limit'
+    | 'memory_count_limit'
+  >;
 
   export type ResourceQuotaScopeType = 'personal' | 'team' | 'dataset';
 
@@ -325,6 +349,8 @@ declare namespace AdminService {
     content: unknown;
     reasoning_content?: unknown;
     created_at?: number;
+    thumbup?: boolean;
+    feedback?: string;
   };
 
   export type ManagedChatSessionDetail = ManagedChatSession & {

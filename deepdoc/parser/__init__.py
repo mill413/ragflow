@@ -14,6 +14,10 @@
 #  limitations under the License.
 #
 
+from .large_ooxml import configure_large_ooxml_parsers
+
+configure_large_ooxml_parsers()
+
 from .docx_parser import RAGFlowDocxParser as DocxParser
 from .epub_parser import RAGFlowEpubParser as EpubParser
 from .excel_parser import RAGFlowExcelParser as ExcelParser
@@ -25,6 +29,7 @@ from .pdf_parser import PlainParser
 from .pdf_parser import RAGFlowPdfParser as PdfParser
 from .ppt_parser import RAGFlowPptParser as PptParser
 from .txt_parser import RAGFlowTxtParser as TxtParser
+from .wps_parser import RAGFlowWpsParser as WpsParser
 
 __all__ = [
     "PdfParser",
@@ -38,4 +43,6 @@ __all__ = [
     "MarkdownParser",
     "TxtParser",
     "MarkdownElementExtractor",
+    "configure_large_ooxml_parsers",
+    "WpsParser",
 ]

@@ -27,6 +27,16 @@ def test_set_workspace_quota_normalizes_and_persists(monkeypatch):
         "get_workspace_usage",
         classmethod(lambda cls, workspace_id: QuotaUsage(3, 1024)),
     )
+    monkeypatch.setattr(
+        ResourceQuotaService,
+        "_workspace_creation_usage",
+        classmethod(
+            lambda cls, workspace_ids: {
+                workspace_id: cls._empty_creation_usage()
+                for workspace_id in workspace_ids
+            }
+        ),
+    )
 
     quota = ResourceQuotaService.set_workspace_quota(
         "workspace-1",
@@ -36,12 +46,21 @@ def test_set_workspace_quota_normalizes_and_persists(monkeypatch):
     assert data["workspaces"]["workspace-1"] == {
         "file_count_limit": 10,
         "storage_bytes_limit": 2048,
+        **{
+            f"{metric}_limit": None
+            for metric in ResourceQuotaService.CREATION_METRICS
+        },
     }
     assert quota == {
         "file_count_limit": 10,
         "storage_bytes_limit": 2048,
+        **{
+            f"{metric}_limit": None
+            for metric in ResourceQuotaService.CREATION_METRICS
+        },
         "file_count_used": 3,
         "storage_bytes_used": 1024,
+        **ResourceQuotaService._empty_creation_usage(),
     }
     assert saved
 
@@ -82,6 +101,9 @@ def test_workspace_file_count_limit_is_enforced(monkeypatch):
 
     assert exc_info.value.scope == "工作空间"
     assert exc_info.value.metric == "file_count"
+    assert str(exc_info.value) == "工作空间文件数量已达到配额限制，请联系管理员调整配额。"
+    assert "4" not in str(exc_info.value)
+    assert "5" not in str(exc_info.value)
 
 
 def test_dataset_storage_limit_is_enforced_after_workspace(monkeypatch):
@@ -147,3 +169,52 @@ def test_get_upload_size_restores_stream_position():
 
     assert ResourceQuotaService.get_upload_size(upload) == 6
     assert stream.tell() == 2
+
+
+def test_workspace_resource_creation_limit_is_enforced(monkeypatch):
+    quota = {
+        **{
+            f"{metric}_limit": None
+            for metric in ResourceQuotaService.CREATION_METRICS
+        },
+        **ResourceQuotaService._empty_creation_usage(),
+    }
+    quota["agent_count_limit"] = 2
+    quota["agent_count_used"] = 2
+    monkeypatch.setattr(
+        ResourceQuotaService,
+        "get_workspace_quota",
+        classmethod(lambda cls, workspace_id: quota),
+    )
+
+    with pytest.raises(ResourceQuotaExceededError) as exc_info:
+        ResourceQuotaService.ensure_resource_creation_allowed(
+            "workspace-1", "agent"
+        )
+
+    assert exc_info.value.scope == "工作空间"
+    assert exc_info.value.metric == "agent_count"
+
+
+def test_unconfigured_creation_limits_are_unlimited(monkeypatch):
+    quota = {
+        **{
+            f"{metric}_limit": None
+            for metric in ResourceQuotaService.CREATION_METRICS
+        },
+        **{
+            f"{metric}_used": 100
+            for metric in ResourceQuotaService.CREATION_METRICS
+        },
+    }
+    monkeypatch.setattr(
+        ResourceQuotaService,
+        "get_workspace_quota",
+        classmethod(lambda cls, workspace_id: quota),
+    )
+
+    ResourceQuotaService.ensure_team_creation_allowed("user-1")
+    for resource_type in ResourceQuotaService.RESOURCE_METRICS:
+        ResourceQuotaService.ensure_resource_creation_allowed(
+            "workspace-1", resource_type
+        )
