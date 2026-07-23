@@ -349,6 +349,8 @@ declare namespace AdminService {
     content: unknown;
     reasoning_content?: unknown;
     created_at?: number;
+    thumbup?: boolean;
+    feedback?: string;
   };
 
   export type ManagedChatSessionDetail = ManagedChatSession & {

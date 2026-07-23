@@ -3830,6 +3830,10 @@ Important structured information may include: names, dates, locations, events, k
           messageTimeline: 'Message timeline',
           thinkingProcess: 'Thinking process',
           references: 'Knowledge base references',
+          userFeedback: 'User feedback',
+          liked: 'Liked',
+          disliked: 'Disliked',
+          feedbackContent: 'Feedback',
           roles: {
             user: 'User',
             assistant: 'Assistant',
