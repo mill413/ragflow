@@ -22,6 +22,8 @@ export default {
       save: '保存',
       saving: '保存中...',
       readOnlySaveTip: '当前仅有只读权限，无法保存修改。',
+      readOnlyResourceTip:
+        '当前账号在所选工作空间中只有查看权限，不能新增、编辑或删除{{resource}}。如需操作，请联系团队管理员。',
       namePlaceholder: '请输入名称',
       descriptionPlaceholder: '请输入描述',
       next: '下一步',

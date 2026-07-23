@@ -1,4 +1,5 @@
 import { CardContainer } from '@/components/card-container';
+import { ReadOnlyResourceNotice } from '@/components/read-only-resource-notice';
 import {
   ConfirmDeleteDialog,
   ConfirmDeleteDialogNode,
@@ -112,7 +113,9 @@ export default function McpServer() {
               disabled={!canRunInWritableWorkspace}
               title={
                 !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
+                  ? t('common.readOnlyResourceTip', {
+                      resource: t('mcp.mcpServers'),
+                    })
                   : undefined
               }
             >
@@ -124,7 +127,9 @@ export default function McpServer() {
               disabled={!canRunInWritableWorkspace}
               title={
                 !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
+                  ? t('common.readOnlyResourceTip', {
+                      resource: t('mcp.mcpServers'),
+                    })
                   : undefined
               }
             >
@@ -135,6 +140,12 @@ export default function McpServer() {
       }
     >
       <div className="h-full p-5 overflow-x-hidden overflow-y-auto">
+        {!canRunInWritableWorkspace && (
+          <div className="mb-5">
+            <ReadOnlyResourceNotice resource={t('mcp.mcpServers')} />
+          </div>
+        )}
+
         {data.mcp_servers?.length ? (
           <>
             {isSelectionMode && (

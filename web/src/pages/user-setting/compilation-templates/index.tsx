@@ -1,4 +1,5 @@
 import { CardContainer } from '@/components/card-container';
+import { ReadOnlyResourceNotice } from '@/components/read-only-resource-notice';
 import { Button } from '@/components/ui/button';
 import { SearchInput } from '@/components/ui/input';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
@@ -81,7 +82,9 @@ export default function CompilationTemplates() {
               disabled={!canRunInWritableWorkspace}
               title={
                 !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
+                  ? t('common.readOnlyResourceTip', {
+                      resource: t('setting.compilationTemplates'),
+                    })
                   : undefined
               }
             >
@@ -94,6 +97,14 @@ export default function CompilationTemplates() {
     >
       <div className="h-full flex flex-col">
         <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto p-5">
+          {!canRunInWritableWorkspace && (
+            <div className="mb-5">
+              <ReadOnlyResourceNotice
+                resource={t('setting.compilationTemplates')}
+              />
+            </div>
+          )}
+
           {groups.length > 0 ? (
             <CardContainer>
               {groups.map((item) => (

@@ -22,6 +22,8 @@ export default {
       save: 'Save',
       saving: 'Saving...',
       readOnlySaveTip: 'You only have read access and cannot save changes.',
+      readOnlyResourceTip:
+        'You only have view access to the selected workspace and cannot create, edit, or delete {{resource}}. Contact a team administrator for access.',
       namePlaceholder: 'Please input name',
       descriptionPlaceholder: 'Enter description',
       next: 'Next',
