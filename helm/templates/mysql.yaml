@@ -9,7 +9,7 @@ kind: PersistentVolume
 metadata:
   name: {{ printf "%s-mysql-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
   annotations:
-    "helm.sh/resource-policy": keep
+    {{- include "ragflow.persistentResourceAnnotations" . | nindent 4 }}
   labels:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: mysql
@@ -30,7 +30,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "ragflow.fullname" . }}-mysql
   annotations:
-    "helm.sh/resource-policy": keep
+    {{- include "ragflow.persistentResourceAnnotations" . | nindent 4 }}
   labels:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: mysql

@@ -17,6 +17,12 @@ Uninstall:
 helm uninstall ragflow -n ragflow
 ```
 
+Uninstall removes all workloads, Pods, Services, ConfigMaps, Secrets, Ingresses,
+and test resources managed by the release. Only the Elasticsearch, MySQL,
+MinIO, and Redis PVCs and their bound PVs are retained so that the same release
+name and namespace can reuse the existing data on a later install. The
+namespace itself is not removed by `helm uninstall`.
+
 ## Global Settings
 
 - `global.repo`: Prepend a global image registry prefix for all images.
