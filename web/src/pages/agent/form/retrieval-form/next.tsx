@@ -87,7 +87,10 @@ export function MemoryDatasetForm() {
       </RAGFlowFormItem>
       {retrievalFrom === RetrievalFrom.Memory ? (
         <>
-          <MemoriesFormField label={t('header.memories')}></MemoriesFormField>
+          <MemoriesFormField
+            label={t('header.memories')}
+            workspaceId={ownerTenantId}
+          ></MemoriesFormField>
           <UserIdFormField></UserIdFormField>
         </>
       ) : (
