@@ -24,6 +24,9 @@ export default {
       readOnlySaveTip: '当前仅有只读权限，无法保存修改。',
       readOnlyResourceTip:
         '当前账号在所选工作空间中只有查看权限，不能新增、编辑或删除{{resource}}。如需操作，请联系团队管理员。',
+      selectWorkspaceBeforeConfiguration: '请先选择要配置的工作空间',
+      selectWorkspaceAboveTip:
+        '当前处于“全部工作空间”视图，不能在该视图下进行配置。请在页面上方的工作空间选择器中选择一个个人或团队工作空间后再进行配置。',
       namePlaceholder: '请输入名称',
       descriptionPlaceholder: '请输入描述',
       next: '下一步',
@@ -1675,7 +1678,6 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       addInstance: '添加实例',
       addInstanceText: '添加实例',
       noInstancesConfigured: '尚未配置任何实例。',
-      selectWorkspaceForModels: '请选择个人或团队工作空间以查看其模型设置。',
       teamModelsReadOnly:
         '当前为只读模式，仅团队所有者和管理员可以修改模型设置。',
       editInstanceName: '编辑实例名称',

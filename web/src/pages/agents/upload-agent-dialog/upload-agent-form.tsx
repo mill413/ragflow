@@ -15,19 +15,26 @@ import {
 } from '@/components/ui/form';
 import { FileMimeType } from '@/constants/common';
 import { TagRenameId } from '@/constants/knowledge';
+import { useCreationWorkspaceOptions } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
+import { useEffect } from 'react';
 import { NameFormField, NameFormSchema } from '../name-form-field';
+import { WorkspaceFormField } from '@/components/workspace-form-field';
 
 export const FormSchema = z.object({
   fileList: z.array(z.instanceof(File)),
   ...NameFormSchema,
+  workspace_id: z.string().min(1),
 });
 
 export type FormSchemaType = z.infer<typeof FormSchema>;
 export function UploadAgentForm({ hideModal, onOk }: IModalProps<any>) {
+  const { defaultWorkspaceId, writableOptions } = useCreationWorkspaceOptions(
+    'create_collaborative_resource',
+  );
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { name: '' },
+    defaultValues: { name: '', workspace_id: defaultWorkspaceId },
   });
 
   async function onSubmit(data: FormSchemaType) {
@@ -37,6 +44,10 @@ export function UploadAgentForm({ hideModal, onOk }: IModalProps<any>) {
     }
   }
 
+  useEffect(() => {
+    form.setValue('workspace_id', defaultWorkspaceId);
+  }, [defaultWorkspaceId, form]);
+
   return (
     <Form {...form}>
       <form
@@ -45,6 +56,7 @@ export function UploadAgentForm({ hideModal, onOk }: IModalProps<any>) {
         id={TagRenameId}
       >
         <NameFormField></NameFormField>
+        <WorkspaceFormField options={writableOptions} />
         <FormField
           control={form.control}
           name="fileList"

@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { FormLayout } from '@/constants/form';
 import { ParseType } from '@/constants/knowledge';
 import { useFetchDefaultModelDictionary } from '@/hooks/use-llm-request';
-import { AllWorkspacesId, useWorkspace } from '@/hooks/use-workspace';
+import { useCreationWorkspaceOptions } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { omit } from 'lodash';
@@ -33,6 +33,7 @@ import {
   EmbeddingModelItem,
   ParseTypeItem,
 } from '../dataset/dataset-setting/configuration/common-item';
+import { WorkspaceFormField } from '@/components/workspace-form-field';
 
 const FormId = 'dataset-creating-form';
 
@@ -41,17 +42,9 @@ const ChunkMethodName = 'chunk_method';
 export function InputForm({ onOk }: IModalProps<any>) {
   const { t } = useTranslation();
   const defaultModelDictionary = useFetchDefaultModelDictionary();
-  const { workspaceId, options } = useWorkspace();
-  const writableWorkspaceOptions = options.filter(
-    (option) =>
-      option.value !== AllWorkspacesId &&
-      option.capabilities?.create_knowledgebase,
+  const { defaultWorkspaceId, writableOptions } = useCreationWorkspaceOptions(
+    'create_knowledgebase',
   );
-  const defaultWorkspaceId =
-    writableWorkspaceOptions.find((option) => option.value === workspaceId)
-      ?.value ||
-    writableWorkspaceOptions[0]?.value ||
-    '';
 
   const FormSchema = z
     .object({
@@ -165,28 +158,7 @@ export function InputForm({ onOk }: IModalProps<any>) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="workspace_id"
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <FormLabel required>{t('setting.workspace')}</FormLabel>
-              <FormControl>
-                <select
-                  className="h-9 w-full rounded-md border border-border-default bg-bg-input px-3"
-                  {...field}
-                >
-                  {writableWorkspaceOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <WorkspaceFormField options={writableOptions} />
 
         <EmbeddingModelItem line={2} isEdit={false} />
         <ParseTypeItem />

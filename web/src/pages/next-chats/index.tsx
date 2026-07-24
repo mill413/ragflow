@@ -5,7 +5,6 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useFetchChatList } from '@/hooks/use-chat-request';
 import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
@@ -19,11 +18,9 @@ import { useCreateChatDialog } from './hooks/use-create-chat';
 import { useRenameChat } from './hooks/use-rename-chat';
 
 export default function ChatList() {
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction('create_collaborative_resource');
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction(
+    'create_collaborative_resource',
+  );
   const {
     data,
     setPagination,
@@ -60,8 +57,8 @@ export default function ChatList() {
   );
 
   const handleShowCreateModal = useCallback(() => {
-    runInWritableWorkspace(showCreateChatModal);
-  }, [runInWritableWorkspace, showCreateChatModal]);
+    showCreateChatModal();
+  }, [showCreateChatModal]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const isCreate = searchParams.get('isCreate') === 'true';
@@ -96,6 +93,7 @@ export default function ChatList() {
         initialName: '',
         loading: createChatLoading,
         title: t('chat.createChat'),
+        showWorkspace: true,
       };
     }
     return null;
@@ -114,7 +112,6 @@ export default function ChatList() {
 
   return (
     <>
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data.chats?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"

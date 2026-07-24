@@ -24,6 +24,10 @@ export default {
       readOnlySaveTip: 'You only have read access and cannot save changes.',
       readOnlyResourceTip:
         'You only have view access to the selected workspace and cannot create, edit, or delete {{resource}}. Contact a team administrator for access.',
+      selectWorkspaceBeforeConfiguration:
+        'Select the workspace you want to configure',
+      selectWorkspaceAboveTip:
+        'Configuration is unavailable in the All workspaces view. Use the workspace selector at the top of the page to select a personal or team workspace before configuring it.',
       namePlaceholder: 'Please input name',
       descriptionPlaceholder: 'Enter description',
       next: 'Next',
@@ -1883,8 +1887,6 @@ Example: Virtual Hosted Style`,
       addInstance: 'Add instance',
       addInstanceText: 'Add instance',
       noInstancesConfigured: 'No instances configured yet.',
-      selectWorkspaceForModels:
-        'Select a personal or team workspace to view its model settings.',
       teamModelsReadOnly:
         'You can view these model settings, but only team owners and administrators can change them.',
       editInstanceName: 'Edit instance name',

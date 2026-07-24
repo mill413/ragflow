@@ -12,13 +12,21 @@ import { useTranslation } from 'react-i18next';
 import { ButtonLoading } from '../ui/button';
 import { RenameForm } from './rename-form';
 
+type RenameDialogProps = Omit<IModalProps<any>, 'onOk'> & {
+  initialName?: string;
+  title?: ReactNode;
+  showWorkspace?: boolean;
+  onOk?: (name: string, workspaceId?: string) => unknown;
+};
+
 export function RenameDialog({
   hideModal,
   initialName,
   onOk,
   loading,
   title,
-}: IModalProps<any> & { initialName?: string; title?: ReactNode }) {
+  showWorkspace = false,
+}: RenameDialogProps) {
   const { t } = useTranslation();
 
   return (
@@ -31,6 +39,7 @@ export function RenameDialog({
           initialName={initialName}
           hideModal={hideModal}
           onOk={onOk}
+          showWorkspace={showWorkspace}
         ></RenameForm>
         <DialogFooter>
           <ButtonLoading

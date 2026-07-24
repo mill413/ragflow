@@ -24,6 +24,7 @@ export function useCreateAgentOrPipeline() {
         canvas_category: isAgent
           ? AgentCategory.AgentCanvas
           : AgentCategory.DataflowCanvas,
+        workspace_id: data.workspace_id,
       });
 
       if (ret.code === 0) {

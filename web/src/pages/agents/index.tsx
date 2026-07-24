@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { useFetchAgentListByPage } from '@/hooks/use-agent-request';
 import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
@@ -29,11 +28,9 @@ import { useHandleImportJsonFile } from './use-import-json';
 import { useRenameAgent } from './use-rename-agent';
 
 export default function Agents() {
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction('create_collaborative_resource');
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction(
+    'create_collaborative_resource',
+  );
   const {
     data,
     pagination,
@@ -71,16 +68,16 @@ export default function Agents() {
   } = useHandleImportJsonFile();
 
   const openCreateAgent = useCallback(
-    () => runInWritableWorkspace(showCreatingModal),
-    [runInWritableWorkspace, showCreatingModal],
+    () => showCreatingModal(),
+    [showCreatingModal],
   );
   const openAgentTemplates = useCallback(
-    () => runInWritableWorkspace(navigateToAgentTemplates),
-    [navigateToAgentTemplates, runInWritableWorkspace],
+    () => navigateToAgentTemplates(),
+    [navigateToAgentTemplates],
   );
   const openImportAgent = useCallback(
-    () => runInWritableWorkspace(handleImportJson),
-    [handleImportJson, runInWritableWorkspace],
+    () => handleImportJson(),
+    [handleImportJson],
   );
 
   const filters = useSelectFilters();
@@ -110,7 +107,6 @@ export default function Agents() {
 
   return (
     <>
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {data?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"

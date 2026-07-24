@@ -1,6 +1,11 @@
-import { DynamicForm } from '@/components/dynamic-form';
+import {
+  DynamicForm,
+  FormFieldConfig,
+  FormFieldType,
+} from '@/components/dynamic-form';
 import { HomeIcon } from '@/components/svg-icon';
 import { Modal } from '@/components/ui/modal/modal';
+import { useCreationWorkspaceOptions } from '@/hooks/use-workspace';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createMemoryFields } from './constants';
@@ -17,6 +22,9 @@ type IProps = {
 export const AddOrEditModal = memo(function AddOrEditModal(props: IProps) {
   const { open, onClose, onSubmit, initialMemory, isCreate } = props;
   const { t } = useTranslation();
+  const { defaultWorkspaceId, writableOptions } = useCreationWorkspaceOptions(
+    'create_collaborative_resource',
+  );
   // const { modelOptions } = useModelOptions();
 
   const fields = useMemo(() => {
@@ -38,9 +46,17 @@ export const AddOrEditModal = memo(function AddOrEditModal(props: IProps) {
       //   }
       // });
       // return tempFields;
-      return createMemoryFields(t);
+      const fields = createMemoryFields(t);
+      fields.splice(1, 0, {
+        name: 'workspace_id',
+        label: t('setting.workspace'),
+        type: FormFieldType.Select,
+        options: writableOptions,
+        required: true,
+      } as FormFieldConfig);
+      return fields;
     }
-  }, [isCreate, t]);
+  }, [isCreate, t, writableOptions]);
 
   return (
     <Modal
@@ -61,7 +77,12 @@ export const AddOrEditModal = memo(function AddOrEditModal(props: IProps) {
       <DynamicForm.Root
         fields={fields}
         onSubmit={() => {}}
-        defaultValues={initialMemory}
+        defaultValues={{
+          ...initialMemory,
+          workspace_id: isCreate
+            ? defaultWorkspaceId
+            : initialMemory.workspace_id,
+        }}
       >
         <div className="flex justify-end gap-2 pb-5">
           <DynamicForm.CancelButton handleCancel={onClose} />

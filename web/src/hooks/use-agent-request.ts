@@ -461,6 +461,7 @@ export const useSetAgent = (showMessage: boolean = true) => {
       release?: string;
       description?: string | null;
       permission?: string;
+      workspace_id?: string;
     }) => {
       const agentId = params.id ?? id;
       const { data = {} } = agentId
@@ -473,7 +474,7 @@ export const useSetAgent = (showMessage: boolean = true) => {
           })
         : await agentService.createAgent({
             ...params,
-            workspace_id: workspaceId,
+            workspace_id: params.workspace_id ?? workspaceId,
           });
       if (data.code === 0) {
         if (showMessage) {
