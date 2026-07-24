@@ -24,6 +24,10 @@ export default {
       readOnlySaveTip: 'You only have read access and cannot save changes.',
       readOnlyResourceTip:
         'You only have view access to the selected workspace and cannot create, edit, or delete {{resource}}. Contact a team administrator for access.',
+      selectWorkspaceBeforeConfiguration:
+        'Select the workspace you want to configure',
+      selectWorkspaceAboveTip:
+        'Configuration is unavailable in the All workspaces view. Use the workspace selector at the top of the page to select a personal or team workspace before configuring it.',
       namePlaceholder: 'Please input name',
       descriptionPlaceholder: 'Enter description',
       next: 'Next',
@@ -874,6 +878,7 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       tableColumnRolesReparseTip:
         'Re-parse existing documents for the new column roles to take effect.',
       parserLabel: {
+        example_chunk: 'Extension Example Chunking',
         naive: 'General',
         general: 'General',
         qa: 'Q&A',
@@ -901,6 +906,7 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       dialogueExamplesTitle: 'view',
       methodEmpty:
         'This will display a visual explanation of the dataset categories',
+      exampleChunk: `<p>Demonstrates the function signature and return format for an extended PDF chunk method.</p><p>Reuses existing PDF parsers such as <b>DeepDOC, MinerU, and Plain Text</b>, then converts their output directly into chunks.</p>`,
       book: `<p>Supported file formats are <b>DOCX</b>, <b>PDF</b>, <b>TXT</b>.</p><p>
       For each book in PDF, please set the <i>page ranges</i> to remove unwanted information and reduce analysis time.</p>`,
       laws: `<p>Supported file formats are <b>DOCX</b>, <b>PDF</b>, <b>TXT</b>.</p><p>
@@ -1883,8 +1889,6 @@ Example: Virtual Hosted Style`,
       addInstance: 'Add instance',
       addInstanceText: 'Add instance',
       noInstancesConfigured: 'No instances configured yet.',
-      selectWorkspaceForModels:
-        'Select a personal or team workspace to view its model settings.',
       teamModelsReadOnly:
         'You can view these model settings, but only team owners and administrators can change them.',
       editInstanceName: 'Edit instance name',
@@ -3484,6 +3488,16 @@ Important structured information may include: names, dates, locations, events, k
           'Leave blank for unlimited. Set to 0 to prevent creating that resource. Existing resources are retained, but no more can be created after reaching the limit.',
         configure: 'Configure resource quota',
         updated: 'Resource quota updated',
+      },
+
+      chunkMethodVisibility: {
+        title: 'Extended chunk methods',
+        description:
+          'Control which extended built-in chunk methods are available in this workspace.',
+        methodDescription:
+          'When enabled, this method can be selected for PDF datasets in the workspace.',
+        updated: 'Chunk method visibility updated',
+        empty: 'No configurable extended chunk methods',
       },
 
       permissionType: {

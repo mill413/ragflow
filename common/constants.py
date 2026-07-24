@@ -121,6 +121,7 @@ class ConnectorTaskType(StrEnum):
 
 
 class ParserType(StrEnum):
+    EXAMPLE_CHUNK = "example_chunk"
     PRESENTATION = "presentation"
     LAWS = "laws"
     MANUAL = "manual"

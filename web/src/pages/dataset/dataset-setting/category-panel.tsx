@@ -7,9 +7,11 @@ import camelCase from 'lodash/camelCase';
 import { useMemo } from 'react';
 import { TagTabs } from './tag-tabs';
 import { ImageMap } from './utils';
+import { useKnowledgeBaseContext } from '../contexts/knowledge-base-context';
 
 const CategoryPanel = ({ chunkMethod }: { chunkMethod: string }) => {
-  const parserList = useSelectParserList();
+  const { knowledgeBase } = useKnowledgeBaseContext();
+  const parserList = useSelectParserList(knowledgeBase?.tenant_id);
   const { t } = useTranslate('knowledgeConfiguration');
 
   const item = useMemo(() => {

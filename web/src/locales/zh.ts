@@ -24,6 +24,9 @@ export default {
       readOnlySaveTip: '当前仅有只读权限，无法保存修改。',
       readOnlyResourceTip:
         '当前账号在所选工作空间中只有查看权限，不能新增、编辑或删除{{resource}}。如需操作，请联系团队管理员。',
+      selectWorkspaceBeforeConfiguration: '请先选择要配置的工作空间',
+      selectWorkspaceAboveTip:
+        '当前处于“全部工作空间”视图，不能在该视图下进行配置。请在页面上方的工作空间选择器中选择一个个人或团队工作空间后再进行配置。',
       namePlaceholder: '请输入名称',
       descriptionPlaceholder: '请输入描述',
       next: '下一步',
@@ -837,6 +840,7 @@ export default {
       tableColumnRolesReparseTip:
         '已有文档需要重新解析后，新的列用途才会生效。',
       parserLabel: {
+        example_chunk: '扩展示例分块',
         naive: '通用',
         general: '通用',
         qa: '问答',
@@ -863,6 +867,7 @@ export default {
         '为帮助您更好地理解，我们提供了相关截图供您参考。',
       dialogueExamplesTitle: '对话示例',
       methodEmpty: '这将显示知识库类别的可视化解释',
+      exampleChunk: `<p>用于展示 PDF 扩展分块方法的函数签名和返回值格式。</p><p>支持复用 <b>DeepDOC、MinerU、Plain Text</b> 等现有 PDF 解析器，并将解析结果直接转换为分块。</p>`,
       book: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
       由于一本书很长，并不是所有部分都有用，如果是 PDF，
       请为每本书设置<i>页面范围</i>，以消除负面影响并节省分析计算时间。</p>`,
@@ -1675,7 +1680,6 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       addInstance: '添加实例',
       addInstanceText: '添加实例',
       noInstancesConfigured: '尚未配置任何实例。',
-      selectWorkspaceForModels: '请选择个人或团队工作空间以查看其模型设置。',
       teamModelsReadOnly:
         '当前为只读模式，仅团队所有者和管理员可以修改模型设置。',
       editInstanceName: '编辑实例名称',
@@ -3219,6 +3223,14 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
           '留空表示不限制；设置为 0 表示禁止创建对应资源。已有资源不会被删除，但达到上限后无法继续创建。',
         configure: '设置资源配额',
         updated: '资源配额已更新',
+      },
+
+      chunkMethodVisibility: {
+        title: '扩展分块方法',
+        description: '控制当前工作空间可以使用哪些扩展内置分块方法。',
+        methodDescription: '启用后，可在当前工作空间的 PDF 知识库中选择该方法。',
+        updated: '分块方法可见性已更新',
+        empty: '暂无可配置的扩展分块方法',
       },
 
       permissionType: {

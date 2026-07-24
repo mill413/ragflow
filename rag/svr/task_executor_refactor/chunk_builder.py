@@ -45,10 +45,11 @@ def get_parser(parser_id: str):
     Returns:
         The parser module for the given parser ID.
     """
-    from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one, audio, email, tag
+    from rag.app import audio, book, email, example_chunk, laws, manual, naive, one, paper, picture, presentation, qa, resume, table, tag
 
     factory = {
         "general": naive,
+        ParserType.EXAMPLE_CHUNK.value: example_chunk,
         ParserType.NAIVE.value: naive,
         ParserType.PAPER.value: paper,
         ParserType.BOOK.value: book,

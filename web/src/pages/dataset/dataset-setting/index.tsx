@@ -277,6 +277,7 @@ export default function DatasetSettings() {
                       <ChunkMethodItem
                         line={1}
                         name="chunk_method"
+                        workspaceId={knowledgeDetails.tenant_id}
                       ></ChunkMethodItem>
                     )}
                     {parseType === ParseType.Pipeline && (

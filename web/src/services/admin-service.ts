@@ -311,6 +311,25 @@ export const updateAdminTeamMember = (
   });
 export const deleteAdminTeamMember = (teamId: string, userId: string) =>
   request.delete<ResponseData<boolean>>(api.adminTeamMember(teamId, userId));
+export const listWorkspaceChunkMethods = (workspaceId: string) =>
+  request.get<ResponseData<AdminService.WorkspaceChunkMethod[]>>(
+    api.adminWorkspaceChunkMethods(workspaceId),
+  );
+export const updateWorkspaceChunkMethod = (
+  workspaceId: string,
+  parserId: string,
+  enabled: boolean,
+) =>
+  request.patch<
+    ResponseData<{
+      workspace_id: string;
+      chunk_method: string;
+      enabled: boolean;
+    }>
+  >(
+    api.adminWorkspaceChunkMethod(workspaceId, parserId),
+    { enabled },
+  );
 export const listManagedResources = ({
   workspaceIds,
   ...params

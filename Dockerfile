@@ -233,9 +233,8 @@ RUN --mount=type=cache,id=ragflow_npm,target=/root/.npm,sharing=locked \
     cd web && NODE_OPTIONS="--max-old-space-size=8192" VITE_BUILD_SOURCEMAP=false VITE_MINIFY=esbuild npm run build
 
 ARG GIT_COMMIT
-RUN --mount=type=bind,source=.git,target=/ragflow/.git \
-    ragflow_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1) && \
-    git_commit=${GIT_COMMIT:-$(git rev-parse --short=9 HEAD)} && \
+RUN ragflow_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1) && \
+    git_commit=${GIT_COMMIT} && \
     git_commit=$(printf '%s' "$git_commit" | cut -c1-9) && \
     test -n "$ragflow_version" && \
     test -n "$git_commit" && \

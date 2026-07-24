@@ -22,7 +22,7 @@ export const useHandleImportJsonFile = () => {
   const { loading, setAgent } = useSetAgent();
 
   const onFileUploadOk = useCallback(
-    async ({ fileList, name }: FormSchemaType) => {
+    async ({ fileList, name, workspace_id }: FormSchemaType) => {
       if (fileList.length > 0) {
         const file = fileList[0];
         if (file.type !== FileMimeType.Json) {
@@ -43,6 +43,7 @@ export const useHandleImportJsonFile = () => {
               canvas_category: isAgent
                 ? AgentCategory.AgentCanvas
                 : AgentCategory.DataflowCanvas,
+              workspace_id,
             });
             hideFileUploadModal();
           } else {

@@ -96,6 +96,7 @@ import {
   ResourceQuotaCards,
   ResourceQuotaDialog,
 } from './components/resource-quota';
+import { WorkspaceChunkMethods } from './components/workspace-chunk-methods';
 import {
   WORKSPACE_RESOURCE_TYPES,
   WorkspaceResourceTable,
@@ -750,6 +751,7 @@ export default function AdminTeams() {
                 scopeType="team"
               />
             </section>
+            <WorkspaceChunkMethods workspaceId={selectedTeamDetails?.id} />
             <div className="flex items-center justify-between py-4">
               <div className="text-sm font-medium">
                 {t('admin.teamManagement.memberManagement')}

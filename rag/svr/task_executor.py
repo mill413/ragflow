@@ -79,10 +79,11 @@ from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.llm_service import LLMBundle
 from api.db.services.task_service import TaskService, has_canceled, CANVAS_DEBUG_DOC_ID, GRAPH_RAPTOR_FAKE_DOC_ID
 from api.db.services.file2document_service import File2DocumentService
+from api.db.services.workspace_parser_service import WorkspaceParserService
 from api.db.joint_services.tenant_model_service import get_tenant_default_model_by_type, resolve_model_config, get_model_config_by_id
 from common.versions import get_ragflow_version
 from api.db.db_models import close_connection
-from rag.app import laws, paper, presentation, manual, qa, table, book, resume, picture, naive, one, audio, email, tag
+from rag.app import audio, book, email, example_chunk, laws, manual, naive, one, paper, picture, presentation, qa, resume, table, tag
 from rag.nlp import search, rag_tokenizer, add_positions
 from rag.advanced_rag.knowlege_compile.raptor import (
     RAPTOR_TREE_BUILDER,
@@ -113,6 +114,7 @@ BATCH_SIZE = 64
 
 FACTORY = {
     "general": naive,
+    ParserType.EXAMPLE_CHUNK.value: example_chunk,
     ParserType.NAIVE.value: naive,
     ParserType.PAPER.value: paper,
     ParserType.BOOK.value: book,
@@ -286,6 +288,7 @@ async def build_chunks(task, progress_callback):
     get_recording_context().record("file_size_exceeded", False)
     get_recording_context().record("parser_id", task["parser_id"])
 
+    WorkspaceParserService.require_allowed(task["tenant_id"], task["parser_id"])
     chunker = FACTORY[task["parser_id"].lower()]
     try:
         st = timer()

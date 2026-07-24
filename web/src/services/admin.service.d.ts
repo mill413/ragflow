@@ -108,6 +108,12 @@ declare namespace AdminService {
     update_date: string;
   };
 
+  export type WorkspaceChunkMethod = {
+    parser_id: string;
+    label: string;
+    enabled: boolean;
+  };
+
   export type ListUsersItem = {
     id: string;
     create_date: string;

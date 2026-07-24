@@ -167,7 +167,7 @@ export const useCreateChat = () => {
     mutationFn: async (params: Record<string, any>) => {
       const { data } = await chatService.createChat({
         ...params,
-        workspace_id: workspaceId,
+        workspace_id: params.workspace_id ?? workspaceId,
       });
       if (data.code === 0) {
         queryClient.invalidateQueries({

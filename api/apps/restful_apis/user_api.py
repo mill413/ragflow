@@ -27,6 +27,7 @@ from quart import make_response, redirect, request, session
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
 from api.db.services.file_service import FileService
+from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.user_service import (
     TenantService,
     UserService,
@@ -592,10 +593,35 @@ async def tenant_info():
               description: Embedding model ID.
     """
     try:
-        tenant = TenantService.get_personal_by_user_id(current_user.id)
-        if not tenant:
+        workspace_id = request.args.get("workspace_id") or current_user.id
+        if workspace_id not in WorkspaceAccessService.list_visible_workspace_ids(current_user.id):
+            return get_data_error_result(message="Permission denied", code=RetCode.FORBIDDEN)
+        exists, tenant = TenantService.get_by_id(workspace_id)
+        if not exists:
             return get_data_error_result(message="Tenant not found!")
-        return get_json_result(data=tenant)
+        membership = WorkspaceAccessService.get_membership(current_user.id, workspace_id)
+        return get_json_result(
+            data={
+                "tenant_id": tenant.id,
+                "name": tenant.name,
+                "llm_id": tenant.llm_id,
+                "tenant_llm_id": tenant.tenant_llm_id,
+                "embd_id": tenant.embd_id,
+                "tenant_embd_id": tenant.tenant_embd_id,
+                "rerank_id": tenant.rerank_id,
+                "tenant_rerank_id": tenant.tenant_rerank_id,
+                "asr_id": tenant.asr_id,
+                "tenant_asr_id": tenant.tenant_asr_id,
+                "img2txt_id": tenant.img2txt_id,
+                "tenant_img2txt_id": tenant.tenant_img2txt_id,
+                "tts_id": tenant.tts_id,
+                "tenant_tts_id": tenant.tenant_tts_id,
+                "ocr_id": tenant.ocr_id,
+                "tenant_ocr_id": tenant.tenant_ocr_id,
+                "parser_ids": tenant.parser_ids,
+                "role": getattr(membership, "role", None),
+            }
+        )
     except Exception as e:
         return server_error_response(e)
 
@@ -643,6 +669,17 @@ async def set_tenant_info():
     req = await get_request_json()
     try:
         tid = req.pop("tenant_id")
+        if not (
+            WorkspaceAccessService.is_superuser(current_user.id)
+            or tid == current_user.id
+            or WorkspaceAccessService.can_manage_workspace(current_user.id, tid)
+        ):
+            return get_data_error_result(message="Permission denied", code=RetCode.FORBIDDEN)
+        if "parser_ids" in req:
+            return get_data_error_result(
+                message="Chunk method visibility is managed by the administrator.",
+                code=RetCode.FORBIDDEN,
+            )
         TenantService.update_by_id(tid, req)
         return get_json_result(data=True)
     except Exception as e:

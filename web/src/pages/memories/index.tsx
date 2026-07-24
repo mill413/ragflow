@@ -4,7 +4,6 @@ import { EmptyAppCard } from '@/components/empty/empty';
 import ListFilterBar from '@/components/list-filter-bar';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { pick } from 'lodash';
@@ -18,11 +17,9 @@ import { ICreateMemoryProps, IMemory } from './interface';
 import { MemoryCard } from './memory-card';
 
 export default function MemoryList() {
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction('create_collaborative_resource');
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction(
+    'create_collaborative_resource',
+  );
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('memories');
   const [addOrEditType, setAddOrEditType] = useState<'add' | 'edit'>('add');
@@ -53,11 +50,9 @@ export default function MemoryList() {
     });
   };
   const openCreateModalFun = useCallback(() => {
-    runInWritableWorkspace(() => {
-      setAddOrEditType('add');
-      showMemoryRenameModal(defaultMemoryFields as unknown as IMemory);
-    });
-  }, [runInWritableWorkspace, showMemoryRenameModal]);
+    setAddOrEditType('add');
+    showMemoryRenameModal(defaultMemoryFields as unknown as IMemory);
+  }, [showMemoryRenameModal]);
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
       setPagination({ page, pageSize });
@@ -84,7 +79,6 @@ export default function MemoryList() {
 
   return (
     <>
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {list?.data?.memory_list?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"

@@ -347,6 +347,11 @@ def get_parser_config(chunk_method, parser_config):
         "image_context_size": 0,
     }
     key_mapping = {
+        "example_chunk": {
+            "layout_recognize": "DeepDOC",
+            "raptor": {"use_raptor": False},
+            "graphrag": {"use_graphrag": False},
+        },
         "naive": {
             "layout_recognize": "DeepDOC",
             "chunk_token_num": 512,

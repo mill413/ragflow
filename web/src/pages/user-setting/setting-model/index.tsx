@@ -15,6 +15,7 @@
  */
 
 import Spotlight from '@/components/spotlight';
+import { WorkspaceSelectionNotice } from '@/components/workspace-selection-notice';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useFetchUserInfo } from '@/hooks/use-user-setting-request';
 import { useWorkspace } from '@/hooks/use-workspace';
@@ -197,11 +198,7 @@ const SettingModelV2: FC = () => {
   );
 
   if (isAllWorkspaces) {
-    return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border-button text-text-secondary">
-        {tSetting('selectWorkspaceForModels')}
-      </div>
-    );
+    return <WorkspaceSelectionNotice />;
   }
 
   return (

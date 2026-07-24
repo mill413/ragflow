@@ -50,6 +50,7 @@ export default function AgentTemplates() {
         dsl,
         avatar: template?.avatar,
         canvas_category: canvasCategory,
+        workspace_id: payload.workspace_id,
       });
 
       if (ret?.code === 0) {

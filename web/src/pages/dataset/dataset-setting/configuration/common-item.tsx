@@ -50,17 +50,25 @@ import {
   useSelectChunkMethodList,
 } from '../hooks';
 interface IProps {
+  documentExtension?: string;
   line?: 1 | 2;
   isEdit?: boolean;
   label?: string;
   name?: string;
+  workspaceId?: string;
 }
 export function ChunkMethodItem(props: IProps) {
-  const { line, name = 'parser_id' } = props;
+  const { documentExtension, line, name = 'parser_id', workspaceId } = props;
   const { t } = useTranslate('knowledgeConfiguration');
   const form = useFormContext();
   // const handleChunkMethodSelectChange = useHandleChunkMethodSelectChange(form);
-  const parserList = useSelectChunkMethodList();
+  const parserList = useSelectChunkMethodList(workspaceId);
+  const availableParserList = useMemo(() => {
+    if (!documentExtension || documentExtension.toLowerCase() === 'pdf') {
+      return parserList;
+    }
+    return parserList.filter((parser) => parser.value !== 'example_chunk');
+  }, [documentExtension, parserList]);
 
   return (
     <FormField
@@ -84,7 +92,7 @@ export function ChunkMethodItem(props: IProps) {
               <FormControl>
                 <SelectWithSearch
                   {...field}
-                  options={parserList}
+                  options={availableParserList}
                   placeholder={t('chunkMethodPlaceholder')}
                 />
               </FormControl>

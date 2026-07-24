@@ -16,6 +16,7 @@ import { useParams, useSearchParams } from 'react-router';
 interface CreateSearchProps {
   name: string;
   description?: string;
+  workspace_id?: string;
 }
 
 interface CreateSearchResponse {
@@ -37,7 +38,7 @@ export const useCreateSearch = () => {
     mutationFn: async (props) => {
       const { data: response } = await searchService.createSearch({
         ...props,
-        workspace_id: workspaceId,
+        workspace_id: props.workspace_id ?? workspaceId,
       });
       if (response.code !== 0) {
         throw new Error(response.message || 'Failed to create search');
@@ -350,7 +351,7 @@ export const useRenameSearch = () => {
   }, [hideChatRenameModal]);
 
   const onSearchRenameOk = useCallback(
-    async (name: string, callBack?: () => void) => {
+    async (name: string, callBack?: () => void, workspaceId?: string) => {
       let res;
       setLoading(true);
       if (search?.id) {
@@ -371,7 +372,7 @@ export const useRenameSearch = () => {
           console.error('error', e);
         }
       } else {
-        res = await createSearch({ name: name });
+        res = await createSearch({ name: name, workspace_id: workspaceId });
       }
       if (res && !search?.id) {
         navigateToSearch(res?.search_id)();

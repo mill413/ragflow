@@ -34,6 +34,7 @@ from api.db.services.tenant_model_service import TenantModelService
 from api.db.services.user_service import TenantService, UserService
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
+from api.db.services.workspace_parser_service import WorkspaceParserService
 from common.constants import FileSource, StatusEnum
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
 from common.misc_utils import thread_pool_exec
@@ -118,6 +119,8 @@ async def create_dataset(user_id: str, workspace_id: str, req: dict):
 
     if not WorkspaceAccessService.can_create_knowledgebase(user_id, workspace_id):
         return False, "No authorization."
+    if not WorkspaceParserService.is_allowed(workspace_id, req.get("parser_id") or "naive"):
+        return False, "The chunk method is not enabled for this workspace."
     ResourceQuotaService.ensure_resource_creation_allowed(workspace_id, "dataset")
     workspace_type = WorkspaceAccessService.get_workspace_type(workspace_id)
     req["permission"] = TenantPermission.ME if workspace_type == WorkspaceType.PERSONAL else TenantPermission.TEAM
@@ -320,6 +323,8 @@ async def update_dataset(user_id: str, dataset_id: str, req: dict):
         return False, f"User '{user_id}' lacks permission for dataset '{dataset_id}'"
     req.pop("workspace_id", None)
     req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(kb.tenant_id) == WorkspaceType.TEAM else TenantPermission.ME
+    if req.get("parser_id") and not WorkspaceParserService.is_allowed(kb.tenant_id, req["parser_id"]):
+        return False, "The chunk method is not enabled for this workspace."
 
     # Extract ext field for additional parameters
     ext_fields = req.pop("ext", {})

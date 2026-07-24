@@ -51,6 +51,7 @@ from api.db.services.resource_quota_service import (
     ResourceQuotaService,
 )
 from api.db.services.workspace_service import WorkspaceAccessService
+from api.db.services.workspace_parser_service import WorkspaceParserService
 from api.db.services.canvas_service import UserCanvasService
 from api.db.services.task_service import TaskService, cancel_all_task_of
 from api.utils.api_utils import (
@@ -247,6 +248,10 @@ async def update_document(tenant_id, dataset_id, document_id):
         return get_error_data_result(message=format_validation_error_message(e), code=RetCode.DATA_ERROR)
 
     doc = docs[0]
+
+    requested_chunk_method = update_doc_req.chunk_method
+    if requested_chunk_method and not WorkspaceParserService.is_allowed(kb.tenant_id, requested_chunk_method):
+        return get_error_data_result(message="The chunk method is not enabled for this workspace.", code=RetCode.FORBIDDEN)
 
     # further check with inner status (from DB)
     error_msg, error_code = validate_document_update_fields(update_doc_req, doc, req)

@@ -9,8 +9,11 @@ import { AddedSourceCard } from './component/added-source-card';
 import { DataSourceKey, useDataSourceInfo } from './constant';
 import { useAddDataSource, useListDataSource } from './hooks';
 import { IDataSorceInfo } from './interface';
-import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
+import {
+  useWorkspace,
+  useWritableWorkspaceAction,
+} from '@/hooks/use-workspace';
+import { WorkspaceSelectionNotice } from '@/components/workspace-selection-notice';
 
 const AvailableSourceCard = ({
   name,
@@ -72,7 +75,6 @@ const DataSource = () => {
     };
   });
 
-  // useListTenantUser();
   const { categorizedList } = useListDataSource();
 
   const {
@@ -83,14 +85,11 @@ const DataSource = () => {
     hideAddingModal,
     showAddingModal,
   } = useAddDataSource({});
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction();
+  const { isAllWorkspaces } = useWorkspace();
 
   const addInWorkspace = (item: IDataSorceInfo) => {
-    runInWritableWorkspace(() => showAddingModal(item));
+    showAddingModal(item);
   };
 
   return (
@@ -107,47 +106,51 @@ const DataSource = () => {
       }
     >
       <div className="h-full p-5 overflow-x-hidden overflow-y-auto">
-        {!canRunInWritableWorkspace && (
-          <div className="mb-5">
-            <ReadOnlyResourceNotice resource={t('setting.dataSources')} />
-          </div>
-        )}
+        {isAllWorkspaces ? (
+          <WorkspaceSelectionNotice />
+        ) : (
+          <>
+            {!canRunInWritableWorkspace && (
+              <div className="mb-5">
+                <ReadOnlyResourceNotice resource={t('setting.dataSources')} />
+              </div>
+            )}
 
-        <section className="flex flex-col gap-3">
-          {categorizedList?.length <= 0 && (
-            <div className="text-text-secondary w-full flex justify-center items-center h-20">
-              {t('setting.sourceEmptyTip')}
-            </div>
-          )}
-          {categorizedList.map((item, index) => (
-            <AddedSourceCard key={index} {...item} />
-          ))}
-        </section>
-
-        {canRunInWritableWorkspace && (
-          <section className="mt-8">
-            <header className="flex flex-row items-center justify-between space-y-0 p-0 pb-4">
-              {/* <Users className="mr-2 h-5 w-5 text-[#1677ff]" /> */}
-              <h2 className="text-2xl font-medium">
-                {t('setting.availableSources')}
-                <div className="text-sm text-text-secondary font-normal mt-1.5">
-                  {t('setting.availableSourcesDescription')}
+            <section className="flex flex-col gap-3">
+              {categorizedList?.length <= 0 && (
+                <div className="text-text-secondary w-full flex justify-center items-center h-20">
+                  {t('setting.sourceEmptyTip')}
                 </div>
-              </h2>
-            </header>
-
-            {/* <TenantTable searchTerm={searchTerm}></TenantTable> */}
-            <ul className="@container grid sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4 3xl:grid-cols-4 gap-4">
-              {dataSourceTemplates.map((item) => (
-                <li key={item.id} className="h-full">
-                  <AvailableSourceCard
-                    {...item}
-                    onAdd={() => addInWorkspace(item)}
-                  />
-                </li>
+              )}
+              {categorizedList.map((item, index) => (
+                <AddedSourceCard key={index} {...item} />
               ))}
-            </ul>
-          </section>
+            </section>
+
+            {canRunInWritableWorkspace && (
+              <section className="mt-8">
+                <header className="flex flex-row items-center justify-between space-y-0 p-0 pb-4">
+                  <h2 className="text-2xl font-medium">
+                    {t('setting.availableSources')}
+                    <div className="text-sm text-text-secondary font-normal mt-1.5">
+                      {t('setting.availableSourcesDescription')}
+                    </div>
+                  </h2>
+                </header>
+
+                <ul className="@container grid sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-4 3xl:grid-cols-4 gap-4">
+                  {dataSourceTemplates.map((item) => (
+                    <li key={item.id} className="h-full">
+                      <AvailableSourceCard
+                        {...item}
+                        onAdd={() => addInWorkspace(item)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
         )}
       </div>
 
@@ -162,7 +165,6 @@ const DataSource = () => {
           sourceData={addSource}
         />
       )}
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
     </ProfileSettingWrapperCard>
   );
 };

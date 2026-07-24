@@ -99,6 +99,7 @@ import {
   ResourceQuotaCards,
   ResourceQuotaDialog,
 } from './components/resource-quota';
+import { WorkspaceChunkMethods } from './components/workspace-chunk-methods';
 
 export const WORKSPACE_RESOURCE_TYPES: AdminService.ManagedResourceType[] = [
   'dataset',
@@ -736,6 +737,8 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
               </div>
               <ResourceQuotaCards quota={detail?.quota} scopeType="personal" />
             </section>
+
+            <WorkspaceChunkMethods workspaceId={detail?.id} />
 
             <section className="min-w-0 py-5">
               <Tabs

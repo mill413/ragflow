@@ -8,13 +8,15 @@ import { RAGFlowFormItem } from '@/components/ragflow-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Form } from '@/components/ui/form';
 import { TagRenameId } from '@/constants/knowledge';
+import { useCreationWorkspaceOptions } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { cn } from '@/lib/utils';
 import { BrainCircuit, Check, Route } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlowType } from './constant';
 import { NameFormField, NameFormSchema } from './name-form-field';
+import { WorkspaceFormField } from '@/components/workspace-form-field';
 
 export type CreateAgentFormProps = IModalProps<any> & {
   shouldChooseAgent?: boolean;
@@ -80,6 +82,7 @@ export const FormSchema = z.object({
   tag: z.string().trim().optional(),
   description: z.string().trim().optional(),
   type: z.nativeEnum(FlowType).optional(),
+  workspace_id: z.string().min(1),
 });
 
 export type FormSchemaType = z.infer<typeof FormSchema>;
@@ -90,10 +93,17 @@ export function CreateAgentForm({
   shouldChooseAgent = false,
 }: CreateAgentFormProps) {
   const { t } = useTranslation();
+  const { defaultWorkspaceId, writableOptions } = useCreationWorkspaceOptions(
+    'create_collaborative_resource',
+  );
 
   const form = useForm<FormSchemaType>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { name: '', type: FlowType.Agent },
+    defaultValues: {
+      name: '',
+      type: FlowType.Agent,
+      workspace_id: defaultWorkspaceId,
+    },
   });
 
   async function onSubmit(data: FormSchemaType) {
@@ -102,6 +112,10 @@ export function CreateAgentForm({
       hideModal?.();
     }
   }
+
+  useEffect(() => {
+    form.setValue('workspace_id', defaultWorkspaceId);
+  }, [defaultWorkspaceId, form]);
 
   return (
     <Form {...form}>
@@ -120,6 +134,7 @@ export function CreateAgentForm({
           </RAGFlowFormItem>
         )}
         <NameFormField></NameFormField>
+        <WorkspaceFormField options={writableOptions} />
       </form>
     </Form>
   );
