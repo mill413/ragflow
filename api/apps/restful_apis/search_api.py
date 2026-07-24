@@ -26,6 +26,10 @@ from api.constants import DATASET_NAME_LIMIT
 from api.db.db_models import DB
 from api.db.services import duplicate_name
 from api.db.services.search_service import SearchService
+from api.db.services.resource_quota_service import (
+    ResourceQuotaExceededError,
+    ResourceQuotaService,
+)
 from api.db.services.user_service import TenantService
 from api.db.services.workspace_service import WorkspaceAccessService
 from common.misc_utils import get_uuid
@@ -74,6 +78,12 @@ async def create():
     workspace_id = req.pop("workspace_id", req.pop("tenant_id", current_user.id))
     if not WorkspaceAccessService.can_create_collaborative_resource(current_user.id, workspace_id):
         return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
+    try:
+        ResourceQuotaService.ensure_resource_creation_allowed(
+            workspace_id, "search"
+        )
+    except ResourceQuotaExceededError as exc:
+        return get_data_error_result(message=str(exc))
     search_name = req["name"]
     description = req.get("description", "")
     if not isinstance(search_name, str):

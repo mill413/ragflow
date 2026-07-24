@@ -3,6 +3,7 @@
 
 import { RunningStatus } from '@/constants/knowledge';
 import { DataSourceKey } from '@/pages/user-setting/data-source/constant';
+import type { IWorkspaceQuota } from './workspace';
 
 export interface IConnector {
   id: string;
@@ -52,6 +53,7 @@ export interface IDataset {
   creator_name?: string;
   creator_avatar?: string;
   capabilities?: { read: boolean; update: boolean; delete: boolean };
+  quota?: IWorkspaceQuota;
 }
 
 interface Parserconfig {

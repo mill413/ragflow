@@ -15,7 +15,7 @@ import { changeLanguageAsync } from '@/locales/config';
 import api from '@/utils/api';
 import { getAuthorization } from '@/utils/authorization-util';
 import { buildMessageUuid } from '@/utils/chat';
-import axios from 'axios';
+import { getRuntimeConfig } from '@/utils/runtime-config';
 import { EventSourceParserStream } from 'eventsource-parser/stream';
 import { has, isEmpty, omit } from 'lodash';
 import {
@@ -161,21 +161,11 @@ export const useGetPagination = (options?: { pageSize?: number }) => {
 
 export interface AppConf {
   appName: string;
+  appIconUrl: string;
 }
 
 export const useFetchAppConf = () => {
-  const [appConf, setAppConf] = useState<AppConf>({} as AppConf);
-  const fetchAppConf = useCallback(async () => {
-    const ret = await axios.get('/conf.json');
-
-    setAppConf(ret.data);
-  }, []);
-
-  useEffect(() => {
-    fetchAppConf();
-  }, [fetchAppConf]);
-
-  return appConf;
+  return getRuntimeConfig();
 };
 
 function useSetDoneRecord() {

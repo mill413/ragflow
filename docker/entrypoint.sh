@@ -184,6 +184,31 @@ done < "${TEMPLATE_FILE}"
 export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/"
 PY=python3
 
+# Generate browser-visible branding at container startup so one image can be
+# deployed under different names without embedding deployment values in it.
+APP_NAME="${APP_NAME:-RAGFlow}" \
+APP_ICON_URL="${APP_ICON_URL:-/logo.svg}" \
+"$PY" - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config_path = Path("/ragflow/web/dist/conf.json")
+if config_path.parent.is_dir():
+    temp_path = config_path.with_suffix(".json.tmp")
+    temp_path.write_text(
+        json.dumps(
+            {
+                "appName": os.environ["APP_NAME"],
+                "appIconUrl": os.environ["APP_ICON_URL"],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    temp_path.replace(config_path)
+PY
+
 # -----------------------------------------------------------------------------
 # Select Nginx Configuration based on API_PROXY_SCHEME
 # -----------------------------------------------------------------------------

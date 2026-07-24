@@ -1,4 +1,5 @@
 import { CardContainer } from '@/components/card-container';
+import { ReadOnlyResourceNotice } from '@/components/read-only-resource-notice';
 import { Button } from '@/components/ui/button';
 import { SearchInput } from '@/components/ui/input';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
@@ -14,8 +15,11 @@ import { useTranslation } from 'react-i18next';
 
 import { ProfileSettingWrapperCard } from '../components/user-setting-header';
 import { TemplateCard } from './template-card';
-import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
+import {
+  useWorkspace,
+  useWritableWorkspaceAction,
+} from '@/hooks/use-workspace';
+import { WorkspaceSelectionNotice } from '@/components/workspace-selection-notice';
 
 export default function CompilationTemplates() {
   const { t } = useTranslation();
@@ -30,11 +34,8 @@ export default function CompilationTemplates() {
 
   const { deleteGroup } = useDeleteCompilationTemplateGroup();
   const { navigateToCompilationTemplate } = useNavigatePage();
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction();
+  const { isAllWorkspaces } = useWorkspace();
 
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
@@ -44,8 +45,8 @@ export default function CompilationTemplates() {
   );
 
   const handleAdd = useCallback(() => {
-    runInWritableWorkspace(navigateToCompilationTemplate('create'));
-  }, [navigateToCompilationTemplate, runInWritableWorkspace]);
+    navigateToCompilationTemplate('create')();
+  }, [navigateToCompilationTemplate]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -68,58 +69,77 @@ export default function CompilationTemplates() {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <SearchInput
-              className="w-52"
-              value={searchString}
-              onChange={handleInputChange}
-              placeholder={t('common.search')}
-            />
+          {!isAllWorkspaces && (
+            <div className="flex items-center gap-4">
+              <SearchInput
+                className="w-52"
+                value={searchString}
+                onChange={handleInputChange}
+                placeholder={t('common.search')}
+              />
 
-            <Button
-              onClick={handleAdd}
-              disabled={!canRunInWritableWorkspace}
-              title={
-                !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
-                  : undefined
-              }
-            >
-              <Plus />
-              {t('setting.addTemplateGroup')}
-            </Button>
-          </div>
+              <Button
+                onClick={handleAdd}
+                disabled={!canRunInWritableWorkspace}
+                title={
+                  !canRunInWritableWorkspace
+                    ? t('common.readOnlyResourceTip', {
+                        resource: t('setting.compilationTemplates'),
+                      })
+                    : undefined
+                }
+              >
+                <Plus />
+                {t('setting.addTemplateGroup')}
+              </Button>
+            </div>
+          )}
         </header>
       }
     >
       <div className="h-full flex flex-col">
-        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto p-5">
-          {groups.length > 0 ? (
-            <CardContainer>
-              {groups.map((item) => (
-                <TemplateCard
-                  key={item.id}
-                  data={item}
-                  onClick={navigateToCompilationTemplate(item.id)}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </CardContainer>
-          ) : (
-            <div className="flex items-center justify-center h-full text-text-secondary text-sm">
-              {t('setting.noTemplates')}
-            </div>
-          )}
-        </div>
+        {isAllWorkspaces ? (
+          <div className="flex-1 min-h-0 p-5">
+            <WorkspaceSelectionNotice />
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto p-5">
+              {!canRunInWritableWorkspace && (
+                <div className="mb-5">
+                  <ReadOnlyResourceNotice
+                    resource={t('setting.compilationTemplates')}
+                  />
+                </div>
+              )}
 
-        <div className="p-5 pt-0">
-          <RAGFlowPagination
-            {...pick(pagination, 'current', 'pageSize')}
-            total={total}
-            onChange={handlePageChange}
-          />
-        </div>
-        <WorkspaceTargetDialog {...workspaceDialogProps} />
+              {groups.length > 0 ? (
+                <CardContainer>
+                  {groups.map((item) => (
+                    <TemplateCard
+                      key={item.id}
+                      data={item}
+                      onClick={navigateToCompilationTemplate(item.id)}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </CardContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-text-secondary text-sm">
+                  {t('setting.noTemplates')}
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 pt-0">
+              <RAGFlowPagination
+                {...pick(pagination, 'current', 'pageSize')}
+                total={total}
+                onChange={handlePageChange}
+              />
+            </div>
+          </>
+        )}
       </div>
     </ProfileSettingWrapperCard>
   );

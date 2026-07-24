@@ -1,4 +1,5 @@
 import { CardContainer } from '@/components/card-container';
+import { ReadOnlyResourceNotice } from '@/components/read-only-resource-notice';
 import {
   ConfirmDeleteDialog,
   ConfirmDeleteDialogNode,
@@ -27,8 +28,11 @@ import { McpCard } from './mcp-card';
 import { useBulkOperateMCP } from './use-bulk-operate-mcp';
 import { useEditMcp } from './use-edit-mcp';
 import { useImportMcp } from './use-import-mcp';
-import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
+import {
+  useWorkspace,
+  useWritableWorkspaceAction,
+} from '@/hooks/use-workspace';
+import { WorkspaceSelectionNotice } from '@/components/workspace-selection-notice';
 
 export default function McpServer() {
   const { data, setPagination, searchString, handleInputChange, pagination } =
@@ -52,18 +56,15 @@ export default function McpServer() {
   } = useImportMcp();
 
   const [isSelectionMode, setSelectionMode] = useState(false);
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction();
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction();
+  const { isAllWorkspaces } = useWorkspace();
   const showCreateDialog = useCallback(
-    () => runInWritableWorkspace(showEditModal('')),
-    [runInWritableWorkspace, showEditModal],
+    () => showEditModal('')(),
+    [showEditModal],
   );
   const showImportDialog = useCallback(
-    () => runInWritableWorkspace(showImportModal),
-    [runInWritableWorkspace, showImportModal],
+    () => showImportModal(),
+    [showImportModal],
   );
 
   const handlePageChange = useCallback(
@@ -91,122 +92,140 @@ export default function McpServer() {
             </p>
           </div>
 
-          <div className="flex gap-4" role="toolbar">
-            <SearchInput
-              className="w-40"
-              value={searchString}
-              onChange={handleInputChange}
-              placeholder={t('common.search')}
-            />
-            <Button variant="outline" onClick={switchSelectionMode}>
-              {isSelectionMode ? (
-                <ListChecks className="size-3.5" />
-              ) : (
-                <LayoutList className="size-3.5" />
-              )}
-              {t(`mcp.${isSelectionMode ? 'exitBulkManage' : 'bulkManage'}`)}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={showImportDialog}
-              disabled={!canRunInWritableWorkspace}
-              title={
-                !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
-                  : undefined
-              }
-            >
-              <Download className="size-3.5" />
-              {t('mcp.import')}
-            </Button>
-            <Button
-              onClick={showCreateDialog}
-              disabled={!canRunInWritableWorkspace}
-              title={
-                !canRunInWritableWorkspace
-                  ? t('common.readOnlySaveTip')
-                  : undefined
-              }
-            >
-              <Plus /> {t('mcp.addMCP')}
-            </Button>
-          </div>
+          {!isAllWorkspaces && (
+            <div className="flex gap-4" role="toolbar">
+              <SearchInput
+                className="w-40"
+                value={searchString}
+                onChange={handleInputChange}
+                placeholder={t('common.search')}
+              />
+              <Button variant="outline" onClick={switchSelectionMode}>
+                {isSelectionMode ? (
+                  <ListChecks className="size-3.5" />
+                ) : (
+                  <LayoutList className="size-3.5" />
+                )}
+                {t(`mcp.${isSelectionMode ? 'exitBulkManage' : 'bulkManage'}`)}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={showImportDialog}
+                disabled={!canRunInWritableWorkspace}
+                title={
+                  !canRunInWritableWorkspace
+                    ? t('common.readOnlyResourceTip', {
+                        resource: t('mcp.mcpServers'),
+                      })
+                    : undefined
+                }
+              >
+                <Download className="size-3.5" />
+                {t('mcp.import')}
+              </Button>
+              <Button
+                onClick={showCreateDialog}
+                disabled={!canRunInWritableWorkspace}
+                title={
+                  !canRunInWritableWorkspace
+                    ? t('common.readOnlyResourceTip', {
+                        resource: t('mcp.mcpServers'),
+                      })
+                    : undefined
+                }
+              >
+                <Plus /> {t('mcp.addMCP')}
+              </Button>
+            </div>
+          )}
         </header>
       }
     >
       <div className="h-full p-5 overflow-x-hidden overflow-y-auto">
-        {data.mcp_servers?.length ? (
-          <>
-            {isSelectionMode && (
-              <section className="pb-5 flex items-center">
-                <Checkbox id="all" onCheckedChange={handleSelectAll} />
-                <Label
-                  className="pl-2 text-text-primary cursor-pointer"
-                  htmlFor="all"
-                >
-                  {t('common.selectAll')}
-                </Label>
-                <span className="text-text-secondary pr-10 pl-5">
-                  {t('mcp.selected')} {selectedList.length}
-                </span>
-                <div className="flex gap-10 items-center">
-                  <Button variant={'secondary'} onClick={handleExportMcp}>
-                    <Upload className="size-3.5"></Upload>
-                    {t('mcp.export')}
-                  </Button>
-                  <ConfirmDeleteDialog
-                    onOk={handleDelete}
-                    title={t('common.delete') + ' ' + t('mcp.mcpServers')}
-                    content={{
-                      title: t('common.deleteThem'),
-                      node: (
-                        <ConfirmDeleteDialogNode
-                          name={`${t('mcp.selected')} ${selectedList.length} ${t('mcp.mcpServers')}`}
-                        ></ConfirmDeleteDialogNode>
-                      ),
-                    }}
-                  >
-                    <Button variant={'danger'}>
-                      <Trash2 className="size-3.5 cursor-pointer" />
-                      {t('common.delete')}
-                    </Button>
-                  </ConfirmDeleteDialog>
-                </div>
-              </section>
-            )}
-            <CardContainer>
-              {data.mcp_servers.map((item) => (
-                <McpCard
-                  key={item.id}
-                  data={item}
-                  selectedList={selectedList}
-                  handleSelectChange={handleSelectChange}
-                  showEditModal={showEditModal}
-                  isSelectionMode={isSelectionMode}
-                ></McpCard>
-              ))}
-            </CardContainer>
-            <div className="mt-8">
-              <RAGFlowPagination
-                {...pick(pagination, 'current', 'pageSize')}
-                total={pagination.total || 0}
-                onChange={handlePageChange}
-              ></RAGFlowPagination>
-            </div>
-          </>
+        {isAllWorkspaces ? (
+          <WorkspaceSelectionNotice />
         ) : (
-          <div
-            className="flex items-center justify-between border border-dashed border-border-button rounded-md p-10 cursor-pointer w-[590px]"
-            onClick={showCreateDialog}
-          >
-            <div className="text-text-secondary text-sm">
-              {t('empty.noMCP')}
-            </div>
-            <Button variant="outline" disabled={!canRunInWritableWorkspace}>
-              <Plus />
-              {t('empty.addNow')}
-            </Button>
-          </div>
+          <>
+            {!canRunInWritableWorkspace && (
+              <div className="mb-5">
+                <ReadOnlyResourceNotice resource={t('mcp.mcpServers')} />
+              </div>
+            )}
+
+            {data.mcp_servers?.length ? (
+              <>
+                {isSelectionMode && (
+                  <section className="pb-5 flex items-center">
+                    <Checkbox id="all" onCheckedChange={handleSelectAll} />
+                    <Label
+                      className="pl-2 text-text-primary cursor-pointer"
+                      htmlFor="all"
+                    >
+                      {t('common.selectAll')}
+                    </Label>
+                    <span className="text-text-secondary pr-10 pl-5">
+                      {t('mcp.selected')} {selectedList.length}
+                    </span>
+                    <div className="flex gap-10 items-center">
+                      <Button variant={'secondary'} onClick={handleExportMcp}>
+                        <Upload className="size-3.5"></Upload>
+                        {t('mcp.export')}
+                      </Button>
+                      <ConfirmDeleteDialog
+                        onOk={handleDelete}
+                        title={t('common.delete') + ' ' + t('mcp.mcpServers')}
+                        content={{
+                          title: t('common.deleteThem'),
+                          node: (
+                            <ConfirmDeleteDialogNode
+                              name={`${t('mcp.selected')} ${selectedList.length} ${t('mcp.mcpServers')}`}
+                            ></ConfirmDeleteDialogNode>
+                          ),
+                        }}
+                      >
+                        <Button variant={'danger'}>
+                          <Trash2 className="size-3.5 cursor-pointer" />
+                          {t('common.delete')}
+                        </Button>
+                      </ConfirmDeleteDialog>
+                    </div>
+                  </section>
+                )}
+                <CardContainer>
+                  {data.mcp_servers.map((item) => (
+                    <McpCard
+                      key={item.id}
+                      data={item}
+                      selectedList={selectedList}
+                      handleSelectChange={handleSelectChange}
+                      showEditModal={showEditModal}
+                      isSelectionMode={isSelectionMode}
+                    ></McpCard>
+                  ))}
+                </CardContainer>
+                <div className="mt-8">
+                  <RAGFlowPagination
+                    {...pick(pagination, 'current', 'pageSize')}
+                    total={pagination.total || 0}
+                    onChange={handlePageChange}
+                  ></RAGFlowPagination>
+                </div>
+              </>
+            ) : (
+              <div
+                className="flex items-center justify-between border border-dashed border-border-button rounded-md p-10 cursor-pointer w-[590px]"
+                onClick={showCreateDialog}
+              >
+                <div className="text-text-secondary text-sm">
+                  {t('empty.noMCP')}
+                </div>
+                <Button variant="outline" disabled={!canRunInWritableWorkspace}>
+                  <Plus />
+                  {t('empty.addNow')}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -225,7 +244,6 @@ export default function McpServer() {
           loading={importLoading}
         ></ImportMcpDialog>
       )}
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
     </ProfileSettingWrapperCard>
   );
 }

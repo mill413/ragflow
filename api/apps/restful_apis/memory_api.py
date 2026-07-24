@@ -25,6 +25,7 @@ from api.utils.api_utils import validate_request, get_request_json, get_error_ar
 from api.apps.services import memory_api_service
 from api.db.joint_services.tenant_model_service import ensure_tenant_model_ids_for_params, validate_tenant_model_ids_for_params
 from api.db.services.memory_service import MemoryService
+from api.db.services.resource_quota_service import ResourceQuotaExceededError
 from api.utils.pagination_utils import validate_rest_api_page_size
 
 
@@ -62,7 +63,11 @@ async def create_memory():
         else:
             return get_json_result(message=res, code=RetCode.SERVER_ERROR)
 
-    except (ArgumentException, LookupError) as arg_error:
+    except (
+        ArgumentException,
+        LookupError,
+        ResourceQuotaExceededError,
+    ) as arg_error:
         logging.error(arg_error)
         if timing_enabled:
             logging.info(

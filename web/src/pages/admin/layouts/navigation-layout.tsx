@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import { cn } from '@/lib/utils';
 import { Routes } from '@/routes';
 import { getSystemVersion, logout } from '@/services/admin-service';
@@ -50,6 +51,7 @@ type AdminNavigationItem = {
 };
 
 const AdminNavigationLayout = () => {
+  const { appIconUrl, appName } = useFetchAppConf();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -214,11 +216,11 @@ const AdminNavigationLayout = () => {
             <>
               <img
                 className="mr-3 size-8 shrink-0"
-                src="/logo.svg"
+                src={appIconUrl}
                 alt="logo"
               />
               <span className="min-w-0 truncate text-lg font-bold">
-                {t('admin.title')}
+                {appName}
               </span>
             </>
           )}

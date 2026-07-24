@@ -126,6 +126,7 @@ function GenericProviderInstanceCard({
 
   // ── Form initial values + fields ────────────────────────────────
   const initialValues = useProviderInitialValues(
+    providerName,
     instance,
     instanceDetails,
     isDraft,
@@ -155,6 +156,7 @@ function GenericProviderInstanceCard({
   const handleDelete = useDeleteInstance(
     providerName,
     instance.instance_name,
+    instance.id,
     isDraft,
     onDelete,
   );

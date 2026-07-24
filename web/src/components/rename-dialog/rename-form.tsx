@@ -14,16 +14,28 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { TagRenameId } from '@/constants/knowledge';
+import { useCreationWorkspaceOptions } from '@/hooks/use-workspace';
 import { IModalProps } from '@/interfaces/common';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { WorkspaceFormField } from '../workspace-form-field';
+
+type RenameFormProps = Omit<IModalProps<any>, 'onOk'> & {
+  initialName?: string;
+  showWorkspace?: boolean;
+  onOk?: (name: string, workspaceId?: string) => unknown;
+};
 
 export function RenameForm({
   initialName,
   hideModal,
   onOk,
-}: IModalProps<any> & { initialName?: string }) {
+  showWorkspace = false,
+}: RenameFormProps) {
   const { t } = useTranslation();
+  const { defaultWorkspaceId, writableOptions } = useCreationWorkspaceOptions(
+    'create_collaborative_resource',
+  );
   const FormSchema = z.object({
     name: z
       .string()
@@ -31,15 +43,16 @@ export function RenameForm({
         message: t('common.namePlaceholder'),
       })
       .trim(),
+    workspace_id: showWorkspace ? z.string().min(1) : z.string().optional(),
   });
 
   const form = useForm<z.infer<typeof FormSchema>>({
     resolver: zodResolver(FormSchema),
-    defaultValues: { name: '' },
+    defaultValues: { name: '', workspace_id: defaultWorkspaceId },
   });
 
   async function onSubmit(data: z.infer<typeof FormSchema>) {
-    const ret = await onOk?.(data.name);
+    const ret = await onOk?.(data.name, data.workspace_id);
     if (ret) {
       hideModal?.();
     }
@@ -50,6 +63,12 @@ export function RenameForm({
       form.setValue('name', initialName);
     }
   }, [form, initialName]);
+
+  useEffect(() => {
+    if (showWorkspace) {
+      form.setValue('workspace_id', defaultWorkspaceId);
+    }
+  }, [defaultWorkspaceId, form, showWorkspace]);
 
   return (
     <Form {...form}>
@@ -76,6 +95,7 @@ export function RenameForm({
             </FormItem>
           )}
         />
+        {showWorkspace && <WorkspaceFormField options={writableOptions} />}
       </form>
     </Form>
   );

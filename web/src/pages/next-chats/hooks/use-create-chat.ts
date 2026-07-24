@@ -46,8 +46,12 @@ export const useCreateChatDialog = () => {
   );
 
   const onCreateChatOk = useCallback(
-    async (name: string) => {
-      const ret = await createChat({ ...InitialData, name });
+    async (name: string, workspaceId?: string) => {
+      const ret = await createChat({
+        ...InitialData,
+        name,
+        workspace_id: workspaceId,
+      });
       if (ret === 0) {
         hideCreateChatModal();
       }

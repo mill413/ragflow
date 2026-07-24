@@ -4,6 +4,7 @@ import {
   useSelectedIds,
 } from '@/hooks/logic-hooks/use-row-selection';
 import {
+  RunDocumentOptions,
   useRemoveDocument,
   useRunDocument,
   useSetDocumentStatus,
@@ -54,7 +55,7 @@ export function useBulkOperateDataset({
   }, [documents, selectedRowKeys]);
 
   const runDocument = useCallback(
-    async (run: number, option?: { delete: boolean; apply_kb: boolean }) => {
+    async (run: number, option?: RunDocumentOptions) => {
       const nonVirtualKeys = selectedRowKeys.filter(
         (x) =>
           !documents.some((y) => x === y.id && y.type === DocumentType.Virtual),
@@ -75,7 +76,7 @@ export function useBulkOperateDataset({
   );
 
   const handleRunClick = useCallback(
-    (option?: { delete: boolean; apply_kb: boolean }) => {
+    (option?: RunDocumentOptions) => {
       runDocument(1, option);
     },
     [runDocument],

@@ -5,11 +5,15 @@ import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
   Bot,
+  Brain,
+  ChevronDown,
   Clock3,
   Hash,
   MessageSquare,
   Settings2,
   ShieldCheck,
+  ThumbsDown,
+  ThumbsUp,
   Timer,
   UserRound,
 } from 'lucide-react';
@@ -57,6 +61,33 @@ function messageContent(content: unknown) {
   if (typeof content === 'string') return content || '-';
   if (content == null) return '-';
   return JSON.stringify(content, null, 2);
+}
+
+function splitMessageContent(
+  content: unknown,
+  reasoningContent?: unknown,
+): { answer: string; thoughts: string[] } {
+  const thoughts: string[] = [];
+  if (typeof reasoningContent === 'string' && reasoningContent.trim()) {
+    thoughts.push(reasoningContent.trim());
+  }
+
+  if (typeof content !== 'string') {
+    return { answer: messageContent(content), thoughts };
+  }
+
+  const answer = content
+    .replace(/<think>([\s\S]*?)(?:<\/think>|$)/gi, (_, thought: string) => {
+      const normalizedThought = thought.trim();
+      if (normalizedThought && !thoughts.includes(normalizedThought)) {
+        thoughts.push(normalizedThought);
+      }
+      return '';
+    })
+    .replace(/<\/?think>/gi, '')
+    .trim();
+
+  return { answer: answer || '-', thoughts };
 }
 
 export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
@@ -227,9 +258,9 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(undefined)}
       >
-        <DialogContent className="max-h-[88vh] w-[min(900px,92vw)] max-w-none overflow-hidden p-0">
-          <DialogHeader className="border-b border-border-button px-6 py-5">
-            <DialogTitle>
+        <DialogContent className="max-h-[88vh] w-[min(900px,92vw)] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
+          <DialogHeader className="m-0 shrink-0 border-b border-border-button py-5 pl-6 pr-16">
+            <DialogTitle className="break-words leading-6">
               {selected?.name ||
                 t('admin.resourceManagementPage.chatSessions.sessionDetail')}
             </DialogTitle>
@@ -237,7 +268,7 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
               {selected?.id}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[calc(88vh-94px)] space-y-5 overflow-y-auto px-6 py-5">
+          <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-5">
             {detailLoading && !detail ? (
               <div className="py-20 text-center text-sm text-text-secondary">
                 {t('common.loading')}
@@ -313,6 +344,10 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
                           : isSystem
                             ? ShieldCheck
                             : Settings2;
+                      const { answer, thoughts } = splitMessageContent(
+                        message.content,
+                        message.reasoning_content,
+                      );
                       return (
                         <div
                           key={message.id || index}
@@ -343,9 +378,68 @@ export function ChatSessionMonitor({ resourceId }: { resourceId: string }) {
                                 </span>
                               )}
                             </div>
+                            {thoughts.length > 0 && (
+                              <details className="group mb-3 overflow-hidden rounded-lg border-0.5 border-border-button bg-bg-card">
+                                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-text-secondary marker:content-none">
+                                  <Brain className="size-4 shrink-0" />
+                                  <span className="flex-1">
+                                    {t(
+                                      'admin.resourceManagementPage.chatSessions.thinkingProcess',
+                                    )}
+                                  </span>
+                                  <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform group-open:rotate-0" />
+                                </summary>
+                                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words border-t border-border-button px-3 py-2 font-sans text-xs leading-5 text-text-secondary">
+                                  {thoughts.join('\n\n')}
+                                </pre>
+                              </details>
+                            )}
                             <pre className="overflow-x-auto whitespace-pre-wrap break-words font-sans text-sm leading-6">
-                              {messageContent(message.content)}
+                              {answer}
                             </pre>
+                            {isAssistant &&
+                              typeof message.thumbup === 'boolean' && (
+                                <div className="mt-3 space-y-2 border-t border-border-button pt-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-text-secondary">
+                                      {t(
+                                        'admin.resourceManagementPage.chatSessions.userFeedback',
+                                      )}
+                                    </span>
+                                    <Badge
+                                      variant={
+                                        message.thumbup
+                                          ? 'success'
+                                          : 'destructive'
+                                      }
+                                      className="gap-1"
+                                    >
+                                      {message.thumbup ? (
+                                        <ThumbsUp className="size-3.5" />
+                                      ) : (
+                                        <ThumbsDown className="size-3.5" />
+                                      )}
+                                      {t(
+                                        `admin.resourceManagementPage.chatSessions.${
+                                          message.thumbup ? 'liked' : 'disliked'
+                                        }`,
+                                      )}
+                                    </Badge>
+                                  </div>
+                                  {!message.thumbup && message.feedback && (
+                                    <div className="rounded-lg bg-bg-card px-3 py-2 text-sm leading-5 text-text-secondary">
+                                      <div className="mb-1 text-xs font-medium text-text-primary">
+                                        {t(
+                                          'admin.resourceManagementPage.chatSessions.feedbackContent',
+                                        )}
+                                      </div>
+                                      <div className="whitespace-pre-wrap break-words">
+                                        {message.feedback}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                           </div>
                           {isUser && (
                             <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-primary/10">

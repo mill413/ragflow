@@ -5,7 +5,6 @@ import ListFilterBar from '@/components/list-filter-bar';
 import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
-import { WorkspaceTargetDialog } from '@/components/workspace-target-dialog';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useWritableWorkspaceAction } from '@/hooks/use-workspace';
 import { buildOwnersFilter } from '@/utils/list-filter-util';
@@ -17,11 +16,9 @@ import { useFetchSearchList, useRenameSearch } from './hooks';
 import { SearchCard } from './search-card';
 
 export default function SearchList() {
-  const {
-    canRunInWritableWorkspace,
-    runInWritableWorkspace,
-    workspaceDialogProps,
-  } = useWritableWorkspaceAction('create_collaborative_resource');
+  const { canRunInWritableWorkspace } = useWritableWorkspaceAction(
+    'create_collaborative_resource',
+  );
   // const { data } = useFetchFlowList();
   const { t } = useTranslate('search');
   const { t: tc } = useTranslate('common');
@@ -51,14 +48,18 @@ export default function SearchList() {
   // const handleSearchChange = (value: string) => {
   //   console.log(value);
   // };
-  const onSearchRenameConfirm = (name: string) => {
-    onSearchRenameOk(name, () => {
-      refetchList();
-    });
+  const onSearchRenameConfirm = (name: string, workspaceId?: string) => {
+    onSearchRenameOk(
+      name,
+      () => {
+        refetchList();
+      },
+      workspaceId,
+    );
   };
   const openCreateModalFun = useCallback(() => {
-    runInWritableWorkspace(showSearchRenameModal);
-  }, [runInWritableWorkspace, showSearchRenameModal]);
+    showSearchRenameModal();
+  }, [showSearchRenameModal]);
   const handlePageChange = useCallback(
     (page: number, pageSize?: number) => {
       setPagination({ page, pageSize });
@@ -84,7 +85,6 @@ export default function SearchList() {
 
   return (
     <>
-      <WorkspaceTargetDialog {...workspaceDialogProps} />
       {list?.data?.search_apps?.length || searchString ? (
         <article
           className="size-full min-w-0 flex flex-col"
@@ -173,6 +173,7 @@ export default function SearchList() {
           initialName={initialSearchName}
           loading={searchRenameLoading}
           title={initialSearchName || t('createSearch')}
+          showWorkspace={!initialSearchName}
         ></RenameDialog>
       )}
     </>

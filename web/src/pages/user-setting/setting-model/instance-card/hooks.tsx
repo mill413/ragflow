@@ -15,6 +15,7 @@
  */
 
 import { DynamicFormRef, FormFieldType } from '@/components/dynamic-form';
+import { LLMFactory } from '@/constants/llm';
 import {
   useAddProviderInstance,
   useDeleteProviderInstance,
@@ -29,6 +30,7 @@ import {
   IUpdateProviderInstanceRequestBody,
 } from '@/interfaces/request/llm';
 import { RefObject, useCallback, useEffect, useMemo, useRef } from 'react';
+import { getProviderConfig } from '../provider-schema/field-config/get-provider-config';
 import { useProviderFields } from '../provider-schema/hooks';
 import { SelectOption } from '../provider-schema/types';
 import { API_KEY_NESTED_FIELDS, ApiKeyNestedField } from './interface';
@@ -165,6 +167,7 @@ export function useProviderBaseUrlOptions(providerName: string) {
  *   fields (see {@link unwrapApiKey}).
  */
 export function useProviderInitialValues(
+  providerName: string,
   instance: IProviderInstance,
   instanceDetails: IProviderInstance | undefined,
   isDraft: boolean,
@@ -194,7 +197,29 @@ export function useProviderInitialValues(
     // api_key text field shows the bare key and the nested credential
     // fields (MiniMax group_id, Azure api_version, OpenRouter
     // provider_order) pre-fill their own form inputs.
-    if (merged.api_key) {
+    if (providerName === LLMFactory.MinerU && merged.api_key) {
+      let mineruConfig: unknown = merged.api_key;
+      if (typeof mineruConfig === 'string') {
+        try {
+          mineruConfig = JSON.parse(mineruConfig);
+        } catch {
+          mineruConfig = {};
+        }
+      }
+      if (mineruConfig && typeof mineruConfig === 'object') {
+        const config = mineruConfig as Record<string, unknown>;
+        Object.assign(
+          values,
+          config.api_key && typeof config.api_key === 'object'
+            ? config.api_key
+            : config,
+        );
+        values.mineru_delete_output =
+          values.mineru_delete_output === true ||
+          values.mineru_delete_output === 1 ||
+          values.mineru_delete_output === '1';
+      }
+    } else if (merged.api_key) {
       const { apiKey, nested } = unwrapApiKey(merged.api_key);
       values.api_key = apiKey;
       Object.assign(values, nested);
@@ -219,7 +244,7 @@ export function useProviderInitialValues(
       }
     }
     return values;
-  }, [instance, instanceDetails, isDraft, baseUrlOptions]);
+  }, [providerName, instance, instanceDetails, isDraft, baseUrlOptions]);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,11 +326,16 @@ export function useVerifyProvider(
   return useCallback(
     async (params: any) => {
       const values = { ...(formRef.current?.getValues?.() ?? {}), ...params };
+      const transformed =
+        providerName === LLMFactory.MinerU
+          ? getProviderConfig(providerName).verifyTransform?.(values)
+          : undefined;
       const ret = await verifyProviderConnection({
         provider_name: providerName,
-        api_key: values.api_key ?? '',
-        base_url: values.base_url ?? values.api_base,
-        model_info: values.model_info,
+        api_key: transformed?.apiKey ?? values.api_key ?? '',
+        base_url:
+          transformed?.baseUrl ?? values.base_url ?? values.api_base ?? '',
+        model_info: transformed?.modelInfo ?? values.model_info,
       });
       if (ret.code === 0) {
         return { isValid: true, logs: ret.message } as {
@@ -363,6 +393,7 @@ export function useSaveInstanceName(
 export function useDeleteInstance(
   providerName: string,
   instanceName: string,
+  instanceId: string | undefined,
   isDraft: boolean,
   onDelete?: () => void,
 ) {
@@ -373,10 +404,37 @@ export function useDeleteInstance(
     } else {
       await deleteProviderInstance({
         provider_name: providerName,
-        instances: [instanceName],
+        instances: [instanceId || instanceName],
       });
     }
-  }, [isDraft, providerName, instanceName, deleteProviderInstance, onDelete]);
+  }, [
+    isDraft,
+    providerName,
+    instanceName,
+    instanceId,
+    deleteProviderInstance,
+    onDelete,
+  ]);
+}
+
+function buildProviderCredentials(
+  providerName: string,
+  values: Record<string, any>,
+) {
+  if (providerName === LLMFactory.MinerU) {
+    const transformed = getProviderConfig(providerName).submitTransform?.({
+      ...values,
+      instance_name: values.instance_name ?? '',
+    });
+    return {
+      apiKey: transformed?.api_key ?? '',
+      baseUrl: transformed?.api_base ?? transformed?.base_url ?? '',
+    };
+  }
+  return {
+    apiKey: buildApiKeyValue(values) ?? '',
+    baseUrl: values.base_url ?? values.api_base,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -553,15 +611,17 @@ export function useSavedAutoSave({
     // than as top-level keys. Nesting them here also folds their values
     // into the change signature below, so editing one actually triggers
     // a blur-save.
-    const apiKeyValue = buildApiKeyValue(values as Record<string, any>);
+    const credentials = buildProviderCredentials(
+      providerName,
+      values as Record<string, any>,
+    );
     const payload: IUpdateProviderInstanceRequestBody = {
       provider_name: providerName,
       instance_name: instanceName,
       id: resolvedId,
-      api_key: apiKeyValue ?? '',
-      base_url: values.base_url ?? values.api_base,
+      api_key: credentials.apiKey,
+      base_url: credentials.baseUrl,
       region: values.region || 'default',
-      model_info: [],
       verify: false,
     };
     // Pull the latest model list from ModelsSection (via the ref it
@@ -661,14 +721,14 @@ export function useSavedAutoSave({
     // doesn't see a signature diff and fire a redundant save. model_info
     // is omitted for the same reason as in performAutoSave: model
     // changes are owned by the per-model endpoints, not this auto-save.
+    const credentials = buildProviderCredentials(providerName, initialValues);
     const baseline = {
       provider_name: providerName,
       instance_name: instanceName,
       id: resolvedId,
-      api_key: buildApiKeyValue(initialValues),
-      base_url: initialValues.base_url ?? initialValues.api_base,
+      api_key: credentials.apiKey,
+      base_url: credentials.baseUrl,
       region: initialValues.region,
-      model_info: [] as IModelInfo[],
     };
     lastSavedPayloadRef.current = JSON.stringify(baseline);
   }, [

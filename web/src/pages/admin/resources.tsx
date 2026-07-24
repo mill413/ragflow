@@ -1189,11 +1189,6 @@ export default function AdminResources() {
           icon: HardDrive,
         },
         {
-          label: t('admin.knowledgeMonitoring.failureReason'),
-          value: document.failure_reason || '-',
-          icon: AlertTriangle,
-        },
-        {
           label: t('admin.createTime'),
           value: formatDate(document.create_date) || '-',
           icon: CalendarPlus,
@@ -1685,8 +1680,17 @@ export default function AdminResources() {
                             <TableCell className="text-center">
                               <StorageSize bytes={document.size ?? 0} />
                             </TableCell>
-                            <TableCell className="max-w-md whitespace-normal text-state-error">
-                              {document.failure_reason || '-'}
+                            <TableCell className="w-[360px] max-w-[360px]">
+                              <div className="line-clamp-2 break-all text-sm leading-5 text-state-error">
+                                {document.failure_reason || '-'}
+                              </div>
+                              {document.failure_reason && (
+                                <div className="mt-1 text-xs text-text-secondary">
+                                  {t(
+                                    'admin.resourceManagementPage.viewFullFailureReason',
+                                  )}
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell>
                               {formatDate(document.create_date) || '-'}
@@ -1981,6 +1985,17 @@ export default function AdminResources() {
                       />
                     ))}
                   </div>
+                  {selectedDetail?.kind === 'failure' && (
+                    <div className="mt-5 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <AlertTriangle className="size-4 text-state-error" />
+                        {t('admin.knowledgeMonitoring.failureReason')}
+                      </div>
+                      <div className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border-0.5 border-state-error/30 bg-state-error/5 p-4 font-mono text-xs leading-6 text-text-primary select-text">
+                        {selectedDetail.document.failure_reason || '-'}
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
             </ScrollArea>

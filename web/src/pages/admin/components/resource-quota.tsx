@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Files, Gauge, HardDrive } from 'lucide-react';
+import {
+  Bot,
+  Brain,
+  Database,
+  Files,
+  Gauge,
+  HardDrive,
+  MessageSquare,
+  Search,
+  UsersRound,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -24,10 +34,33 @@ import {
 import { DetailInformationCard } from './detail-information-card';
 import { StorageSize } from './storage-size';
 
-type QuotaLimits = Pick<
-  AdminService.ResourceQuota,
-  'file_count_limit' | 'storage_bytes_limit'
->;
+type QuotaLimits = AdminService.ResourceQuotaLimits;
+type QuotaScopeType = AdminService.ResourceQuotaScopeType;
+type CreationMetric =
+  | 'team_count'
+  | 'dataset_count'
+  | 'chat_count'
+  | 'search_count'
+  | 'agent_count'
+  | 'memory_count';
+
+const CREATION_METRICS: CreationMetric[] = [
+  'team_count',
+  'dataset_count',
+  'chat_count',
+  'search_count',
+  'agent_count',
+  'memory_count',
+];
+
+const CREATION_ICONS = {
+  team_count: UsersRound,
+  dataset_count: Database,
+  chat_count: MessageSquare,
+  search_count: Search,
+  agent_count: Bot,
+  memory_count: Brain,
+};
 
 type StorageUnit = 'MiB' | 'GiB' | 'TiB';
 
@@ -53,14 +86,22 @@ function storageInputValue(bytes: number | null): {
 
 export function ResourceQuotaCards({
   quota,
+  scopeType = 'dataset',
 }: {
   quota?: AdminService.ResourceQuota;
+  scopeType?: QuotaScopeType;
 }) {
   const { t } = useTranslation();
   const unlimited = t('admin.resourceQuota.unlimited');
+  const creationMetrics =
+    scopeType === 'personal'
+      ? CREATION_METRICS
+      : scopeType === 'team'
+        ? CREATION_METRICS.filter((metric) => metric !== 'team_count')
+        : [];
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <DetailInformationCard
         icon={Files}
         label={t('admin.resourceQuota.fileCount')}
@@ -87,6 +128,22 @@ export function ResourceQuotaCards({
           </span>
         }
       />
+      {creationMetrics.map((metric) => {
+        const Icon = CREATION_ICONS[metric];
+        return (
+          <DetailInformationCard
+            key={metric}
+            icon={Icon}
+            label={t(`admin.resourceQuota.metrics.${metric}`)}
+            value={
+              <span>
+                {quota?.[`${metric}_used`] ?? 0} /{' '}
+                {quota?.[`${metric}_limit`] ?? unlimited}
+              </span>
+            }
+          />
+        );
+      })}
     </div>
   );
 }
@@ -97,17 +154,26 @@ export function ResourceQuotaDialog({
   saving,
   onOpenChange,
   onSave,
+  scopeType = 'dataset',
 }: {
   open: boolean;
   quota?: AdminService.ResourceQuota;
   saving?: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (quota: QuotaLimits) => void;
+  scopeType?: QuotaScopeType;
 }) {
   const { t } = useTranslation();
   const [fileCount, setFileCount] = useState('');
   const [storageValue, setStorageValue] = useState('');
   const [storageUnit, setStorageUnit] = useState<StorageUnit>('GiB');
+  const [creationLimits, setCreationLimits] = useState<
+    Record<CreationMetric, string>
+  >(
+    Object.fromEntries(
+      CREATION_METRICS.map((metric) => [metric, '']),
+    ) as Record<CreationMetric, string>,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -119,6 +185,17 @@ export function ResourceQuotaDialog({
     const storage = storageInputValue(quota?.storage_bytes_limit ?? null);
     setStorageValue(storage.value);
     setStorageUnit(storage.unit);
+    setCreationLimits(
+      Object.fromEntries(
+        CREATION_METRICS.map((metric) => {
+          const limit = quota?.[`${metric}_limit`];
+          return [
+            metric,
+            limit === null || limit === undefined ? '' : String(limit),
+          ];
+        }),
+      ) as Record<CreationMetric, string>,
+    );
   }, [open, quota]);
 
   const save = () => {
@@ -126,11 +203,28 @@ export function ResourceQuotaDialog({
     const storageText = String(storageValue ?? '').trim();
     const fileCountLimit = fileCountText === '' ? null : Number(fileCountText);
     const numericStorage = storageText === '' ? null : Number(storageText);
+    const normalizedCreationLimits = Object.fromEntries(
+      CREATION_METRICS.map((metric) => {
+        const value = String(creationLimits[metric] ?? '').trim();
+        return [`${metric}_limit`, value === '' ? null : Number(value)];
+      }),
+    ) as Pick<
+      QuotaLimits,
+      | 'team_count_limit'
+      | 'dataset_count_limit'
+      | 'chat_count_limit'
+      | 'search_count_limit'
+      | 'agent_count_limit'
+      | 'memory_count_limit'
+    >;
     if (
       (fileCountLimit !== null &&
         (!Number.isInteger(fileCountLimit) || fileCountLimit < 0)) ||
       (numericStorage !== null &&
-        (!Number.isFinite(numericStorage) || numericStorage < 0))
+        (!Number.isFinite(numericStorage) || numericStorage < 0)) ||
+      Object.values(normalizedCreationLimits).some(
+        (value) => value !== null && (!Number.isInteger(value) || value < 0),
+      )
     ) {
       message.error(t('admin.resourceQuota.invalidLimit'));
       return;
@@ -141,8 +235,16 @@ export function ResourceQuotaDialog({
         numericStorage === null
           ? null
           : Math.round(numericStorage * STORAGE_UNIT_BYTES[storageUnit]),
+      ...normalizedCreationLimits,
     });
   };
+
+  const creationMetrics =
+    scopeType === 'personal'
+      ? CREATION_METRICS
+      : scopeType === 'team'
+        ? CREATION_METRICS.filter((metric) => metric !== 'team_count')
+        : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -153,7 +255,7 @@ export function ResourceQuotaDialog({
             {t('admin.resourceQuota.title')}
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-5 px-6 sm:grid-cols-2">
+        <div className="grid max-h-[65vh] gap-5 overflow-y-auto px-6 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>{t('admin.resourceQuota.fileCountLimit')}</Label>
             <Input
@@ -196,6 +298,36 @@ export function ResourceQuotaDialog({
           <div className="text-xs text-text-secondary sm:col-span-2">
             {t('admin.resourceQuota.help')}
           </div>
+          {creationMetrics.length > 0 && (
+            <>
+              <div className="border-t pt-4 text-sm font-medium sm:col-span-2">
+                {t('admin.resourceQuota.creationLimits')}
+              </div>
+              {creationMetrics.map((metric) => (
+                <div key={metric} className="space-y-2">
+                  <Label>
+                    {t(`admin.resourceQuota.metricLimits.${metric}`)}
+                  </Label>
+                  <Input
+                    min={0}
+                    step={1}
+                    type="number"
+                    placeholder={t('admin.resourceQuota.unlimited')}
+                    value={creationLimits[metric]}
+                    onChange={(event) =>
+                      setCreationLimits((current) => ({
+                        ...current,
+                        [metric]: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+              <div className="text-xs text-text-secondary sm:col-span-2">
+                {t('admin.resourceQuota.creationHelp')}
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

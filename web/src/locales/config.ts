@@ -109,7 +109,16 @@ export const changeLanguageAsync = async (lng: string): Promise<void> => {
   await i18n.changeLanguage(normalizedLng);
 };
 
-export const initLanguage = async (): Promise<void> => {
+export const initLanguage = async (appName?: string): Promise<void> => {
+  if (appName) {
+    i18n.options.interpolation = {
+      ...i18n.options.interpolation,
+      defaultVariables: {
+        ...i18n.options.interpolation?.defaultVariables,
+        appName,
+      },
+    };
+  }
   const currentLng = resolveLanguageCode(storage.getLanguage());
 
   await changeLanguageAsync(currentLng);

@@ -38,7 +38,7 @@ export const useCreateMemory = () => {
     async (props: ICreateMemoryProps): Promise<CreateMemoryResponse> => {
       const { data: response } = await memoryService.createMemory({
         ...props,
-        workspace_id: workspaceId,
+        workspace_id: props.workspace_id ?? workspaceId,
       });
       if (response.code !== 0) {
         throw new Error(response.message || 'Failed to create memory');

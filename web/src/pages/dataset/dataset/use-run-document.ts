@@ -1,5 +1,8 @@
 import { useSetModalState } from '@/hooks/common-hooks';
-import { useRunDocument } from '@/hooks/use-document-request';
+import {
+  RunDocumentOptions,
+  useRunDocument,
+} from '@/hooks/use-document-request';
 import { useState } from 'react';
 
 export const useHandleRunDocumentByIds = (id: string) => {
@@ -10,7 +13,7 @@ export const useHandleRunDocumentByIds = (id: string) => {
   const handleRunDocumentByIds = async (
     documentId: string,
     isRunning: boolean,
-    option?: { delete: boolean; apply_kb: boolean },
+    option?: RunDocumentOptions,
   ) => {
     if (isLoading) {
       return;

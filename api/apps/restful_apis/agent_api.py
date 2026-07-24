@@ -52,6 +52,10 @@ from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.pipeline_operation_log_service import PipelineOperationLogService
 from api.db.services.resource_reference_service import ResourceReferenceService
+from api.db.services.resource_quota_service import (
+    ResourceQuotaExceededError,
+    ResourceQuotaService,
+)
 from api.db.services.task_service import CANVAS_DEBUG_DOC_ID, TaskService, queue_dataflow, register_task_authorization
 from api.db.services.user_service import TenantService
 from api.db.services.user_canvas_version import UserCanvasVersionService
@@ -913,6 +917,12 @@ async def create_agent(tenant_id):
     workspace_id = req.pop("workspace_id", req.pop("user_id", tenant_id))
     if not WorkspaceAccessService.can_create_collaborative_resource(tenant_id, workspace_id):
         return get_json_result(data=False, message="No authorization.", code=RetCode.OPERATING_ERROR)
+    try:
+        ResourceQuotaService.ensure_resource_creation_allowed(
+            workspace_id, "agent"
+        )
+    except ResourceQuotaExceededError as exc:
+        return get_data_error_result(message=str(exc))
     req["canvas_type"] = req.get("canvas_type", "")
     req["user_id"] = workspace_id
     req["permission"] = TenantPermission.TEAM if WorkspaceAccessService.get_workspace_type(workspace_id) == WorkspaceType.TEAM else TenantPermission.ME

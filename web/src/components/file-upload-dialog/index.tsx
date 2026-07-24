@@ -14,6 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { IModalProps } from '@/interfaces/common';
+import type { IWorkspaceQuota } from '@/interfaces/database/workspace';
+import { formatBytes } from '@/lib/utils';
 import { extractTableColumns, isTableFile } from '@/utils/table-column-extract';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TFunction } from 'i18next';
@@ -75,11 +77,13 @@ type UploadFormProps = {
   submit: (values?: UploadFormSchemaType) => void;
   showParseOnCreation?: boolean;
   isTableParser?: boolean;
+  quota?: IWorkspaceQuota;
 };
 function UploadForm({
   submit,
   showParseOnCreation,
   isTableParser,
+  quota,
 }: UploadFormProps) {
   const { t } = useTranslation();
   const FormSchema = buildUploadFormSchema(t);
@@ -147,6 +151,24 @@ function UploadForm({
   }, [extractedColumns, columnMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showColumnConfig = isTableParser && extractedColumns.length > 0;
+  const unlimited = t('knowledgeDetails.quotaUnlimited');
+  const quotaDescription = quota
+    ? t('knowledgeDetails.uploadQuotaDescription', {
+        fileUsed: quota.file_count_used,
+        fileLimit: quota.file_count_limit ?? unlimited,
+        storageUsed: formatBytes(quota.storage_bytes_used, {
+          decimals: 1,
+          sizeType: 'accurate',
+        }),
+        storageLimit:
+          quota.storage_bytes_limit === null
+            ? unlimited
+            : formatBytes(quota.storage_bytes_limit, {
+                decimals: 1,
+                sizeType: 'accurate',
+              }),
+      })
+    : t('knowledgeDetails.uploadQuotaUnavailable');
 
   return (
     <Form {...form}>
@@ -178,6 +200,8 @@ function UploadForm({
                 handleFilesChange(files);
               }}
               accept={{}}
+              description={quotaDescription}
+              maxFileCount={50}
               data-testid="dataset-upload-dropzone"
             />
           )}
@@ -260,13 +284,14 @@ function UploadForm({
 }
 
 type FileUploadDialogProps = IModalProps<UploadFormSchemaType> &
-  Pick<UploadFormProps, 'showParseOnCreation' | 'isTableParser'>;
+  Pick<UploadFormProps, 'showParseOnCreation' | 'isTableParser' | 'quota'>;
 export function FileUploadDialog({
   hideModal,
   onOk,
   loading,
   showParseOnCreation = false,
   isTableParser = false,
+  quota,
 }: FileUploadDialogProps) {
   const { t } = useTranslation();
 
@@ -283,6 +308,7 @@ export function FileUploadDialog({
           submit={onOk!}
           showParseOnCreation={showParseOnCreation}
           isTableParser={isTableParser}
+          quota={quota}
         />
         <DialogFooter>
           <ButtonLoading type="submit" loading={loading} form={UploadFormId}>

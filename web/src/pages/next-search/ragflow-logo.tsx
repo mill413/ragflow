@@ -1,5 +1,6 @@
 import { useFetchTokenListBeforeOtherStep } from '@/components/embed-dialog/use-show-embed-dialog';
 import { Button } from '@/components/ui/button';
+import { useFetchAppConf } from '@/hooks/logic-hooks';
 import { SharedFrom } from '@/constants/chat';
 import { cn } from '@/lib/utils';
 import { Routes } from '@/routes';
@@ -47,6 +48,7 @@ export function RAGFlowLogo({
   onClick?: React.MouseEventHandler<HTMLHeadingElement>;
   showEmbedIcon?: boolean;
 }) {
+  const { appName } = useFetchAppConf();
   return (
     <div className="flex gap-4 items-center">
       <h1
@@ -55,7 +57,7 @@ export function RAGFlowLogo({
           'text-4xl font-bold bg-gradient-to-l from-[#40EBE3] to-[#4A51FF] bg-clip-text',
         )}
       >
-        RAGFlow
+        {appName}
       </h1>
       {showEmbedIcon && <EmbedIcon></EmbedIcon>}
     </div>
