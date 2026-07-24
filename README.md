@@ -50,6 +50,8 @@
 
 扩展的内置分块方法默认不对工作空间开放。管理员登录管理后台后，可以通过以下接口按工作空间启用或禁用“扩展示例分块”：
 
+也可以在管理后台的用户详情或团队详情中，通过“扩展分块方法”开关直接配置对应个人或团队工作空间。
+
 ```http
 PATCH /api/v1/admin/workspaces/<workspace_id>/chunk-methods/example_chunk
 Content-Type: application/json

@@ -3225,6 +3225,14 @@ Tokenizer 会根据所选方式将内容存储为对应的数据结构。`,
         updated: '资源配额已更新',
       },
 
+      chunkMethodVisibility: {
+        title: '扩展分块方法',
+        description: '控制当前工作空间可以使用哪些扩展内置分块方法。',
+        methodDescription: '启用后，可在当前工作空间的 PDF 知识库中选择该方法。',
+        updated: '分块方法可见性已更新',
+        empty: '暂无可配置的扩展分块方法',
+      },
+
       permissionType: {
         enable: '启用',
         read: '读取',

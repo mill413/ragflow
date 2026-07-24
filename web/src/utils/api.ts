@@ -436,6 +436,10 @@ export default {
     `${restAPIv1}/admin/teams/${teamId}/resources`,
   adminTeamMember: (teamId: string, userId: string) =>
     `${restAPIv1}/admin/teams/${teamId}/members/${userId}`,
+  adminWorkspaceChunkMethods: (workspaceId: string) =>
+    `${restAPIv1}/admin/workspaces/${workspaceId}/chunk-methods`,
+  adminWorkspaceChunkMethod: (workspaceId: string, parserId: string) =>
+    `${restAPIv1}/admin/workspaces/${workspaceId}/chunk-methods/${parserId}`,
   adminListManagedResources: `${restAPIv1}/admin/resources`,
   adminManagedResource: (resourceType: string, resourceId: string) =>
     `${restAPIv1}/admin/resources/${resourceType}/${resourceId}`,

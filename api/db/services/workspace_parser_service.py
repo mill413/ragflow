@@ -40,6 +40,21 @@ class WorkspaceParserService:
         return parser_id in {item_id for item_id, _label in cls.parse_parser_ids(tenant.parser_ids)}
 
     @classmethod
+    def list_settings(cls, workspace_id: str) -> list[dict]:
+        exists, tenant = TenantService.get_by_id(workspace_id)
+        if not exists:
+            raise LookupError("Workspace not found")
+        enabled_parser_ids = {item_id for item_id, _label in cls.parse_parser_ids(tenant.parser_ids)}
+        return [
+            {
+                "parser_id": parser_id,
+                "label": label,
+                "enabled": parser_id in enabled_parser_ids,
+            }
+            for parser_id, label in cls.EXTENDED_PARSERS.items()
+        ]
+
+    @classmethod
     def set_enabled(cls, workspace_id: str, parser_id: str, enabled: bool) -> dict:
         if parser_id not in cls.EXTENDED_PARSERS:
             raise ValueError(f"Unsupported extended chunk method: {parser_id}")

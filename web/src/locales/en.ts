@@ -3490,6 +3490,16 @@ Important structured information may include: names, dates, locations, events, k
         updated: 'Resource quota updated',
       },
 
+      chunkMethodVisibility: {
+        title: 'Extended chunk methods',
+        description:
+          'Control which extended built-in chunk methods are available in this workspace.',
+        methodDescription:
+          'When enabled, this method can be selected for PDF datasets in the workspace.',
+        updated: 'Chunk method visibility updated',
+        empty: 'No configurable extended chunk methods',
+      },
+
       permissionType: {
         enable: 'Enable',
         read: 'Read',

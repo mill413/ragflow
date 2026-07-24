@@ -716,6 +716,19 @@ def list_model_workspaces():
         return error_response(str(e), 500)
 
 
+@admin_bp.route("/workspaces/<workspace_id>/chunk-methods", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_workspace_chunk_methods(workspace_id):
+    try:
+        return success_response(WorkspaceParserService.list_settings(workspace_id))
+    except LookupError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        logging.exception("Failed to list workspace chunk methods")
+        return error_response(str(e), 500)
+
+
 @admin_bp.route("/workspaces/<workspace_id>/chunk-methods/<parser_id>", methods=["PATCH"])
 @login_required
 @check_admin_auth

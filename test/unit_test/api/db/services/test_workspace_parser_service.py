@@ -37,6 +37,23 @@ def test_extended_chunk_method_requires_workspace_grant(monkeypatch):
         WorkspaceParserService.require_allowed("workspace-1", "example_chunk")
 
 
+def test_list_extended_chunk_method_settings(monkeypatch):
+    tenant = SimpleNamespace(parser_ids="naive:General,example_chunk:Old label")
+    monkeypatch.setattr(
+        TenantService,
+        "get_by_id",
+        lambda _workspace_id: (True, tenant),
+    )
+
+    assert WorkspaceParserService.list_settings("workspace-1") == [
+        {
+            "parser_id": "example_chunk",
+            "label": "Extension Example Chunking",
+            "enabled": True,
+        }
+    ]
+
+
 def test_extended_chunk_method_can_be_enabled_and_disabled(monkeypatch):
     tenant = SimpleNamespace(parser_ids="naive:General,qa:Q&A")
     updates = []
