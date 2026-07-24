@@ -51,7 +51,7 @@ type AdminNavigationItem = {
 };
 
 const AdminNavigationLayout = () => {
-  const { appName } = useFetchAppConf();
+  const { appIconUrl, appName } = useFetchAppConf();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -216,7 +216,7 @@ const AdminNavigationLayout = () => {
             <>
               <img
                 className="mr-3 size-8 shrink-0"
-                src="/logo.svg"
+                src={appIconUrl}
                 alt="logo"
               />
               <span className="min-w-0 truncate text-lg font-bold">

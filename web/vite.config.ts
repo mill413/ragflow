@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
-import { appName } from './src/conf.json';
+import { appIconUrl, appName } from './src/conf.json';
 
 // Inject code location data attributes for react-dev-inspector
 const inspectorBabelPlugin = (): import('vite').Plugin => ({
@@ -27,13 +27,19 @@ const inspectorBabelPlugin = (): import('vite').Plugin => ({
 
 const runtimeConfigPlugin = (
   configuredAppName: string,
+  configuredAppIconUrl: string,
 ): import('vite').Plugin => ({
   name: 'runtime-config',
   configureServer(server) {
     server.middlewares.use('/conf.json', (_request, response) => {
       response.setHeader('Content-Type', 'application/json; charset=utf-8');
       response.setHeader('Cache-Control', 'no-store');
-      response.end(JSON.stringify({ appName: configuredAppName }));
+      response.end(
+        JSON.stringify({
+          appName: configuredAppName,
+          appIconUrl: configuredAppIconUrl,
+        }),
+      );
     });
   },
 });
@@ -165,7 +171,10 @@ export default defineConfig(({ mode }) => {
     plugins: [
       inspectorBabelPlugin(),
       react(),
-      runtimeConfigPlugin(env.APP_NAME?.trim() || appName),
+      runtimeConfigPlugin(
+        env.APP_NAME?.trim() || appName,
+        env.APP_ICON_URL?.trim() || appIconUrl,
+      ),
       viteStaticCopy({
         targets: [
           {

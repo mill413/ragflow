@@ -16,7 +16,11 @@ import {
   useState,
 } from 'react';
 
-import { IRegenerateMessage, IRemoveMessageById } from '@/hooks/logic-hooks';
+import {
+  IRegenerateMessage,
+  IRemoveMessageById,
+  useFetchAppConf,
+} from '@/hooks/logic-hooks';
 import { INodeEvent, MessageEventType } from '@/hooks/use-send-message';
 import { cn } from '@/lib/utils';
 import { AgentChatContext } from '@/pages/agent/context';
@@ -82,6 +86,7 @@ function MessageItem({
   isShare,
   nickname,
 }: IProps) {
+  const { appIconUrl } = useFetchAppConf();
   const { theme } = useTheme();
   const isAssistant = item.role === MessageType.Assistant;
   const isUser = item.role === MessageType.User;
@@ -191,7 +196,7 @@ function MessageItem({
           {visibleAvatar &&
             (item.role === MessageType.User ? (
               <RAGFlowAvatar
-                avatar={avatar ?? '/logo.svg'}
+                avatar={avatar ?? appIconUrl}
                 name={nickname}
                 isPerson
               />

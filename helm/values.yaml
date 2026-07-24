@@ -14,6 +14,8 @@ env:
   # Browser title and user-facing product name. Prefer setting this during
   # deployment instead of committing a deployment-specific value here.
   # APP_NAME: ""
+  # Product icon and browser favicon URL. Supports absolute HTTP(S) URLs.
+  # APP_ICON_URL: "https://example.com/logo.svg"
 
   # The type of doc engine to use.
   # Available options:

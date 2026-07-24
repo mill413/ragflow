@@ -1,5 +1,9 @@
 import { MessageType } from '@/constants/chat';
-import { IRegenerateMessage, IRemoveMessageById } from '@/hooks/logic-hooks';
+import {
+  IRegenerateMessage,
+  IRemoveMessageById,
+  useFetchAppConf,
+} from '@/hooks/logic-hooks';
 import {
   IMessage,
   IReference,
@@ -53,6 +57,7 @@ const MessageItem = ({
   visibleAvatar = true,
   nickname,
 }: IProps) => {
+  const { appIconUrl } = useFetchAppConf();
   const { theme } = useTheme();
   const isAssistant = item.role === MessageType.Assistant;
   const isUser = item.role === MessageType.User;
@@ -97,7 +102,7 @@ const MessageItem = ({
             (item.role === MessageType.User ? (
               <RAGFlowAvatar
                 className="size-10"
-                avatar={avatar ?? '/logo.svg'}
+                avatar={avatar ?? appIconUrl}
                 isPerson
                 name={nickname}
               />
