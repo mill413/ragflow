@@ -83,7 +83,7 @@ from api.db.services.workspace_parser_service import WorkspaceParserService
 from api.db.joint_services.tenant_model_service import get_tenant_default_model_by_type, resolve_model_config, get_model_config_by_id
 from common.versions import get_ragflow_version
 from api.db.db_models import close_connection
-from rag.app import audio, book, custom_chunk, email, laws, manual, naive, one, paper, picture, presentation, qa, resume, table, tag
+from rag.app import audio, book, email, example_chunk, laws, manual, naive, one, paper, picture, presentation, qa, resume, table, tag
 from rag.nlp import search, rag_tokenizer, add_positions
 from rag.advanced_rag.knowlege_compile.raptor import (
     RAPTOR_TREE_BUILDER,
@@ -114,7 +114,7 @@ BATCH_SIZE = 64
 
 FACTORY = {
     "general": naive,
-    ParserType.CUSTOM_CHUNK.value: custom_chunk,
+    ParserType.EXAMPLE_CHUNK.value: example_chunk,
     ParserType.NAIVE.value: naive,
     ParserType.PAPER.value: paper,
     ParserType.BOOK.value: book,

@@ -490,7 +490,7 @@ class UpdateDocumentReq(Base):
         """Validate an optional document parser method."""
         if chunk_method:
             # Validate chunk method if present
-            valid_chunk_method = {"custom_chunk", "naive", "manual", "qa", "table", "paper", "book", "laws", "presentation", "picture", "one", "knowledge_graph", "email", "tag"}
+            valid_chunk_method = {"example_chunk", "naive", "manual", "qa", "table", "paper", "book", "laws", "presentation", "picture", "one", "knowledge_graph", "email", "tag"}
             if chunk_method not in valid_chunk_method:
                 raise PydanticCustomError("format_invalid", "`chunk_method` {chunk_method} doesn't exist", {"chunk_method": chunk_method})
 
@@ -786,7 +786,7 @@ class CreateDatasetReq(Base):
     @classmethod
     def validate_chunk_method(cls, v: Any, handler, info: ValidationInfo) -> Any:
         """Wrap validation to unify error messages, including type errors (e.g. list)."""
-        allowed = {"custom_chunk", "naive", "book", "email", "laws", "manual", "one", "paper", "picture", "presentation", "qa", "table", "tag", "resume"}
+        allowed = {"example_chunk", "naive", "book", "email", "laws", "manual", "one", "paper", "picture", "presentation", "qa", "table", "tag", "resume"}
         error_msg = "Input should be a supported built-in chunk method"
         try:
             # Run inner validation (type checking)

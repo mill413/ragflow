@@ -32,9 +32,9 @@ def test_extended_chunk_method_requires_workspace_grant(monkeypatch):
         lambda _workspace_id: (True, tenant),
     )
 
-    assert not WorkspaceParserService.is_allowed("workspace-1", "custom_chunk")
+    assert not WorkspaceParserService.is_allowed("workspace-1", "example_chunk")
     with pytest.raises(PermissionError):
-        WorkspaceParserService.require_allowed("workspace-1", "custom_chunk")
+        WorkspaceParserService.require_allowed("workspace-1", "example_chunk")
 
 
 def test_extended_chunk_method_can_be_enabled_and_disabled(monkeypatch):
@@ -54,11 +54,11 @@ def test_extended_chunk_method_can_be_enabled_and_disabled(monkeypatch):
         update_by_id,
     )
 
-    WorkspaceParserService.set_enabled("workspace-1", "custom_chunk", True)
-    assert WorkspaceParserService.is_allowed("workspace-1", "custom_chunk")
-    assert tenant.parser_ids.endswith("custom_chunk:Custom Chunk")
+    WorkspaceParserService.set_enabled("workspace-1", "example_chunk", True)
+    assert WorkspaceParserService.is_allowed("workspace-1", "example_chunk")
+    assert tenant.parser_ids.endswith("example_chunk:Extension Example Chunking")
 
-    WorkspaceParserService.set_enabled("workspace-1", "custom_chunk", False)
-    assert not WorkspaceParserService.is_allowed("workspace-1", "custom_chunk")
-    assert "custom_chunk" not in tenant.parser_ids
+    WorkspaceParserService.set_enabled("workspace-1", "example_chunk", False)
+    assert not WorkspaceParserService.is_allowed("workspace-1", "example_chunk")
+    assert "example_chunk" not in tenant.parser_ids
     assert len(updates) == 2

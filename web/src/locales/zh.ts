@@ -840,7 +840,7 @@ export default {
       tableColumnRolesReparseTip:
         '已有文档需要重新解析后，新的列用途才会生效。',
       parserLabel: {
-        custom_chunk: '测试分块',
+        example_chunk: '扩展示例分块',
         naive: '通用',
         general: '通用',
         qa: '问答',
@@ -867,7 +867,7 @@ export default {
         '为帮助您更好地理解，我们提供了相关截图供您参考。',
       dialogueExamplesTitle: '对话示例',
       methodEmpty: '这将显示知识库类别的可视化解释',
-      customChunk: `<p>用于验证扩展内置分块方法与工作空间可见性控制。</p><p>支持 <b>TXT、Markdown、CSV 和 JSON</b> 文件，按分隔符切分并合并到目标 Token 数。</p>`,
+      exampleChunk: `<p>用于展示 PDF 扩展分块方法的函数签名和返回值格式。</p><p>支持复用 <b>DeepDOC、MinerU、Plain Text</b> 等现有 PDF 解析器，并将解析结果直接转换为分块。</p>`,
       book: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
       由于一本书很长，并不是所有部分都有用，如果是 PDF，
       请为每本书设置<i>页面范围</i>，以消除负面影响并节省分析计算时间。</p>`,

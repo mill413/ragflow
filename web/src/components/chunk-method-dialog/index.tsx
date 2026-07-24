@@ -206,7 +206,6 @@ export function ChunkMethodDialog({
 
   const showMaxTokenNumber =
     selectedTag === DocumentParserType.Naive ||
-    selectedTag === DocumentParserType.CustomChunk ||
     selectedTag === DocumentParserType.KnowledgeGraph;
 
   const showEntityTypes = selectedTag === DocumentParserType.KnowledgeGraph;

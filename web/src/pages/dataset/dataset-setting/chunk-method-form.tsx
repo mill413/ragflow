@@ -17,10 +17,10 @@ import { QAConfiguration } from './configuration/qa';
 import { ResumeConfiguration } from './configuration/resume';
 import { TableConfiguration } from './configuration/table';
 import { TagConfiguration } from './configuration/tag';
-import { CustomChunkConfiguration } from './configuration/custom-chunk';
+import { ExampleChunkConfiguration } from './configuration/example-chunk';
 
 const ConfigurationComponentMap = {
-  [DocumentParserType.CustomChunk]: CustomChunkConfiguration,
+  [DocumentParserType.ExampleChunk]: ExampleChunkConfiguration,
   [DocumentParserType.Naive]: NaiveConfiguration,
   [DocumentParserType.Qa]: QAConfiguration,
   [DocumentParserType.Resume]: ResumeConfiguration,

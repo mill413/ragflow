@@ -19,7 +19,7 @@ from common.constants import ParserType
 
 
 class WorkspaceParserService:
-    EXTENDED_PARSERS = {ParserType.CUSTOM_CHUNK.value: "Custom Chunk"}
+    EXTENDED_PARSERS = {ParserType.EXAMPLE_CHUNK.value: "Extension Example Chunking"}
 
     @staticmethod
     def parse_parser_ids(raw: str | None) -> list[tuple[str, str]]:

@@ -64,14 +64,10 @@ export function ChunkMethodItem(props: IProps) {
   // const handleChunkMethodSelectChange = useHandleChunkMethodSelectChange(form);
   const parserList = useSelectChunkMethodList(workspaceId);
   const availableParserList = useMemo(() => {
-    const customChunkExtensions = new Set(['csv', 'json', 'md', 'mdx', 'txt']);
-    if (
-      !documentExtension ||
-      customChunkExtensions.has(documentExtension.toLowerCase())
-    ) {
+    if (!documentExtension || documentExtension.toLowerCase() === 'pdf') {
       return parserList;
     }
-    return parserList.filter((parser) => parser.value !== 'custom_chunk');
+    return parserList.filter((parser) => parser.value !== 'example_chunk');
   }, [documentExtension, parserList]);
 
   return (

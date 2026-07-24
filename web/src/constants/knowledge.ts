@@ -93,7 +93,7 @@ export enum DocumentType {
 }
 
 export enum DocumentParserType {
-  CustomChunk = 'custom_chunk',
+  ExampleChunk = 'example_chunk',
   Naive = 'naive',
   Qa = 'qa',
   Resume = 'resume',
