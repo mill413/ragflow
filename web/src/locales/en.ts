@@ -172,6 +172,10 @@ export default {
         profileTitle: 'Open your profile settings',
         profileDescription:
           'Manage your profile, teams, model providers, data sources, and other workspace settings here.',
+        userSettingAriaLabel: 'Workspace guidance for user settings',
+        userSettingWorkspaceTitle: 'Select a workspace before configuring',
+        userSettingWorkspaceDescription:
+          'Models, data sources, MCP servers, and compilation templates in user settings belong to the current workspace. Select a personal or team workspace above before configuring them.',
         skip: 'Skip tour',
         previous: 'Previous',
         next: 'Next',
@@ -519,6 +523,10 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       },
       redoAll: 'Clear existing chunks',
       applyAutoMetadataSettings: 'Apply global auto-metadata settings',
+      applyKnowledgeBaseParsingSettings:
+        'Overwrite file parsing settings with the current dataset settings',
+      applyKnowledgeBaseParsingSettingsDescription:
+        "The selected files' chunking method, parsing parameters, and DataFlow configuration will be replaced.",
       parseFileTip: 'Are you sure to parse?',
       parseFile: 'Parse file',
       emptyMetadata: 'No metadata',

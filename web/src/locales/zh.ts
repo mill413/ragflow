@@ -163,6 +163,10 @@ export default {
         profileTitle: '进入个人中心',
         profileDescription:
           '在个人中心管理个人资料、团队、模型提供商、数据源以及其他工作空间配置。',
+        userSettingAriaLabel: '个人中心工作空间引导',
+        userSettingWorkspaceTitle: '先选择要配置的工作空间',
+        userSettingWorkspaceDescription:
+          '个人中心的模型、数据源、MCP 和知识编译模板等配置均属于当前工作空间。请先在上方选择个人或团队工作空间，再进行配置。',
         skip: '跳过引导',
         previous: '上一步',
         next: '下一步',
@@ -488,6 +492,9 @@ export default {
       },
       redoAll: '清除现有分块',
       applyAutoMetadataSettings: '应用全局自动元数据设置',
+      applyKnowledgeBaseParsingSettings: '使用当前知识库配置覆盖文件解析配置',
+      applyKnowledgeBaseParsingSettingsDescription:
+        '勾选后，所选文件原有的分块方法、解析参数和 DataFlow 配置将被当前知识库配置替换。',
       parseFileTip: '您确定要解析吗？',
       parseFile: '解析文件',
       emptyMetadata: '无元数据',

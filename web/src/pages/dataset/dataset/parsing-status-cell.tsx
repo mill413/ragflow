@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { IDocumentInfo } from '@/interfaces/database/document';
+import { RunDocumentOptions } from '@/hooks/use-document-request';
 import { CircleQuestionMark, CircleX } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -130,10 +131,7 @@ export function ParsingStatusCell({
   const isRunning = isParserRunning(run);
   const isZeroChunk = chunk_count === 0;
 
-  const handleOperationIconClick = (option?: {
-    delete: boolean;
-    apply_kb: boolean;
-  }) => {
+  const handleOperationIconClick = (option?: RunDocumentOptions) => {
     handleRunDocumentByIds(record.id, isRunning, option);
   };
 
@@ -175,11 +173,6 @@ export function ParsingStatusCell({
                 size="icon-xs"
                 disabled={readOnly}
                 onClick={() => showReparseDialogModal()}
-                // onClick={
-                //   isZeroChunk || isRunning
-                //     ? handleOperationIconClick(false)
-                //     : () => {}
-                // }
               >
                 {operationIcon}
               </Button>

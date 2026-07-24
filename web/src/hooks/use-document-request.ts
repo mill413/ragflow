@@ -347,6 +347,12 @@ export const useSetDocumentStatus = () => {
   return { setDocumentStatus: mutateAsync, data, loading };
 };
 
+export type RunDocumentOptions = {
+  delete: boolean;
+  apply_kb: boolean;
+  apply_kb_config: boolean;
+};
+
 // This hook is used to run a document by its IDs
 export const useRunDocument = () => {
   const queryClient = useQueryClient();
@@ -364,7 +370,7 @@ export const useRunDocument = () => {
     }: {
       documentIds: string[];
       run: number;
-      option?: { delete: boolean; apply_kb: boolean };
+      option?: RunDocumentOptions;
     }) => {
       queryClient.invalidateQueries({
         queryKey: [DocumentApiAction.FetchDocumentList],

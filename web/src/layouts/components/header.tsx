@@ -247,7 +247,13 @@ export function Header({
         </div>
       </div>
 
-      <HeaderOnboardingTour enabled={!isCompact} userId={userInfo.id} />
+      <HeaderOnboardingTour
+        enabled={!isCompact}
+        mode={
+          pathname.startsWith(Routes.UserSetting) ? 'user-setting' : 'header'
+        }
+        userId={userInfo.id}
+      />
     </>
   );
 }
