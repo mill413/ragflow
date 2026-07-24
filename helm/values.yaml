@@ -85,18 +85,23 @@ env:
   # The number of text chunks processed in a single batch during embedding vectorization.
   EMBEDDING_BATCH_SIZE: 16
 
+  # Keep parsing concurrency conservative for the shared test server.
+  # Two task executors with one concurrent task each allow at most two
+  # parsing tasks to run at the same time; additional tasks remain queued.
+  MAX_CONCURRENT_TASKS: "1"
+  MAX_CONCURRENT_CHUNK_BUILDERS: "1"
+  MAX_CONCURRENT_MINIO: "8"
+
+  # Elasticsearch runs with a 10 GiB container limit below. Keep the JVM heap
+  # at 4 GiB so the remaining memory is available to Lucene and the OS cache.
+  ES_JAVA_OPTS: "-Xms4g -Xmx4g"
+
 ragflow:
   image:
     repository: infiniflow/ragflow
     tag: v0.26.4
     pullPolicy: IfNotPresent
     pullSecrets: []
-  # Arguments passed to docker/entrypoint.sh. These defaults match
-  # docker/docker-compose.yml.
-  args:
-    - --enable-adminserver
-    - --init-model-provider-tables
-    - --workers=1
   # Other supported arguments:
   # - --disable-webserver
   # - --disable-taskexecutor
@@ -137,10 +142,6 @@ ragflow:
     #       model_type: chat
     #       is_tools: false
 
-  # Kubernetes configuration
-  deployment:
-    strategy:
-    resources:
   service:
     type: NodePort
     # Used only when type is NodePort. Leave empty for automatic allocation.
@@ -151,8 +152,42 @@ ragflow:
     # Admin Service port configuration
     port: 9381
   api:
+    replicas: 1
+    # The API deployment serves the web UI, API, admin server, and data sync.
+    # Parsing is disabled and handled by the dedicated worker deployment.
+    args:
+      - --enable-adminserver
+      - --init-model-provider-tables
+      - --disable-taskexecutor
+    deployment:
+      strategy:
+      # Test-server limit: 4 CPU / 4 GiB.
+      resources:
+        requests:
+          cpu: "2"
+          memory: "3Gi"
+        limits:
+          cpu: "4"
+          memory: "4Gi"
     service:
       enabled: true
+  worker:
+    replicas: 1
+    # The worker deployment consumes parsing tasks without exposing a service.
+    args:
+      - --disable-webserver
+      - --disable-datasync
+      - --workers=2
+    deployment:
+      strategy:
+      # Test-server limit: 12 CPU / 10 GiB.
+      resources:
+        requests:
+          cpu: "6"
+          memory: "7Gi"
+        limits:
+          cpu: "12"
+          memory: "10Gi"
 
 elasticsearch:
   image:
@@ -163,11 +198,11 @@ elasticsearch:
   initContainers:
     alpine:
       repository: alpine
-      tag: latest
+      tag: "3.24.1"
       pullPolicy: IfNotPresent
     busybox:
       repository: busybox
-      tag: latest
+      tag: "1.38.0"
       pullPolicy: IfNotPresent
   storage:
     className:
@@ -177,10 +212,14 @@ elasticsearch:
     hostPath: ""
   deployment:
     strategy:
+    # Test-server limit: 8 CPU / 10 GiB.
     resources:
       requests:
         cpu: "4"
-        memory: "16Gi"
+        memory: "8Gi"
+      limits:
+        cpu: "8"
+        memory: "10Gi"
   service:
     type: NodePort
     # Used only when type is NodePort.
@@ -201,7 +240,14 @@ minio:
     hostPath: ""
   deployment:
     strategy:
+    # Test-server limit: 3 CPU / 3 GiB.
     resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "3"
+        memory: "3Gi"
   service:
     type: NodePort
     # Used only when type is NodePort.
@@ -224,7 +270,14 @@ mysql:
     hostPath: ""
   deployment:
     strategy:
+    # Test-server limit: 3 CPU / 3 GiB.
     resources:
+      requests:
+        cpu: "1"
+        memory: "2Gi"
+      limits:
+        cpu: "3"
+        memory: "3Gi"
   service:
     type: NodePort
     # Used only when type is NodePort.
@@ -252,7 +305,14 @@ redis:
       # whenScaled: Delete
   deployment:
     strategy:
+    # Test-server limit: 2 CPU / 2 GiB.
     resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "2Gi"
 # This block is for setting up web service ingress. For more information, see:
 # https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:

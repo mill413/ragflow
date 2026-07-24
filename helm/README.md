@@ -2,7 +2,7 @@
 
 A Helm chart to deploy RAGFlow and its dependencies on Kubernetes.
 
-- Components: RAGFlow (web/api), Elasticsearch, MySQL, MinIO, and Redis
+- Components: RAGFlow API, RAGFlow parsing worker, Elasticsearch, MySQL, MinIO, and Redis
 - Requirements: Kubernetes >= 1.24, Helm >= 3.10
 
 ## Install
@@ -122,15 +122,29 @@ env:
 
 ## RAGFlow Runtime
 
-The default RAGFlow entrypoint arguments match `docker/docker-compose.yml`:
+The chart runs the web/API and parsing workers in separate Deployments using
+the same image. Only the API Deployment is exposed through Services:
 
 ```yaml
 ragflow:
-  args:
-    - --enable-adminserver
-    - --init-model-provider-tables
-    - --workers=1
+  api:
+    replicas: 1
+    args:
+      - --enable-adminserver
+      - --init-model-provider-tables
+      - --disable-taskexecutor
+  worker:
+    replicas: 1
+    args:
+      - --disable-webserver
+      - --disable-datasync
+      - --workers=2
 ```
+
+The API Deployment runs the web UI, API, admin server, and data sync process.
+The worker Deployment only consumes parsing tasks and has no Service. Configure
+their resources independently through `ragflow.api.deployment.resources` and
+`ragflow.worker.deployment.resources`.
 
 Application environment variables are configured through `env`. Service host
 names are generated from Kubernetes service DNS names, while runtime defaults
