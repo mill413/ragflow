@@ -13,6 +13,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
+import copy
 import logging
 
 from api.db.services.document_service import DocumentService
@@ -60,6 +61,21 @@ def update_document_name_only(document_id, req_doc_name):
             doc.kb_id,
         )
     return None
+
+
+def overwrite_document_parser_config_from_knowledgebase(doc, kb):
+    """Replace a document's parsing configuration with its knowledge base defaults."""
+    parser_config = copy.deepcopy(kb.parser_config or {})
+    update_fields = {
+        "parser_id": FileService.get_parser(doc.type, doc.name, kb.parser_id),
+        "parser_config": parser_config,
+        "pipeline_id": kb.pipeline_id,
+    }
+    if not DocumentService.update_by_id(doc.id, update_fields):
+        raise RuntimeError(f"Failed to apply knowledge base parsing configuration to document {doc.id}.")
+
+    for field, value in update_fields.items():
+        setattr(doc, field, value)
 
 
 def update_chunk_method(req, doc, tenant_id):

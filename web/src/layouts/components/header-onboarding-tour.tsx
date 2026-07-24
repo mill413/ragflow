@@ -4,10 +4,11 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 const TOUR_VERSION = 'v1';
-const STORAGE_KEY_PREFIX = 'ragflow:header-onboarding:';
 const SPOTLIGHT_PADDING = 6;
 const TOOLTIP_WIDTH = 320;
 const VIEWPORT_GUTTER = 16;
+
+export type HeaderOnboardingMode = 'header' | 'user-setting';
 
 type TargetRect = {
   bottom: number;
@@ -18,20 +19,22 @@ type TargetRect = {
   width: number;
 };
 
-const getStorageKey = (userId: string) =>
-  `${STORAGE_KEY_PREFIX}${TOUR_VERSION}:${userId}`;
+const getStorageKey = (userId: string, mode: HeaderOnboardingMode) =>
+  `ragflow:${mode}-onboarding:${TOUR_VERSION}:${userId}`;
 
-const hasCompletedTour = (userId: string) => {
+const hasCompletedTour = (userId: string, mode: HeaderOnboardingMode) => {
   try {
-    return window.localStorage.getItem(getStorageKey(userId)) === 'completed';
+    return (
+      window.localStorage.getItem(getStorageKey(userId, mode)) === 'completed'
+    );
   } catch {
     return false;
   }
 };
 
-const markTourCompleted = (userId: string) => {
+const markTourCompleted = (userId: string, mode: HeaderOnboardingMode) => {
   try {
-    window.localStorage.setItem(getStorageKey(userId), 'completed');
+    window.localStorage.setItem(getStorageKey(userId, mode), 'completed');
   } catch {
     // The tour still closes when storage is unavailable.
   }
@@ -39,9 +42,11 @@ const markTourCompleted = (userId: string) => {
 
 export function HeaderOnboardingTour({
   enabled,
+  mode = 'header',
   userId,
 }: {
   enabled: boolean;
+  mode?: HeaderOnboardingMode;
   userId?: string;
 }) {
   const { t } = useTranslation();
@@ -49,43 +54,54 @@ export function HeaderOnboardingTour({
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
 
   const steps = useMemo(
-    () => [
-      {
-        target: 'workspace',
-        title: t('header.onboarding.workspaceTitle'),
-        description: t('header.onboarding.workspaceDescription'),
-      },
-      {
-        target: 'help',
-        title: t('header.onboarding.helpTitle'),
-        description: t('header.onboarding.helpDescription'),
-      },
-      {
-        target: 'profile',
-        title: t('header.onboarding.profileTitle'),
-        description: t('header.onboarding.profileDescription'),
-      },
-    ],
-    [t],
+    () =>
+      mode === 'user-setting'
+        ? [
+            {
+              target: 'workspace',
+              title: t('header.onboarding.userSettingWorkspaceTitle'),
+              description: t(
+                'header.onboarding.userSettingWorkspaceDescription',
+              ),
+            },
+          ]
+        : [
+            {
+              target: 'workspace',
+              title: t('header.onboarding.workspaceTitle'),
+              description: t('header.onboarding.workspaceDescription'),
+            },
+            {
+              target: 'help',
+              title: t('header.onboarding.helpTitle'),
+              description: t('header.onboarding.helpDescription'),
+            },
+            {
+              target: 'profile',
+              title: t('header.onboarding.profileTitle'),
+              description: t('header.onboarding.profileDescription'),
+            },
+          ],
+    [mode, t],
   );
 
   const closeTour = useCallback(() => {
     if (userId) {
-      markTourCompleted(userId);
+      markTourCompleted(userId, mode);
     }
     setStepIndex(null);
     setTargetRect(null);
-  }, [userId]);
+  }, [mode, userId]);
 
   useEffect(() => {
-    if (!enabled || !userId || hasCompletedTour(userId)) {
+    if (!enabled || !userId || hasCompletedTour(userId, mode)) {
       setStepIndex(null);
       return;
     }
 
     const frame = window.requestAnimationFrame(() => setStepIndex(0));
     return () => window.cancelAnimationFrame(frame);
-  }, [enabled, userId]);
+  }, [enabled, mode, userId]);
 
   useEffect(() => {
     if (stepIndex === null) return;
@@ -142,7 +158,11 @@ export function HeaderOnboardingTour({
 
   return createPortal(
     <div
-      aria-label={t('header.onboarding.ariaLabel')}
+      aria-label={t(
+        mode === 'user-setting'
+          ? 'header.onboarding.userSettingAriaLabel'
+          : 'header.onboarding.ariaLabel',
+      )}
       aria-modal="true"
       className="fixed inset-0 z-[1000]"
       data-testid="header-onboarding-tour"

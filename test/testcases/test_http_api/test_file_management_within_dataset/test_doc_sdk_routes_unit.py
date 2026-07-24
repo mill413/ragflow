@@ -492,6 +492,7 @@ def _load_doc_module(monkeypatch, module_basename="chunk_api"):
         document_api_service_mod.update_chunk_method = lambda *_args, **_kwargs: None
         document_api_service_mod.update_document_status_only = lambda *_args, **_kwargs: None
         document_api_service_mod.reset_document_for_reparse = lambda *_args, **_kwargs: None
+        document_api_service_mod.overwrite_document_parser_config_from_knowledgebase = lambda *_args, **_kwargs: None
         monkeypatch.setitem(sys.modules, "api.apps.services.document_api_service", document_api_service_mod)
 
     module_path = repo_root / "api" / "apps" / "restful_apis" / f"{module_basename}.py"

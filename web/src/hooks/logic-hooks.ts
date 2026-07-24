@@ -161,6 +161,7 @@ export const useGetPagination = (options?: { pageSize?: number }) => {
 
 export interface AppConf {
   appName: string;
+  appIconUrl: string;
 }
 
 export const useFetchAppConf = () => {

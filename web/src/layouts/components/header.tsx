@@ -47,7 +47,7 @@ export function Header({
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const { pathname } = useLocation();
-  const { appName } = useFetchAppConf();
+  const { appIconUrl, appName } = useFetchAppConf();
   const { t } = useTranslation();
   const changeLanguage = useChangeLanguage();
 
@@ -102,7 +102,7 @@ export function Header({
               className="flex size-10 shrink-0 items-center justify-center"
             >
               <img
-                src={'/logo.svg'}
+                src={appIconUrl}
                 alt={`${appName} logo`}
                 className="size-10"
               />
@@ -247,7 +247,13 @@ export function Header({
         </div>
       </div>
 
-      <HeaderOnboardingTour enabled={!isCompact} userId={userInfo.id} />
+      <HeaderOnboardingTour
+        enabled={!isCompact}
+        mode={
+          pathname.startsWith(Routes.UserSetting) ? 'user-setting' : 'header'
+        }
+        userId={userInfo.id}
+      />
     </>
   );
 }

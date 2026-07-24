@@ -40,6 +40,7 @@ services:
     env_file: .env
     environment:
       APP_NAME: ${APP_NAME:-RAGFlow}
+      APP_ICON_URL: ${APP_ICON_URL:-/logo.svg}
       API_PROXY_SCHEME: python
       DOC_BULK_SIZE: "1"
       DOC_ENGINE: elasticsearch
@@ -104,6 +105,7 @@ services:
       - ${RAGFLOW_LOCAL_VITE_PORT:-18084}:9222
     environment:
       APP_NAME: ${APP_NAME:-RAGFlow}
+      APP_ICON_URL: ${APP_ICON_URL:-/logo.svg}
       API_PROXY_SCHEME: python
       API_PROXY_URL: http://ragflow:9380/
       ADMIN_API_PROXY_URL: http://ragflow:9381/

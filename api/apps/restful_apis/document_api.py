@@ -35,6 +35,7 @@ from api.apps.services.document_api_service import (
     update_chunk_method,
     update_document_status_only,
     reset_document_for_reparse,
+    overwrite_document_parser_config_from_knowledgebase,
 )
 from api.db import VALID_FILE_TYPES, FileType
 from api.db.db_models import API4Conversation, DB
@@ -1541,7 +1542,12 @@ def _run_sync(user_id: str, req):
                 settings.docStoreConn.delete({"doc_id": doc_id}, search.index_name(doc_tenant_id), doc.kb_id)
 
         if str(req["run"]) == TaskStatus.RUNNING.value:
-            if req.get("apply_kb"):
+            if req.get("apply_kb_config"):
+                e, kb = KnowledgebaseService.get_by_id(doc.kb_id)
+                if not e:
+                    raise LookupError("Can't find this dataset!")
+                overwrite_document_parser_config_from_knowledgebase(doc, kb)
+            elif req.get("apply_kb"):
                 e, kb = KnowledgebaseService.get_by_id(doc.kb_id)
                 if not e:
                     raise LookupError("Can't find this dataset!")
