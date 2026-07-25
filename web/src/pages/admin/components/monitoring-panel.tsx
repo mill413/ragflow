@@ -14,17 +14,9 @@ import {
   HardDrive,
   Library,
   MessageSquare,
-  RefreshCw,
   Users,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDecimalBytes } from '@/lib/utils';
 import { Routes } from '@/routes';
@@ -143,11 +135,13 @@ function StorageDistributionChart({
         {
           type: 'pie',
           radius: ['48%', '72%'],
-          center: ['50%', '42%'],
+          center: ['50%', '50%'],
           avoidLabelOverlap: true,
           label: {
             color: themeColors.textColor,
             formatter: '{b}',
+            width: 120,
+            overflow: 'truncate',
           },
           data: data.map((item) => ({
             name: item.label,
@@ -209,7 +203,7 @@ function StorageDistributionChart({
 
 export default function MonitoringPanel() {
   const { t } = useTranslation();
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['admin/monitoring'],
     queryFn: async () => (await getMonitoringSummary()).data.data,
     refetchInterval: 30_000,
@@ -321,25 +315,6 @@ export default function MonitoringPanel() {
 
   return (
     <section className="space-y-6 border-b border-border-button px-6 py-6">
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-xl font-semibold">
-            {t('admin.monitoringPage.title')}
-          </h2>
-          <CardDescription>
-            {t('admin.monitoringPage.description')}
-          </CardDescription>
-        </div>
-        <Button
-          variant="outline"
-          disabled={isFetching}
-          onClick={() => refetch()}
-        >
-          <RefreshCw className={isFetching ? 'animate-spin' : ''} />
-          {t('admin.monitoringPage.refresh')}
-        </Button>
-      </div>
-
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {metrics.map(
           ({ label, value, detail, icon: Icon, route, breakdown }) => (

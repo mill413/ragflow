@@ -34,6 +34,7 @@ import {
 } from '@/services/admin-service';
 
 import Empty from '@/components/empty/empty';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import useCreateRoleForm, { CreateRoleFormData } from './forms/role-form';
 import { PERMISSION_TYPES } from './utils';
 
@@ -150,13 +151,21 @@ function AdminRoles() {
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
             <CardTitle>{t('admin.roles')}</CardTitle>
 
-            <Button
-              className="h-10 px-4"
-              onClick={() => setAddRoleModalOpen(true)}
-            >
-              <LucideUserPlus />
-              {t('admin.newRole')}
-            </Button>
+            <div className="flex items-center gap-3">
+              <AdminRefreshButton
+                queryKeys={[
+                  ['admin/listRolesWithPermission'],
+                  ['admin/resourceTypes'],
+                ]}
+              />
+              <Button
+                className="h-10 px-4"
+                onClick={() => setAddRoleModalOpen(true)}
+              >
+                <LucideUserPlus />
+                {t('admin.newRole')}
+              </Button>
+            </div>
           </CardHeader>
 
           <CardContent className="space-y-6">
@@ -340,7 +349,7 @@ function AdminRoles() {
               onSubmit={(evt) => {
                 evt.preventDefault();
                 updateRoleDescriptionMutation.mutate({
-                  name: roleToMakeAction!?.role_name,
+                  name: roleToMakeAction!.role_name,
                   description: roleDescription.trim(),
                 });
               }}
@@ -417,7 +426,7 @@ function AdminRoles() {
               variant="destructive"
               onClick={() =>
                 roleToMakeAction &&
-                deleteRoleMutation.mutate(roleToMakeAction!?.role_name)
+                deleteRoleMutation.mutate(roleToMakeAction.role_name)
               }
               disabled={deleteRoleMutation.isPending}
               loading={deleteRoleMutation.isPending}

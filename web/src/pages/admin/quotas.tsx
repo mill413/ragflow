@@ -50,6 +50,7 @@ import {
 } from '@/services/admin-service';
 
 import { DetailInformationCard } from './components/detail-information-card';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import { ResourceQuotaDialog } from './components/resource-quota';
 import { StorageSize } from './components/storage-size';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
@@ -491,11 +492,14 @@ export default function AdminQuotas() {
         <Spotlight />
         <ScrollArea className="size-full">
           <CardHeader className="space-y-5">
-            <div>
-              <CardTitle>{t('admin.quotaManagementPage.title')}</CardTitle>
-              <div className="mt-2 max-w-3xl text-sm text-text-secondary">
-                {t('admin.quotaManagementPage.description')}
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <CardTitle>{t('admin.quotaManagementPage.title')}</CardTitle>
+                <div className="mt-2 max-w-3xl text-sm text-text-secondary">
+                  {t('admin.quotaManagementPage.description')}
+                </div>
               </div>
+              <AdminRefreshButton queryKeys={[['admin/resource-quotas']]} />
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -574,10 +578,10 @@ export default function AdminQuotas() {
         onOpenChange={(open) => !open && setDetail(undefined)}
       >
         <DialogContent
-          className="w-[min(720px,90vw)] max-w-none overflow-hidden p-0"
+          className="grid max-h-[min(760px,90vh)] w-[min(720px,90vw)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
           aria-describedby={undefined}
         >
-          <DialogHeader className="border-b border-border-button px-6 py-5">
+          <DialogHeader className="m-0 border-b border-border-button px-6 py-5">
             <div className="flex items-start gap-4 pr-7">
               <div className="min-w-0">
                 <DialogTitle className="truncate">{detail?.name}</DialogTitle>
@@ -593,7 +597,7 @@ export default function AdminQuotas() {
             </div>
           </DialogHeader>
           {detail && (
-            <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
+            <div className="min-h-0 space-y-5 overflow-y-auto px-6 py-5">
               <div className="grid gap-3 sm:grid-cols-3">
                 <DetailInformationCard
                   icon={Gauge}
@@ -624,7 +628,7 @@ export default function AdminQuotas() {
               />
             </div>
           )}
-          <DialogFooter className="border-t border-border-button px-6 py-4">
+          <DialogFooter className="m-0 border-t border-border-button px-6 py-4">
             <Button variant="outline" onClick={() => setDetail(undefined)}>
               {t('admin.close')}
             </Button>

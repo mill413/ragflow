@@ -3507,6 +3507,7 @@ Important structured information may include: names, dates, locations, events, k
       },
 
       serviceStatus: 'Overview',
+      serviceListTitle: 'Service status',
       userManagement: 'User management',
       teamManagement: {
         title: 'Team management',

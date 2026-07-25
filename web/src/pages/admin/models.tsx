@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import { DynamicForm, type DynamicFormRef } from '@/components/dynamic-form';
 import {
   AlertDialog,
@@ -434,9 +435,17 @@ export default function AdminModels() {
                   {t('admin.modelManagementPage.description')}
                 </div>
               </div>
-              <Button onClick={openCreate}>
-                <Plus /> {t('admin.modelManagementPage.addModel')}
-              </Button>
+              <div className="flex items-center gap-3">
+                <AdminRefreshButton
+                  queryKeys={[
+                    ['admin/managed-models'],
+                    ['admin/model-workspaces'],
+                  ]}
+                />
+                <Button className="h-10 px-4" onClick={openCreate}>
+                  <Plus /> {t('admin.modelManagementPage.addModel')}
+                </Button>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">

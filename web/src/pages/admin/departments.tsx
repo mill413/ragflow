@@ -62,6 +62,7 @@ import {
   updateDepartment,
 } from '@/services/admin-service';
 import { formatDate } from '@/utils/date';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import { getSortIcon } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { matchesSelectedFilter } from './components/table-filter-utils';
@@ -221,9 +222,14 @@ export default function AdminDepartments() {
                 {t('admin.departmentDescription')}
               </div>
             </div>
-            <Button onClick={openCreate}>
-              <Plus /> {t('admin.newDepartment')}
-            </Button>
+            <div className="flex items-center gap-3">
+              <AdminRefreshButton
+                queryKeys={[['admin/departments'], ['admin/listUsers']]}
+              />
+              <Button className="h-10 px-4" onClick={openCreate}>
+                <Plus /> {t('admin.newDepartment')}
+              </Button>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
