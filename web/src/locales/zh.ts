@@ -547,7 +547,6 @@ export default {
       completed: '已完成',
       datasetLog: '知识库日志',
       created: '创建于',
-      learnMore: '内置pipeline简介',
       general: '通用',
       chunkMethodTab: '切片方法',
       testResults: '测试结果',

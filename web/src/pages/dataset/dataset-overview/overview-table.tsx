@@ -27,6 +27,7 @@ import { NavigateToDataflowResultProps } from '@/pages/dataflow-result/interface
 import { useDataSourceInfo } from '@/pages/user-setting/data-source/constant';
 import { IDataSourceInfoMap } from '@/pages/user-setting/data-source/interface';
 import { formatDate, formatSecondsToHumanReadable } from '@/utils/date';
+import { getParserLabel } from '@/utils/parser-label';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -139,7 +140,7 @@ export const getFileLogsTableColumns = (
       header: t('dataPipelineTitle'),
       cell: ({ row }) => {
         const title = row.original.pipeline_title;
-        const pipelineTitle = title === 'naive' ? 'general' : title;
+        const pipelineTitle = getParserLabel(t, title);
         return (
           <div className="flex items-center gap-2 text-text-primary">
             <RAGFlowAvatar

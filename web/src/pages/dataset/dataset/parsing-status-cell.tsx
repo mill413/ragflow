@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { IDocumentInfo } from '@/interfaces/database/document';
 import { RunDocumentOptions } from '@/hooks/use-document-request';
+import { getParserLabel } from '@/utils/parser-label';
 import { CircleQuestionMark, CircleX } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +66,9 @@ export function ParseDropdownButton({
 } & UseChangeDocumentParserShowType) {
   const { t } = useTranslation();
   const { pipeline_id, pipeline_name, chunk_method } = record;
+  const displayName = pipeline_id
+    ? pipeline_name || pipeline_id
+    : getParserLabel(t, chunk_method);
 
   const handleShowChangeParserModal = useCallback(() => {
     showChangeParserModal(record);
@@ -79,24 +83,13 @@ export function ParseDropdownButton({
               <Button
                 variant="static"
                 size="auto"
-                className="capitalize"
                 disabled={readOnly}
               >
-                {pipeline_id
-                  ? pipeline_name || pipeline_id
-                  : chunk_method === 'naive'
-                    ? 'general'
-                    : chunk_method}
+                {displayName}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p className="capitalize">
-                {pipeline_id
-                  ? pipeline_name || pipeline_id
-                  : chunk_method === 'naive'
-                    ? 'general'
-                    : chunk_method}
-              </p>
+              <p>{displayName}</p>
             </TooltipContent>
           </Tooltip>
         </div>

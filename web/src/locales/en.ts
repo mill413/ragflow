@@ -580,7 +580,6 @@ Example: A 1 KB message with 1024-dim embedding uses ~9 KB. The 5 MB default lim
       completed: 'Completed',
       datasetLog: 'Dataset log',
       created: 'Created',
-      learnMore: 'Built-in pipeline introduction',
       general: 'General',
       chunkMethodTab: 'Chunk method',
       testResults: 'Results',
