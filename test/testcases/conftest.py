@@ -93,7 +93,7 @@ _install_scholarly_stub()
 
 import pytest
 import requests
-from test.testcases.configs import API_PROXY_SCHEME, EMAIL, HOST_ADDRESS, PASSWORD, SILICONFLOW_API_KEY, VERSION, ZHIPU_AI_API_KEY
+from test.testcases.configs import EMAIL, HOST_ADDRESS, PASSWORD, SILICONFLOW_API_KEY, VERSION, ZHIPU_AI_API_KEY
 
 MARKER_EXPRESSIONS = {
     "p1": "p1",
@@ -177,29 +177,14 @@ def get_added_models(auth, factory_name):
     res = response.json()
     if res.get("code") != 0:
         raise Exception(res.get("message"))
-    # Go server (post-Python port) serializes this field as `model_provider`
-    # in the RESTful `/api/v1/models` response. Fall back to the legacy
-    # `provider_name` key so this conftest works against both.
     added_factory = {model.get("model_provider") or model["provider_name"] for model in res.get("data", [])}
-    if API_PROXY_SCHEME == "go":
-        added_factory = {provider.casefold() for provider in added_factory}
-        factory_name = factory_name.casefold()
     if factory_name in added_factory:
         return True
     return False
 
 
 def _response_json_or_warning(response, action: str) -> dict:
-    try:
-        return response.json()
-    except ValueError:
-        if API_PROXY_SCHEME != "go":
-            raise
-        message = response.text.strip() or response.reason or "empty response body"
-        return {
-            "code": response.status_code or -1,
-            "message": f"{action} returned non-JSON response: {message[:200]}",
-        }
+    return response.json()
 
 
 def add_model_instance(auth):
@@ -285,11 +270,6 @@ def set_tenant_info(auth):
     set_default_llm_response = requests.patch(url=url, headers=authorization, json={"model_provider": "ZHIPU-AI", "model_instance": "CI", "model_type": "chat", "model_name": "glm-4-flash"})
     llm_res = _response_json_or_warning(set_default_llm_response, "set default chat LLM")
     if llm_res.get("code") != 0:
-        # The Go server (post-Python port) doesn't yet implement
-        # PATCH /api/v1/models/default, so the chat/embedding default
-        # can't be set via API. Downgrade to a warning so tests that
-        # don't rely on a default LLM can still run; tests that do
-        # will fail with their own real error.
         print(f"WARNING: failed to set default chat LLM via {url}: {llm_res.get('message')!r}. Continuing.")
     # set embedding model
     set_default_embedding_response = requests.patch(

@@ -17,7 +17,7 @@ import random
 import re
 
 import pytest
-from configs import INVALID_API_TOKEN, HOST_ADDRESS, IS_GO_PROXY, SDK_UNAUTHORIZED_ERROR_MESSAGE
+from configs import INVALID_API_TOKEN, HOST_ADDRESS, SDK_UNAUTHORIZED_ERROR_MESSAGE
 from ragflow_sdk import RAGFlow
 from hypothesis import example, given, settings
 from utils.hypothesis_utils import valid_names
@@ -77,13 +77,6 @@ class TestMemoryCreate:
         }
         with pytest.raises(Exception) as exception_info:
             client.create_memory(**payload)
-        if IS_GO_PROXY:
-            if name == "":
-                expected_message = "failed on the 'required' tag"
-            elif not name.strip():
-                expected_message = "name can't be empty"
-            else:
-                expected_message = "could not create new memory"
         assert expected_message in str(exception_info.value), str(exception_info.value)
 
     @pytest.mark.p2
@@ -93,7 +86,7 @@ class TestMemoryCreate:
         payload = {"name": name, "memory_type": ["something"], "embd_id": "BAAI/bge-small-en-v1.5@Builtin", "llm_id": "glm-4-flash@ZHIPU-AI"}
         with pytest.raises(Exception) as exception_info:
             client.create_memory(**payload)
-        expected_message = "memory type 'something' is not supported" if IS_GO_PROXY else f"Memory type '{ {'something'} }' is not supported."
+        expected_message = f"Memory type '{ {'something'} }' is not supported."
         assert str(exception_info.value) == expected_message, str(exception_info.value)
 
     @pytest.mark.p3

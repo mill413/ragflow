@@ -18,10 +18,7 @@ import uuid
 
 import pytest
 import random
-from configs import IS_GO_PROXY
-
-
-MESSAGE_USER_ID = "sdk-api-test-user" if IS_GO_PROXY else ""
+MESSAGE_USER_ID = ""
 
 
 @pytest.fixture(scope="class")

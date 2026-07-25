@@ -10,12 +10,7 @@ from deepdoc.vision import LayoutRecognizer
 
 logger = logging.getLogger(__name__)
 
-# OSS model label → Go dlaClassLabels index
-# Go-side (internal/parser/deepdoc.go):
-#   var dlaClassLabels = []string{
-#       "title", "text", "reference", "figure", "figure caption",
-#       "table", "table caption", "table caption", "equation", "figure caption",
-#   }
+# OSS model label → wire-format class index.
 # Indices 4/6/7/9 are duplicates; OSS model only produces unique labels.
 DLA_CLASS_MAP = {
     "title": 0,

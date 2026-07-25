@@ -9,11 +9,6 @@ import {
 } from '@/interfaces/database/user-setting';
 import { IWorkspace } from '@/interfaces/database/workspace';
 import { DEFAULT_LANGUAGE_CODE, supportedLanguages } from '@/locales/config';
-import kbService from '@/services/knowledge-service';
-import {
-  getBackendLanguage,
-  subscribeBackendLanguage,
-} from '@/utils/backend-runtime';
 import userService, {
   addTenantUser,
   agreeTenant,
@@ -29,7 +24,6 @@ import userService, {
 } from '@/services/user-service';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
-import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useWarnEmptyModel } from './use-warn-empty-model';
@@ -53,7 +47,6 @@ export const enum UserSettingApiAction {
   UpdateTeam = 'updateTeam',
   DeleteTeam = 'deleteTeam',
   UpdateTeamMember = 'updateTeamMember',
-  ListPipelines = 'listPipelines',
 }
 
 export const useFetchUserInfo = (): ResponseGetType<IUserInfo> => {
@@ -126,27 +119,6 @@ export const useSelectParserList = (
   const { data: tenantInfo } = useFetchTenantInfo(true, workspaceId);
   const { t } = useTranslation();
 
-  // Detect backend runtime language (Go vs Python) so we can choose
-  // the matching parser-list code path at runtime.
-  // fetchBackendLanguage / getBackendLanguage handle their own caching
-  // internally; no need for an extra useQuery layer.
-  const backendLang = useSyncExternalStore(
-    subscribeBackendLanguage,
-    getBackendLanguage,
-    getBackendLanguage,
-  );
-
-  // Go backend: fetch pipeline catalog dynamically.
-  const { data: pipelineListData } = useQuery({
-    queryKey: [UserSettingApiAction.ListPipelines],
-    queryFn: async () => {
-      const { data } = await kbService.listPipelines();
-      return data;
-    },
-    staleTime: Infinity,
-    enabled: backendLang === 'go',
-  });
-
   const defaultParsers = useMemo(
     () => [
       { value: 'naive', label: t('knowledgeConfiguration.parserLabel.naive') },
@@ -180,28 +152,6 @@ export const useSelectParserList = (
   );
 
   const parserList = useMemo(() => {
-    // Go backend: prefer the dynamic pipeline catalog from the API.
-    if (backendLang === 'go') {
-      const pipelineList: Array<{
-        parser_id: string;
-        title: string;
-        dsl: Record<string, any>;
-      }> = pipelineListData?.data ?? [];
-      if (pipelineList.length > 0) {
-        const labelFromAPI = (parserId: string, title: string) => {
-          const key = `knowledgeConfiguration.parserLabel.${parserId}`;
-          const translated = t(key);
-          return translated !== key ? translated : title;
-        };
-        return pipelineList.map((item) => ({
-          value: item.parser_id,
-          label: labelFromAPI(item.parser_id, item.title),
-        }));
-      }
-    }
-
-    // Python backend (or fallback): use tenant-level parser_ids or
-    // the hardcoded default parsers.
     const parserArray: Array<string> = tenantInfo?.parser_ids?.split(',') ?? [];
     const filteredArray = parserArray.filter((x) => x.trim() !== '');
 
@@ -218,7 +168,7 @@ export const useSelectParserList = (
         label: translated !== key ? translated : arr[1] || arr[0],
       };
     });
-  }, [tenantInfo, defaultParsers, backendLang, pipelineListData, t]);
+  }, [tenantInfo, defaultParsers, t]);
 
   return parserList;
 };

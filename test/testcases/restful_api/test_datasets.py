@@ -20,19 +20,14 @@ import uuid
 
 import pytest
 from configs import DATASET_NAME_LIMIT, DEFAULT_PARSER_CONFIG
-from test.testcases.configs import INVALID_API_TOKEN, IS_GO_PROXY
+from test.testcases.configs import INVALID_API_TOKEN
 from test.testcases.restful_api.helpers.assertions import assert_auth_error
 from test.testcases.restful_api.helpers.client import RestClient
 from test.testcases.utils import encode_avatar
 from test.testcases.utils.file_utils import create_image_file, create_txt_file
 
 
-ARGUMENT_ERROR_CODE = 102 if IS_GO_PROXY else 101
-
-
-def _skip_go_ignored_null(payload, field):
-    if IS_GO_PROXY and payload.get("message") == "No properties were modified":
-        pytest.skip(f"Go dataset update ignores an explicit null {field}")
+ARGUMENT_ERROR_CODE = 101
 
 
 def _is_infinity_doc_engine(rest_client: RestClient) -> bool:
@@ -447,8 +442,6 @@ def test_dataset_update_embedding_model_format_contract(rest_client, clear_datas
     )
     assert update_res.status_code == 200
     update_payload = update_res.json()
-    if IS_GO_PROXY and update_payload.get("code") == 0:
-        pytest.skip("Go dataset update accepts an invalid empty embedding model")
     assert update_payload["code"] == ARGUMENT_ERROR_CODE, update_payload
     assert expected_fragment in update_payload["message"], update_payload
 
@@ -729,8 +722,6 @@ def test_dataset_update_avatar_invalid_and_none_contract(rest_client, clear_data
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and expected_message.startswith("Unsupported MIME type"):
-            expected_message = "Unsupported MIME type. Allowed: [image/jpeg image/png]"
         assert expected_message in payload["message"], payload
 
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"avatar": None})
@@ -766,8 +757,6 @@ def test_dataset_update_description_validation_contract(rest_client, clear_datas
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"description": None})
     assert none_res.status_code == 200
     none_payload = none_res.json()
-    if IS_GO_PROXY and none_payload.get("message") == "No properties were modified":
-        pytest.skip("Go dataset update does not clear description with an explicit null")
     assert none_payload["code"] == 0, none_payload
 
     list_res = rest_client.get("/datasets", params={"id": dataset_id})
@@ -801,12 +790,8 @@ def test_dataset_update_name_invalid_and_duplicate_contract(rest_client, clear_d
         res = rest_client.put(f"/datasets/{first_dataset_id}", json={"name": name})
         assert res.status_code == 200
         payload = res.json()
-        _skip_go_ignored_null(payload, "name")
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and not isinstance(name, str):
-            assert "cannot unmarshal" in payload["message"] and ".name" in payload["message"], payload
-        else:
-            assert expected_message in payload["message"], payload
+        assert expected_message in payload["message"], payload
 
     duplicated_res = rest_client.put(
         f"/datasets/{first_dataset_id}",
@@ -840,15 +825,11 @@ def test_dataset_update_embedding_model_invalid_and_none_contract(rest_client, c
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == 102, payload
-        if IS_GO_PROXY:
-            assert "lookup failed: record not found" in payload["message"], payload
-        else:
-            assert payload["message"] == expected_message, payload
+        assert payload["message"] == expected_message, payload
 
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"embedding_model": None})
     assert none_res.status_code == 200
     none_payload = none_res.json()
-    _skip_go_ignored_null(none_payload, "embedding_model")
     assert none_payload["code"] == 0, none_payload
 
     list_res = rest_client.get("/datasets", params={"id": dataset_id})
@@ -872,15 +853,11 @@ def test_dataset_update_permission_invalid_and_none_contract(rest_client, clear_
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and not isinstance(permission, str):
-            assert "cannot unmarshal" in payload["message"] and ".permission" in payload["message"], payload
-        else:
-            assert "Input should be 'me' or 'team'" in payload["message"], payload
+        assert "Input should be 'me' or 'team'" in payload["message"], payload
 
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"permission": None})
     assert none_res.status_code == 200
     none_payload = none_res.json()
-    _skip_go_ignored_null(none_payload, "permission")
     assert none_payload["code"] == ARGUMENT_ERROR_CODE, none_payload
     assert "Input should be 'me' or 'team'" in none_payload["message"], none_payload
 
@@ -899,22 +876,13 @@ def test_dataset_update_chunk_method_invalid_contract(rest_client, clear_dataset
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and not isinstance(chunk_method, str):
-            assert "cannot unmarshal" in payload["message"] and ".chunk_method" in payload["message"], payload
-        elif IS_GO_PROXY:
-            assert payload["message"].startswith("Input should be 'audio', 'book'") and payload["message"].endswith("or 'tag'"), payload
-        else:
-            assert expected_chunk_message in payload["message"], payload
+        assert expected_chunk_message in payload["message"], payload
 
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"chunk_method": None})
     assert none_res.status_code == 200
     none_payload = none_res.json()
-    _skip_go_ignored_null(none_payload, "chunk_method")
     assert none_payload["code"] == ARGUMENT_ERROR_CODE, none_payload
-    if IS_GO_PROXY:
-        assert none_payload["message"].startswith("Input should be 'audio', 'book'") and none_payload["message"].endswith("or 'tag'"), none_payload
-    else:
-        assert expected_chunk_message in none_payload["message"], none_payload
+    assert expected_chunk_message in none_payload["message"], none_payload
 
 
 @pytest.mark.p2
@@ -930,8 +898,6 @@ def test_dataset_update_pagerank_invalid_and_none_contract(rest_client, clear_da
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and pagerank == -1 and "less than or equal to 100" in payload["message"]:
-            pytest.skip("Go dataset update applies the wrong pagerank bound error for negative values")
         assert expected_message in payload["message"], payload
 
     none_res = rest_client.put(f"/datasets/{dataset_id}", json={"pagerank": None})
@@ -1113,13 +1079,6 @@ def test_dataset_create_name_validation(rest_client, clear_datasets, name, expec
     assert res.status_code == 200
     payload = res.json()
     assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-    if IS_GO_PROXY:
-        if not name:
-            expected_fragment = "failed on the 'required' tag"
-        elif not name.strip():
-            expected_fragment = "Dataset name can't be empty."
-        else:
-            expected_fragment = f"Dataset name length is {len(name)} which is large than {DATASET_NAME_LIMIT}"
     assert expected_fragment in payload["message"], payload
 
 
@@ -1247,10 +1206,7 @@ def test_dataset_create_embedding_model_contract(rest_client, clear_datasets, na
         else:
             assert payload["data"]["embedding_model"] == expected_embedding_model, payload
     if expected_message is not None:
-        if IS_GO_PROXY:
-            assert "lookup failed: record not found" in payload["message"], payload
-        else:
-            assert payload["message"] == expected_message, payload
+        assert payload["message"] == expected_message, payload
 
 
 @pytest.mark.p2
@@ -1575,8 +1531,6 @@ def test_dataset_create_avatar_contract(rest_client, clear_datasets, tmp_path):
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and expected_message.startswith("Unsupported MIME type"):
-            expected_message = "Unsupported MIME type. Allowed: [image/jpeg image/png]"
         assert expected_message in payload["message"], payload
 
     unset_res = rest_client.post("/datasets", json={"name": "avatar_unset"})
@@ -1631,16 +1585,11 @@ def test_dataset_create_permission_and_chunk_method_contract(rest_client, clear_
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and not isinstance(permission, str):
-            assert "cannot unmarshal" in payload["message"] and ".permission" in payload["message"], payload
-        else:
-            assert "Input should be 'me' or 'team'" in payload["message"], payload
+        assert "Input should be 'me' or 'team'" in payload["message"], payload
 
     permission_none_res = rest_client.post("/datasets", json={"name": "permission_none", "permission": None})
     assert permission_none_res.status_code == 200
     permission_none_payload = permission_none_res.json()
-    if IS_GO_PROXY and permission_none_payload.get("code") == 0:
-        pytest.skip("Go dataset create accepts a null permission as the default")
     assert permission_none_payload["code"] == ARGUMENT_ERROR_CODE, permission_none_payload
     assert "Input should be 'me' or 'team'" in permission_none_payload["message"], permission_none_payload
 
@@ -1661,21 +1610,13 @@ def test_dataset_create_permission_and_chunk_method_contract(rest_client, clear_
         assert res.status_code == 200
         payload = res.json()
         assert payload["code"] == ARGUMENT_ERROR_CODE, payload
-        if IS_GO_PROXY and not isinstance(chunk_method, str):
-            assert "cannot unmarshal" in payload["message"] and ".chunk_method" in payload["message"], payload
-        elif IS_GO_PROXY:
-            assert payload["message"].startswith("Input should be 'audio', 'book'") and payload["message"].endswith("or 'tag'"), payload
-        else:
-            assert expected_chunk_message in payload["message"], payload
+        assert expected_chunk_message in payload["message"], payload
 
     chunk_method_none_res = rest_client.post("/datasets", json={"name": "chunk_method_none", "chunk_method": None})
     assert chunk_method_none_res.status_code == 200
     chunk_method_none_payload = chunk_method_none_res.json()
     assert chunk_method_none_payload["code"] == ARGUMENT_ERROR_CODE, chunk_method_none_payload
-    if IS_GO_PROXY:
-        assert chunk_method_none_payload["message"].startswith("Input should be 'audio', 'book'") and chunk_method_none_payload["message"].endswith("or 'tag'"), chunk_method_none_payload
-    else:
-        assert expected_chunk_message in chunk_method_none_payload["message"], chunk_method_none_payload
+    assert expected_chunk_message in chunk_method_none_payload["message"], chunk_method_none_payload
 
     chunk_method_unset_res = rest_client.post("/datasets", json={"name": "chunk_method_unset"})
     assert chunk_method_unset_res.status_code == 200

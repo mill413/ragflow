@@ -17,10 +17,10 @@ import time
 import uuid
 import pytest
 from ragflow_sdk import RAGFlow, Memory
-from configs import HOST_ADDRESS, INVALID_API_TOKEN, IS_GO_PROXY, SDK_UNAUTHORIZED_ERROR_MESSAGE
+from configs import HOST_ADDRESS, INVALID_API_TOKEN, SDK_UNAUTHORIZED_ERROR_MESSAGE
 
 
-MESSAGE_USER_ID = "sdk-api-test-user" if IS_GO_PROXY else ""
+MESSAGE_USER_ID = ""
 
 
 class TestAuthorization:

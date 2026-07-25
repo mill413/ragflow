@@ -30,17 +30,6 @@ docker/seekdb/
 # ── Version-control metadata ────────────────────────────────────────────
 .git/
 
-# ── Go implementation ───────────────────────────────────────────────────────
-# The application image is Python-only. Keep the parallel Go backend and its
-# build inputs out of the Docker build context entirely.
-**/*.go
-go.mod
-go.sum
-cmd/
-internal/
-bin/
-build.sh
-
 # ── Native build outputs ────────────────────────────────────────────────────
 target/
 

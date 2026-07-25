@@ -97,7 +97,6 @@ fetch('/api/v1/admin/workspaces/<workspace_id>/chunk-methods/example_chunk', {
 | `agent/`            | 智能体组件、工具和工作流运行逻辑           |
 | `admin/`            | 管理后台服务端及管理命令行代码             |
 | `web/`              | React、TypeScript 和 Vite 前端             |
-| `internal/`、`cmd/` | Go 服务、解析、摄取和命令行实现            |
 | `docker/`           | Compose、镜像管理脚本和运行配置            |
 | `test/`             | 自动化测试                                 |
 
@@ -254,18 +253,6 @@ npm run lint
 npm run type-check
 npm run build
 ```
-
-### Go
-
-Go 代码依赖项目提供的原生库和 CGO 参数，请使用 `build.sh`：
-
-```bash
-uv run ragflow_deps/download_deps.py
-bash build.sh --test ./path/to/package/...
-bash build.sh --go
-```
-
-不要直接使用裸 `go test` 或 `go build` 替代上述脚本。
 
 ## 内置帮助文档维护
 

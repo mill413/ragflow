@@ -15,7 +15,7 @@
 #
 import random
 import pytest
-from configs import INVALID_API_TOKEN, HOST_ADDRESS, IS_GO_PROXY, SDK_UNAUTHORIZED_ERROR_MESSAGE
+from configs import INVALID_API_TOKEN, HOST_ADDRESS, SDK_UNAUTHORIZED_ERROR_MESSAGE
 from ragflow_sdk import RAGFlow, Memory
 from hypothesis import HealthCheck, example, given, settings
 from utils import encode_avatar
@@ -70,11 +70,6 @@ class TestMemoryUpdate:
         memory = Memory(client, {"id": random.choice(memory_ids)})
         with pytest.raises(Exception) as exception_info:
             memory.update(update_dict)
-        if IS_GO_PROXY:
-            if len(name) > 128:
-                expected_message = "failed to update memory"
-            else:
-                expected_message = "name can't be empty"
         assert expected_message in str(exception_info.value), str(exception_info.value)
 
     @pytest.mark.p2

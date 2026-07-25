@@ -458,8 +458,6 @@ class SSHProvider(SandboxProvider):
                 # is unreadable: continuing with system keys could let
                 # the connection succeed against an unintended anchor
                 # (e.g. an attacker who can write ~/.ssh/known_hosts).
-                # Match the Go provider's fail-closed posture (see
-                # internal/agent/sandbox/ssh.go::hostKeyCallback).
                 logging.warning("SSH: failed to load configured known_hosts file; refusing connection")
                 raise SandboxProviderConfigError("Failed to load configured SSH known_hosts file.") from exc
         # Reject unknown hosts: this is the default fail-closed posture
