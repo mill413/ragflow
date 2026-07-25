@@ -368,7 +368,7 @@ export const NoDebugOperatorsList = [Operator.File];
 
 export const FileTypeSuffixMap = {
   [FileType.PDF]: ['pdf'],
-  [FileType.Spreadsheet]: ['xls', 'xlsx', 'csv'],
+  [FileType.Spreadsheet]: ['xls', 'xlsx', 'xlsm', 'csv'],
   [FileType.Image]: ['jpg', 'jpeg', 'png', 'gif'],
   [FileType.Email]: ['eml', 'msg'],
   [FileType.TextMarkdown]: ['md', 'markdown', 'mdx'],
@@ -390,7 +390,7 @@ export const FileTypeSuffixMap = {
   ],
   [FileType.Html]: ['htm', 'html'],
   [FileType.Doc]: ['doc'],
-  [FileType.Docx]: ['docx'],
+  [FileType.Docx]: ['docx', 'docm'],
   [FileType.PowerPoint]: ['pptx', 'ppt'],
   [FileType.Video]: ['mp4', 'avi', 'mkv'],
   [FileType.Audio]: [

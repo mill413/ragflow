@@ -959,7 +959,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
                 continue
 
     is_wps = bool(re.search(r"\.wps$", filename, re.IGNORECASE))
-    if re.search(r"\.docx$", filename, re.IGNORECASE) or (
+    if re.search(r"\.(docx|docm)$", filename, re.IGNORECASE) or (
         is_wps and is_docx_package(binary)
     ):
         callback(0.1, "Start to parse.")
@@ -1055,7 +1055,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
         res = tokenize_table(tables, doc, is_english, language=lang)
         callback(0.8, "Finish parsing.")
 
-    elif re.search(r"\.(csv|xlsx?)$", filename, re.IGNORECASE):
+    elif re.search(r"\.(csv|xls|xlsx|xlsm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
 
         # Check if tcadp_parser is selected for spreadsheet files
@@ -1069,7 +1069,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
                 return res
 
             # Determine file type based on extension
-            file_type = "XLSX" if re.search(r"\.xlsx?$", filename, re.IGNORECASE) else "CSV"
+            file_type = "XLSX" if re.search(r"\.(xls|xlsx|xlsm)$", filename, re.IGNORECASE) else "CSV"
 
             sections, tables = tcadp_parser.parse_pdf(filepath=filename, binary=binary, callback=callback, output_dir=os.environ.get("TCADP_OUTPUT_DIR", ""), file_type=file_type)
             sections = _normalize_section_text_for_rtl_presentation_forms(sections)

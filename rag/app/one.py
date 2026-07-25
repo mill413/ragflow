@@ -64,7 +64,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
     parser_config = kwargs.get("parser_config", {"chunk_token_num": 512, "delimiter": "\n!?。；！？", "layout_recognize": "DeepDOC"})
     eng = lang.lower() == "english"  # is_english(cks)
 
-    if re.search(r"\.docx$", filename, re.IGNORECASE):
+    if re.search(r"\.(docx|docm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         sections = naive.Docx()(filename, binary)
         cks = []
@@ -124,7 +124,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
             sections.append((rows if isinstance(rows, str) else rows[0], [(p[0] + 1 - from_page, p[1], p[2], p[3], p[4]) for p in poss]))
         sections = [s for s, _ in sections if s]
 
-    elif re.search(r"\.xlsx?$", filename, re.IGNORECASE):
+    elif re.search(r"\.(xls|xlsx|xlsm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         excel_parser = ExcelParser()
         sections = excel_parser.html(binary, MAXIMUM_TASK_PAGE_NUMBER)

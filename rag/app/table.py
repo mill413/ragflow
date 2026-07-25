@@ -378,7 +378,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_TASK_PAGE_NUMBER, 
 
     tbls = []
     is_english = lang.lower() == "english"
-    if re.search(r"\.xlsx?$", filename, re.IGNORECASE):
+    if re.search(r"\.(xls|xlsx|xlsm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         excel_parser = Excel()
         dfs, tbls = excel_parser(filename, binary, from_page=from_page, to_page=to_page, callback=callback, **kwargs)

@@ -37,7 +37,7 @@ const DocumentPreview = function ({
           ></PdfPreviewer>
         </section>
       )}
-      {['doc', 'docx'].indexOf(fileType) > -1 && (
+      {['doc', 'docx', 'docm'].indexOf(fileType) > -1 && (
         <section>
           <DocPreviewer className={className} url={url} />
         </section>
@@ -74,7 +74,7 @@ const DocumentPreview = function ({
           <PptPreviewer className={className} url={url} />
         </section>
       )}
-      {['xlsx'].indexOf(fileType) > -1 && (
+      {['xlsx', 'xlsm'].indexOf(fileType) > -1 && (
         <section>
           <ExcelCsvPreviewer className={className} url={url} />
         </section>

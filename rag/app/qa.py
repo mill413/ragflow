@@ -300,7 +300,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
     rag_tokenizer.tokenizer.set_language(lang)
     res = []
     doc = {"docnm_kwd": filename, "title_tks": rag_tokenizer.tokenize(re.sub(r"\.[a-zA-Z]+$", "", filename))}
-    if re.search(r"\.xlsx?$", filename, re.IGNORECASE):
+    if re.search(r"\.(xls|xlsx|xlsm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         excel_parser = Excel()
         for ii, (q, a) in enumerate(excel_parser(filename, binary, callback)):
@@ -417,7 +417,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
                 res.append(beAdoc(deepcopy(doc), sum_question, markdown(last_answer, extensions=["markdown.extensions.tables"]), eng, index))
         return res
 
-    elif re.search(r"\.docx$", filename, re.IGNORECASE):
+    elif re.search(r"\.(docx|docm)$", filename, re.IGNORECASE):
         docx_parser = Docx()
         qai_list, tbls = docx_parser(filename, binary,
                                      from_page=0, to_page=MAXIMUM_PAGE_NUMBER, callback=callback)

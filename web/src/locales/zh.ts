@@ -683,7 +683,7 @@ export default {
         '支持多字符作为分隔符，多字符用两个反引号 \\`\\` 分隔符包裹。若配置成：\\n`##`; 系统将首先使用换行符、两个#号以及分号先对文本进行分割，随后再对分得的小文本块按照「建议文本块大小」设定的大小进行拼装。在设置文本分段标识符前请确保理解上述文本分段切片机制。',
 
       html4excel: '表格转HTML',
-      html4excelTip: `与 General 切片方法配合使用。未开启状态下，表格文件（XLSX、XLS（Excel 97-2003））会按行解析为键值对。开启后，表格文件会被解析为 HTML 表格。若原始表格超过 12 行，系统会自动按每 12 行拆分为多个 HTML 表格。欲了解更多详情，请参阅 https://ragflow.io/docs/dev/enable_excel2html。`,
+      html4excelTip: `与 General 切片方法配合使用。未开启状态下，表格文件（XLSX、XLSM、XLS（Excel 97-2003））会按行解析为键值对。开启后，表格文件会被解析为 HTML 表格。若原始表格超过 12 行，系统会自动按每 12 行拆分为多个 HTML 表格。欲了解更多详情，请参阅 https://ragflow.io/docs/dev/enable_excel2html。`,
       autoKeywords: '自动关键词提取',
       autoKeywordsTip: `自动为每个文本块中提取 N 个关键词，用以提升查询精度。请注意：该功能采用在“配置”中指定的索引模型提取关键词，因此也会产生更多 Token 消耗。另外，你也可以手动更新生成的关键词。详情请见 https://ragflow.io/docs/dev/autokeyword_autoquestion。`,
       autoQuestions: '自动问题提取',
@@ -867,10 +867,10 @@ export default {
       dialogueExamplesTitle: '对话示例',
       methodEmpty: '这将显示知识库类别的可视化解释',
       exampleChunk: `<p>用于展示 PDF 扩展分块方法的函数签名和返回值格式。</p><p>支持复用 <b>DeepDOC、MinerU、Plain Text</b> 等现有 PDF 解析器，并将解析结果直接转换为分块。</p>`,
-      book: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
+      book: `<p>支持的文件格式为<b>DOCX、DOCM</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
       由于一本书很长，并不是所有部分都有用，如果是 PDF，
       请为每本书设置<i>页面范围</i>，以消除负面影响并节省分析计算时间。</p>`,
-      laws: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
+      laws: `<p>支持的文件格式为<b>DOCX、DOCM</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
       法律文件有非常严格的书写格式。 我们使用文本特征来检测分割点。
       </p><p>
       chunk的粒度与'ARTICLE'一致，所有上层文本都会包含在chunk中。
@@ -879,7 +879,7 @@ export default {
       我们假设手册具有分层部分结构。 我们使用最低的部分标题作为对文档进行切片的枢轴。
       因此，同一部分中的图和表不会被分割，并且块大小可能会很大。
       </p>`,
-      naive: `<p>支持的文件格式为<b>MD、MDX、DOCX、XLSX、XLS (Excel 97-2003)、PPTX、PDF、TXT、JPEG、JPG、PNG、TIF、GIF、CSV、JSON、EML、HTML</b>。</p>
+      naive: `<p>支持的文件格式为<b>MD、MDX、DOCX、DOCM、XLSX、XLSM、XLS (Excel 97-2003)、PPTX、PDF、TXT、JPEG、JPG、PNG、TIF、GIF、CSV、JSON、EML、HTML</b>。</p>
       <p>此方法将简单的方法应用于块文件：</p>
       <p>
       <li>系统将使用视觉检测模型将连续文本分割成多个片段。</li>
@@ -894,10 +894,10 @@ export default {
       每个页面都将被视为一个块。 并且每个页面的缩略图都会被存储。</p><p>
       <i>您上传的所有PPT文件都会使用此方法自动分块，无需为每个PPT文件进行设置。</i></p>`,
       qa: ` <p>
-      此块方法支持<b> excel </b>和<b> csv/txt </b>文件格式。
+      此分块方法支持<b>XLSX、XLSM、XLS</b>和<b>CSV/TXT</b>文件格式。
     </p>
     <li>
-      如果文件是<b> excel </b>格式，则应由两个列组成
+      如果文件是<b>XLSX、XLSM 或 XLS</b>格式，则应由两个列组成
       没有标题：一个提出问题，另一个用于答案，
       答案列之前的问题列。多张纸是
       只要列正确结构，就可以接受。
@@ -912,7 +912,7 @@ export default {
         每个问答对将被认为是一个独特的部分。
       </i>
     </p>`,
-      resume: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。
+      resume: `<p>支持的文件格式为<b>DOCX、DOCM</b>、<b>PDF</b>、<b>TXT</b>。
       </p><p>
       简历有多种格式，就像一个人的个性一样，但我们经常必须将它们组织成结构化数据，以便于搜索。
       </p><p>
@@ -920,7 +920,7 @@ export default {
       您只需与<i>'RAGFlow'</i>交谈即可列出所有符合资格的候选人。
       </p>
         `,
-      table: `支持<p><b>XLSX</b>和<b>CSV/TXT</b>格式文件。</p><p>
+      table: `支持<p><b>XLSX、XLSM</b>和<b>CSV/TXT</b>格式文件。</p><p>
       以下是一些提示：
       <ul>
     <li>对于 csv 或 txt 文件，列之间的分隔符为 <em><b>TAB</b></em>。</li>
@@ -943,13 +943,13 @@ export default {
       如果OCR提取的文本不够，可以使用视觉LLM来获取描述。
       </p>`,
       one: `
-      <p>支持的文件格式为<b>DOCX、EXCEL、PDF、TXT</b>。
+      <p>支持的文件格式为<b>DOCX、DOCM、XLSX、XLSM、XLS、PDF、TXT</b>。
       </p><p>
       对于一个文档，它将被视为一个完整的块，根本不会被分割。
       </p><p>
       如果你要总结的东西需要一篇文章的全部上下文，并且所选LLM的上下文长度覆盖了文档长度，你可以尝试这种方法。
       </p>`,
-      knowledgeGraph: `<p>支持的文件格式为<b>DOCX、EXCEL、PPT、IMAGE、PDF、TXT、MD、JSON、EML</b>
+      knowledgeGraph: `<p>支持的文件格式为<b>DOCX、DOCM、XLSX、XLSM、XLS、PPT、IMAGE、PDF、TXT、MD、JSON、EML</b>
 
 <p>文件分块后，使用分块提取整个文档的知识图谱和思维导图。此方法将简单的方法应用于分块文件：
 连续的文本将被切成大约 512 个 token 数的块。</p>
@@ -960,8 +960,8 @@ export default {
 <p>标签集<b>不会</b>直接参与 RAG 检索过程。</p>
 <p>标签集中的每个文本分块都是相互独立的标签和标签描述的文本对。</p>
 
-<p>Tag 分块方法支持<b>XLSX</b>和<b>CSV/TXT</b>文件格式。</p>
-<p>如果文件为<b>XLSX</b>格式，则它应该包含无标题的两列：一列用于标签描述，另一列用于标签，标签描述列位于标签列之前。支持多个工作表，只要列结构正确即可。</p>
+<p>Tag 分块方法支持<b>XLSX、XLSM</b>和<b>CSV/TXT</b>文件格式。</p>
+<p>如果文件为<b>XLSX 或 XLSM</b>格式，则它应该包含无标题的两列：一列用于标签描述，另一列用于标签，标签描述列位于标签列之前。支持多个工作表，只要列结构正确即可。</p>
 <p>如果文件为 <b>CSV/TXT</b> 格式，则必须使用 UTF-8 编码并以 TAB 作为分隔符来分隔内容和标签。</p>
 <p>在标签列中，标签之间使用英文逗号分隔。</p>
 <i>不符合上述规则的文本行将被忽略。</i>

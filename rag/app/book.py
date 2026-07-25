@@ -71,7 +71,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
     doc["title_sm_tks"] = rag_tokenizer.fine_grained_tokenize(doc["title_tks"])
     pdf_parser = None
     sections, tbls = [], []
-    if re.search(r"\.docx$", filename, re.IGNORECASE):
+    if re.search(r"\.(docx|docm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         doc_parser = naive.Docx()
         # TODO: table of contents need to be removed

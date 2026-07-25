@@ -7,11 +7,13 @@ from urllib.parse import urlencode
 
 CONTENT_TYPE_MAP = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "docm": "application/vnd.ms-word.document.macroEnabled.12",
     "doc": "application/msword",
     "pdf": "application/pdf",
     "csv": "text/csv",
     "xls": "application/vnd.ms-excel",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
     "txt": "text/plain",
     "py": "text/plain",
     "js": "text/plain",

@@ -19,7 +19,7 @@ const ParserListMap = new Map([
     ],
   ],
   [
-    ['doc', 'docx'],
+    ['doc', 'docx', 'docm'],
     [
       'naive',
       'resume',
@@ -32,7 +32,7 @@ const ParserListMap = new Map([
     ],
   ],
   [
-    ['xlsx', 'xls'],
+    ['xlsx', 'xlsm', 'xls'],
     ['naive', 'qa', 'table', 'one', 'knowledge_graph'],
   ],
   [['ppt', 'pptx'], ['presentation']],
