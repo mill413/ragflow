@@ -2,7 +2,7 @@
 
 A Helm chart to deploy RAGFlow and its dependencies on Kubernetes.
 
-- Components: RAGFlow (web/api) and optional dependencies (Infinity/Elasticsearch/OpenSearch, MySQL, MinIO, Redis)
+- Components: RAGFlow API, RAGFlow parsing worker, Elasticsearch, MySQL, MinIO, and Redis
 - Requirements: Kubernetes >= 1.24, Helm >= 3.10
 
 ## Install
@@ -17,6 +17,12 @@ Uninstall:
 helm uninstall ragflow -n ragflow
 ```
 
+Uninstall removes all workloads, Pods, Services, ConfigMaps, Secrets, Ingresses,
+and test resources managed by the release. Only the Elasticsearch, MySQL,
+MinIO, and Redis PVCs and their bound PVs are retained so that the same release
+name and namespace can reuse the existing data on a later install. The
+namespace itself is not removed by `helm uninstall`.
+
 ## Global Settings
 
 - `global.repo`: Prepend a global image registry prefix for all images.
@@ -28,6 +34,20 @@ helm uninstall ragflow -n ragflow
     global:
       imagePullSecrets:
         - name: regcred
+    ```
+- `global.nodeSelector`: Node labels required by every Pod rendered by the chart.
+  - Example:
+    ```yaml
+    global:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+    ```
+- `global.nodeName`: Exact node name from `kubectl get nodes`. When set, it
+  takes precedence over `global.nodeSelector`.
+  - Example:
+    ```yaml
+    global:
+      nodeName: worker-01
     ```
 
 ## External Services (MySQL / MinIO / Redis)
@@ -91,18 +111,45 @@ Apply:
 helm upgrade --install ragflow ./helm -n ragflow -f values.override.yaml
 ```
 
-## Document Engine Selection
+## Document Engine
 
-Choose one of `infinity` (default), `elasticsearch`, or `opensearch` via `env.DOC_ENGINE`. The chart renders only the selected engine and sets the appropriate host variables.
+Elasticsearch is the only document engine supported by this chart. Configure its password through `env.ELASTIC_PASSWORD`:
 
 ```yaml
 env:
-  DOC_ENGINE: infinity   # or: elasticsearch | opensearch
-  # For elasticsearch
   ELASTIC_PASSWORD: "<es-pass>"
-  # For opensearch
-  OPENSEARCH_PASSWORD: "<os-pass>"
 ```
+
+## RAGFlow Runtime
+
+The chart runs the web/API and parsing workers in separate Deployments using
+the same image. Only the API Deployment is exposed through Services:
+
+```yaml
+ragflow:
+  api:
+    replicas: 1
+    args:
+      - --enable-adminserver
+      - --init-model-provider-tables
+      - --disable-taskexecutor
+  worker:
+    replicas: 1
+    args:
+      - --disable-webserver
+      - --disable-datasync
+      - --workers=2
+```
+
+The API Deployment runs the web UI, API, admin server, and data sync process.
+The worker Deployment only consumes parsing tasks and has no Service. Configure
+their resources independently through `ragflow.api.deployment.resources` and
+`ragflow.worker.deployment.resources`.
+
+Application environment variables are configured through `env`. Service host
+names are generated from Kubernetes service DNS names, while runtime defaults
+such as `API_PROXY_SCHEME`, registration, parser batch sizes, and thread pool
+size remain aligned with the Docker deployment.
 
 ## Ingress
 
@@ -115,9 +162,59 @@ ingress:
   hosts:
     - host: ragflow.example.com
       paths:
-        - path: /
-          pathType: Prefix
+      - path: /
+        pathType: Prefix
 ```
+
+## NodePort
+
+RAGFlow Web, Elasticsearch, MySQL, and MinIO use `NodePort` services by
+default. Leave `nodePort` empty to let Kubernetes allocate a port, or set a
+fixed port from the cluster's NodePort range.
+
+```yaml
+ragflow:
+  service:
+    type: NodePort
+    nodePort: 30080
+```
+
+Elasticsearch, MySQL, and MinIO expose the same optional settings under their
+respective `service` blocks. The direct API, admin, and Redis services remain
+private `ClusterIP` services.
+
+## Persistent Volume Paths
+
+Elasticsearch, MySQL, MinIO, and Redis use PVCs. By default, the cluster's
+StorageClass dynamically provisions their volumes. To bind a component to a
+directory on a Kubernetes node, set an absolute `storage.hostPath`:
+
+```yaml
+global:
+  nodeName: worker-01
+
+elasticsearch:
+  storage:
+    hostPath: /data/ragflow/elasticsearch
+
+mysql:
+  storage:
+    hostPath: /data/ragflow/mysql
+
+minio:
+  storage:
+    hostPath: /data/ragflow/minio
+
+redis:
+  storage:
+    hostPath: /data/ragflow/redis
+```
+
+When `hostPath` is set, the chart creates a retained static PV and binds the
+component's PVC to it. HostPath storage is node-local, so use
+`global.nodeName` to schedule the Pods onto the node that owns these
+directories. Leave every `hostPath` empty for cluster-managed dynamic
+provisioning.
 
 ## Validate the Chart
 
@@ -128,6 +225,6 @@ helm template ragflow ./helm > rendered.yaml
 
 ## Notes
 
-- By default, the chart uses `DOC_ENGINE: infinity` and deploys in-cluster MySQL, MinIO, and Redis.
+- The chart deploys Elasticsearch, MySQL, MinIO, and Redis in the cluster by default.
 - The chart injects derived `*_HOST`/`*_PORT` and required secrets into a single Secret (`<release>-ragflow-env-config`).
 - `global.repo` and `global.imagePullSecrets` apply to all Pods; per-component `*.image.pullSecrets` still work and are merged with global settings.
