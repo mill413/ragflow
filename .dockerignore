@@ -30,10 +30,18 @@ docker/seekdb/
 # ── Version-control metadata ────────────────────────────────────────────
 .git/
 
-# ── Go and C++ build outputs ────────────────────────────────────────────────
-internal/binding/cpp/build/
-internal/binding/cpp/cmake-build-release/
-internal/binding/cpp/cmake-build-debug/
+# ── Go implementation ───────────────────────────────────────────────────────
+# The application image is Python-only. Keep the parallel Go backend and its
+# build inputs out of the Docker build context entirely.
+**/*.go
+go.mod
+go.sum
+cmd/
+internal/
+bin/
+build.sh
+
+# ── Native build outputs ────────────────────────────────────────────────────
 target/
 
 # ── ragflow_deps build context (built as a separate image, mounted ──
