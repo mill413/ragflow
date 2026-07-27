@@ -34,6 +34,12 @@ env:
   # Product icon and browser favicon URL. Supports absolute HTTP(S) URLs.
   # APP_ICON_URL: "https://example.com/logo.svg"
 
+  # Initial superuser. Uncomment these values together with
+  # ragflow.api.args --init-superuser for the first deployment only.
+  # DEFAULT_SUPERUSER_NICKNAME: "admin"
+  # DEFAULT_SUPERUSER_EMAIL: "admin@ragflow.io"
+  # DEFAULT_SUPERUSER_PASSWORD: "admin"
+
   # The document engine used by this chart.
   DOC_ENGINE: elasticsearch
 
