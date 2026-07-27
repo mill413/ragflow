@@ -72,7 +72,7 @@ spec:
             - mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
               name: nginx-config-volume
-            {{- with .Values.ragflow.service_conf }}
+            {{- if or .Values.ragflow.service_conf .Values.ragflow.oa.enabled }}
             - mountPath: /ragflow/conf/local.service_conf.yaml
               subPath: local.service_conf.yaml
               name: service-conf-volume
@@ -85,6 +85,14 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ include "ragflow.fullname" . }}-env-config
+          {{- if and .Values.ragflow.oa.enabled .Values.ragflow.oa.existingSecret }}
+          env:
+            - name: OA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ragflow.oa.existingSecret | quote }}
+                  key: {{ .Values.ragflow.oa.existingSecretKey | quote }}
+          {{- end }}
           {{- with .Values.ragflow.api.deployment.resources }}
           resources:
             {{- . | toYaml | nindent 12 }}

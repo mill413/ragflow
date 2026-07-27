@@ -193,3 +193,49 @@ def test_oauth_client_async_matrix_unit(monkeypatch):
         asyncio.run(client.async_exchange_code_for_token("code-b"))
     with pytest.raises(ValueError, match="Failed to fetch user info: async boom"):
         asyncio.run(client.async_fetch_user_info("async-token-2"))
+
+
+@pytest.mark.p2
+def test_oauth_client_supports_wrapped_provider_responses(monkeypatch):
+    oauth_module = _load_oauth_module(monkeypatch)
+    monkeypatch.setenv("OA_TEST_CLIENT_SECRET", "secret-from-env")
+    config = {
+        **_base_config(),
+        "client_secret": "",
+        "client_secret_env": "OA_TEST_CLIENT_SECRET",
+        "userinfo_client_id_header": "X-CLIENT-ID",
+        "request_timeout": 30,
+    }
+    client = oauth_module.OAuthClient(config)
+    call_log = []
+
+    def _sync_ok(method, url, data=None, headers=None, timeout=None):
+        call_log.append((method, url, data, headers, timeout))
+        if url.endswith("/token"):
+            return _FakeResponse({"data": {"value": "wrapped-token"}})
+        return _FakeResponse(
+            {
+                "data": {
+                    "email": "oa@example.com",
+                    "userName": "oa-user",
+                    "realName": "OA User",
+                    "avatarUrl": "oa-avatar",
+                }
+            }
+        )
+
+    monkeypatch.setattr(oauth_module, "sync_request", _sync_ok)
+
+    assert client.client_secret == "secret-from-env"
+    assert client.http_request_timeout == 30
+    assert client.exchange_code_for_token("oa-code")["access_token"] == "wrapped-token"
+    assert client.fetch_user_info("wrapped-token").to_dict() == {
+        "email": "oa@example.com",
+        "username": "oa-user",
+        "nickname": "OA User",
+        "avatar_url": "oa-avatar",
+    }
+    assert call_log[1][3] == {
+        "Authorization": "Bearer wrapped-token",
+        "X-CLIENT-ID": "client-1",
+    }

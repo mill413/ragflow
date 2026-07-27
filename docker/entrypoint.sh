@@ -181,6 +181,46 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     fi
 done < "${TEMPLATE_FILE}"
 
+if [[ "${OA_ENABLED:-false}" =~ ^(1|true|yes|on)$ ]]; then
+    python3 - <<'PY'
+import os
+from pathlib import Path
+
+import yaml
+
+
+def required(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"{name} is required when OA_ENABLED is enabled")
+    return value
+
+
+config_path = Path("/ragflow/conf/service_conf.yaml")
+config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+oauth = config.setdefault("oauth", {})
+oauth["oa"] = {
+    "type": "oauth2",
+    "icon": os.environ.get("OA_ICON", "sso"),
+    "display_name": os.environ.get("OA_DISPLAY_NAME", "OA"),
+    "client_id": required("OA_CLIENT_ID"),
+    "client_secret_env": "OA_CLIENT_SECRET",
+    "userinfo_client_id_header": "X-CLIENT-ID",
+    "authorization_url": required("OA_AUTHORIZATION_URL"),
+    "token_url": required("OA_TOKEN_URL"),
+    "userinfo_url": required("OA_USERINFO_URL"),
+    "redirect_uri": required("OA_REDIRECT_URI"),
+    "scope": os.environ.get("OA_SCOPE", "api"),
+    "request_timeout": int(os.environ.get("OA_REQUEST_TIMEOUT", "30")),
+}
+required("OA_CLIENT_SECRET")
+config_path.write_text(
+    yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
+    encoding="utf-8",
+)
+PY
+fi
+
 export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/"
 PY=python3
 

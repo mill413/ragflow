@@ -128,6 +128,26 @@ ragflow:
   # https://ragflow.io/docs/dev/configurations#service-configuration
   service_conf:
 
+  # Optional OA login channel. Password login remains available unless
+  # authentication.disable_password_login is enabled in service_conf.
+  oa:
+    enabled: false
+    displayName: "OA"
+    icon: sso
+    clientId: ""
+    authorizationUrl: ""
+    tokenUrl: ""
+    userinfoUrl: ""
+    # Must exactly match the callback registered with the OA service.
+    redirectUri: ""
+    scope: api
+    requestTimeout: 30
+    # Prefer an existing Secret in production. When existingSecret is empty,
+    # clientSecret is stored in the chart-managed env Secret.
+    clientSecret: ""
+    existingSecret: ""
+    existingSecretKey: client-secret
+
   # Optional yaml formatted override for the
   # llm_factories.json file inside the RAGFlow
   # container.

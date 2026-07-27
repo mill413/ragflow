@@ -4,9 +4,30 @@ kind: ConfigMap
 metadata:
   name: ragflow-service-config
 data:
-  {{- with .Values.ragflow.service_conf }}
+  {{- if or .Values.ragflow.service_conf .Values.ragflow.oa.enabled }}
+  {{- $serviceConf := deepCopy (default (dict) .Values.ragflow.service_conf) }}
+  {{- if .Values.ragflow.oa.enabled }}
+  {{- $oa := .Values.ragflow.oa }}
+  {{- $oaChannel := dict
+        "type" "oauth2"
+        "icon" $oa.icon
+        "display_name" $oa.displayName
+        "client_id" (required "ragflow.oa.clientId is required when OA login is enabled" $oa.clientId)
+        "client_secret_env" "OA_CLIENT_SECRET"
+        "userinfo_client_id_header" "X-CLIENT-ID"
+        "authorization_url" (required "ragflow.oa.authorizationUrl is required when OA login is enabled" $oa.authorizationUrl)
+        "token_url" (required "ragflow.oa.tokenUrl is required when OA login is enabled" $oa.tokenUrl)
+        "userinfo_url" (required "ragflow.oa.userinfoUrl is required when OA login is enabled" $oa.userinfoUrl)
+        "redirect_uri" (required "ragflow.oa.redirectUri is required when OA login is enabled" $oa.redirectUri)
+        "scope" $oa.scope
+        "request_timeout" $oa.requestTimeout
+  }}
+  {{- $oauth := deepCopy (default (dict) (get $serviceConf "oauth")) }}
+  {{- $_ := set $oauth "oa" $oaChannel }}
+  {{- $_ := set $serviceConf "oauth" $oauth }}
+  {{- end }}
   local.service_conf.yaml: |
-    {{- . | toYaml | nindent 4 }}
+    {{- $serviceConf | toYaml | nindent 4 }}
   {{- end }}
   {{- with .Values.ragflow.llm_factories }}
   llm_factories.json: |

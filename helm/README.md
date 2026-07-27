@@ -216,6 +216,44 @@ component's PVC to it. HostPath storage is node-local, so use
 directories. Leave every `hostPath` empty for cluster-managed dynamic
 provisioning.
 
+## OA Login
+
+OA login extends RAGFlow's existing OAuth authorization-code flow. The callback
+URI must be registered with the OA service and must point to the externally
+reachable RAGFlow web endpoint.
+
+Create the client secret first:
+
+```bash
+kubectl create secret generic ragflow-oa \
+  --namespace ragflow \
+  --from-literal=client-secret='<your-oa-client-secret>'
+```
+
+Enable the channel in an override values file:
+
+```yaml
+ragflow:
+  oa:
+    enabled: true
+    displayName: "OA"
+    clientId: "<your-oa-client-id>"
+    authorizationUrl: "https://oa.example.com/gateway/auth-manager/oauth/authorize"
+    tokenUrl: "https://oa.example.com/gateway/auth-manager/oauth/token"
+    userinfoUrl: "https://oa.example.com/gateway/auth-manager/user/getUserInfo"
+    redirectUri: "https://ragflow.example.com/api/v1/auth/oauth/oa/callback"
+    scope: api
+    requestTimeout: 30
+    existingSecret: ragflow-oa
+    existingSecretKey: client-secret
+```
+
+For non-production testing, `ragflow.oa.clientSecret` can be set instead of
+`existingSecret`; the chart then stores it in its managed Kubernetes Secret.
+The OA access token is used only by the backend to retrieve user information.
+RAGFlow continues to issue its own login token, and password login remains
+available by default.
+
 ## Validate the Chart
 
 ```bash
