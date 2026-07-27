@@ -44,7 +44,13 @@ Exported images are always written to `docker/dist/`; the optional export argume
 
 ## 🐬 Docker environment variables
 
-The [.env](./.env) file contains important environment variables for Docker.
+Copy the tracked environment template before the first deployment:
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+The ignored `.env` file contains the active Docker environment variables.
 
 ### Elasticsearch
 

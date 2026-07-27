@@ -13,7 +13,7 @@ Configurations for deploying RAGFlow via Docker.
 
 When it comes to system configurations, you will need to manage the following files:
 
-- [.env](https://github.com/infiniflow/ragflow/blob/main/docker/.env): Contains important environment variables for Docker.
+- [.env.example](../../../docker/.env.example): Template for the Docker environment variables. Copy it to `docker/.env` before deployment.
 - [service_conf.yaml.template](https://github.com/infiniflow/ragflow/blob/main/docker/service_conf.yaml.template): Configures the back-end services. It specifies the system-level configuration for RAGFlow and is used by its API server and task executor. Upon container startup, the `service_conf.yaml` file will be generated based on this template file. This process replaces any environment variables within the template, allowing for dynamic configuration tailored to the container's environment.
 - [docker-compose.yml](https://github.com/infiniflow/ragflow/blob/main/docker/docker-compose.yml): The Docker Compose file for starting up the RAGFlow service.
 
@@ -40,7 +40,7 @@ Both deployments use Elasticsearch. Kibana and the sandbox executor are optional
 
 ## Docker environment variables
 
-The [.env](https://github.com/infiniflow/ragflow/blob/main/docker/.env) file contains important environment variables for Docker.
+Copy [`.env.example`](../../../docker/.env.example) to `docker/.env`. The ignored `.env` file contains the active Docker environment variables.
 
 ### Elasticsearch
 
