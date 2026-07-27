@@ -494,7 +494,7 @@ function AdminUserManagement() {
           const isMe = row.original.email === userInfo?.email;
 
           return (
-            <div className="flex items-center whitespace-nowrap opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
+            <div className="flex items-center whitespace-nowrap">
               <Button
                 variant="transparent"
                 size="icon"
