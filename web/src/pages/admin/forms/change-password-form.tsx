@@ -7,6 +7,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { passwordRule } from '@/utils/password';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCallback, useId, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
@@ -111,12 +112,8 @@ function useChangePasswordForm() {
   const schema = useMemo(() => {
     return z
       .object({
-        newPassword: z
-          .string()
-          .min(8, { message: t('admin.passwordMinLength') }),
-        confirmPassword: z
-          .string()
-          .min(8, { message: t('admin.confirmPasswordRequired') }),
+        newPassword: passwordRule(t('admin.passwordRequired')),
+        confirmPassword: passwordRule(t('admin.confirmPasswordRequired')),
       })
       .refine((data) => data.newPassword === data.confirmPassword, {
         message: t('admin.confirmPasswordDoNotMatch'),

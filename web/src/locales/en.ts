@@ -1812,17 +1812,12 @@ Example: Virtual Hosted Style`,
       timezonePlaceholder: 'select your timezone',
       email: 'Email',
       emailDescription: 'Once registered, E-mail cannot be changed.',
-      currentPassword: 'Current password',
-      currentPasswordMessage: 'Please input your password!',
-      newPassword: 'New password',
       changePassword: 'Change password',
+      createPassword: 'Create password',
+      createPasswordHint:
+        'No password has been set. Create one to enable password login.',
+      noPassword: 'No password set',
       newPasswordMessage: 'Please input your password!',
-      newPasswordDescription:
-        'Your new password must be more than 8 characters.',
-      confirmPassword: 'Confirm new password',
-      confirmPasswordMessage: 'Please confirm your password!',
-      confirmPasswordNonMatchMessage:
-        'The new password that you entered do not match!',
       cancel: 'Cancel',
       addedModels: 'Added models',
       modelsToBeAdded: 'Models to be added',
@@ -4085,7 +4080,6 @@ Important structured information may include: names, dates, locations, events, k
 
       invalidEmail: 'Please input a valid email address!',
       passwordRequired: 'Please input your password!',
-      passwordMinLength: 'Password must be more than 8 characters.',
       confirmPasswordRequired: 'Please confirm your password!',
       confirmPasswordDoNotMatch: 'The password that you entered do not match!',
 

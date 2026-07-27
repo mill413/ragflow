@@ -47,7 +47,7 @@ from api.utils.api_utils import (
     validate_request,
 )
 from api.utils.nickname_validation import validate_nickname
-from api.utils.crypt import check_password_hash, decrypt, generate_password_hash
+from api.utils.crypt import check_password_hash, decrypt, generate_password_hash, get_plain_password, validate_password
 from rag.utils.redis_conn import REDIS_CONN
 from api.apps import login_required, current_user, login_user, logout_user
 from api.utils.web_utils import (
@@ -332,18 +332,30 @@ async def setting_user():
     update_dict = {}
     request_data = await get_request_json()
     password_changed = False
-    if request_data.get("password"):
-        new_password = request_data.get("new_password")
-        if not check_password_hash(current_user.password, decrypt(request_data["password"])):
+    current_password = request_data.get("password")
+    new_password = request_data.get("new_password")
+    has_password = bool(get_plain_password(current_user.password))
+    if "new_password" in request_data:
+        try:
+            decrypted_new_password = validate_password(decrypt(new_password))
+        except (TypeError, ValueError):
+            return get_json_result(
+                data=False,
+                code=RetCode.ARGUMENT_ERROR,
+                message="Password must not be empty.",
+            )
+        if has_password and (
+            not current_password
+            or not check_password_hash(current_user.password, decrypt(current_password))
+        ):
             return get_json_result(
                 data=False,
                 code=RetCode.AUTHENTICATION_ERROR,
                 message="Password error!",
             )
 
-        if new_password:
-            update_dict["password"] = generate_password_hash(decrypt(new_password))
-            password_changed = True
+        update_dict["password"] = generate_password_hash(decrypted_new_password)
+        password_changed = True
 
     for k in request_data.keys():
         if k in [
@@ -403,7 +415,10 @@ async def user_profile():
               type: string
               description: User email.
     """
-    return get_json_result(data=current_user.to_safe_dict(for_self=True))
+    profile = current_user.to_safe_dict(for_self=True)
+    profile["password_plain"] = get_plain_password(current_user.password)
+    profile["has_password"] = bool(profile["password_plain"])
+    return get_json_result(data=profile)
 
 
 def rollback_user_registration(user_id):
@@ -530,11 +545,20 @@ async def user_add():
     nickname = nickname.strip()
 
     user_id = get_uuid()
+    try:
+        password = validate_password(decrypt(req["password"]))
+    except (TypeError, ValueError):
+        return get_json_result(
+            data=False,
+            message="Password must not be empty.",
+            code=RetCode.ARGUMENT_ERROR,
+        )
+
     user_dict = {
         "access_token": generate_access_token(user_id),
         "email": email_address,
         "nickname": nickname,
-        "password": decrypt(req["password"]),
+        "password": password,
         "login_channel": "password",
         "last_login_time": get_format_time(),
         "is_superuser": False,
@@ -869,9 +893,14 @@ async def forget_reset_password():
     if not REDIS_CONN.get(_verified_key(email)):
         return get_json_result(data=False, code=RetCode.AUTHENTICATION_ERROR, message="email not verified")
 
-    new_pwd_base64 = decrypt(new_pwd)
+    try:
+        new_pwd_base64 = validate_password(decrypt(new_pwd))
+        new_pwd2_base64 = validate_password(decrypt(new_pwd2))
+    except (TypeError, ValueError):
+        return get_json_result(data=False, code=RetCode.ARGUMENT_ERROR, message="passwords must not be empty")
+
     new_pwd_string = base64.b64decode(new_pwd_base64).decode("utf-8")
-    new_pwd2_string = base64.b64decode(decrypt(new_pwd2)).decode("utf-8")
+    new_pwd2_string = base64.b64decode(new_pwd2_base64).decode("utf-8")
 
     if new_pwd_string != new_pwd2_string:
         return get_json_result(data=False, code=RetCode.ARGUMENT_ERROR, message="passwords do not match")

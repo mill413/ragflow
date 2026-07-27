@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { listDepartments, listRoles } from '@/services/admin-service';
+import { passwordRule } from '@/utils/password';
 
 import EnterpriseFeature from '../components/enterprise-feature';
 import DepartmentTreeSelect from '../components/department-tree-select';
@@ -237,10 +238,8 @@ function useCreateUserForm(props?: {
           .string()
           .trim()
           .max(100, { message: t('admin.nicknameTooLong') }),
-        password: z.string().min(6, { message: t('admin.passwordMinLength') }),
-        confirmPassword: z
-          .string()
-          .min(1, { message: t('admin.confirmPasswordRequired') }),
+        password: passwordRule(t('admin.passwordRequired')),
+        confirmPassword: passwordRule(t('admin.confirmPasswordRequired')),
         role: z.string().optional(),
         departmentId: z.string().optional(),
       })

@@ -74,6 +74,7 @@ import {
 } from '@/services/admin-service';
 import { rsaPsw } from '@/utils';
 import { formatDate } from '@/utils/date';
+import { isValidPassword } from '@/utils/password';
 
 import { TableEmpty } from '@/components/table-skeleton';
 import EnterpriseFeature from './components/enterprise-feature';
@@ -548,7 +549,7 @@ function UserDetailSheet({ email, onOpenChange }: UserDetailSheetProps) {
     mutationFn: () =>
       updateUser(email!, {
         nickname: editForm.nickname.trim(),
-        password: editForm.password
+        password: isValidPassword(editForm.password)
           ? (rsaPsw(editForm.password) as string)
           : undefined,
         departmentId: editForm.departmentId || null,

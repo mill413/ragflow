@@ -1,6 +1,5 @@
 // src/components/ProfilePage.tsx
 import { AvatarUpload } from '@/components/avatar-upload';
-import PasswordInput from '@/components/originui/password-input';
 import { SelectWithSearch } from '@/components/originui/select-with-search';
 import Spotlight from '@/components/spotlight';
 import { Button } from '@/components/ui/button';
@@ -48,45 +47,7 @@ const baseSchema = z.object({
     .min(1, { message: t('setting.timezonePlaceholder') }),
 });
 
-const nameSchema = baseSchema.extend({
-  currPasswd: z.string().optional(),
-  newPasswd: z.string().optional(),
-  confirmPasswd: z.string().optional(),
-});
-
-const passwordSchema = baseSchema
-  .extend({
-    currPasswd: z
-      .string({
-        required_error: t('setting.currentPasswordMessage'),
-      })
-      .trim(),
-    newPasswd: z
-      .string({
-        required_error: t('setting.newPasswordMessage'),
-      })
-      .trim()
-      .min(8, { message: t('setting.newPasswordDescription') }),
-    confirmPasswd: z
-      .string({
-        required_error: t('setting.confirmPasswordMessage'),
-      })
-      .trim()
-      .min(8, { message: t('setting.newPasswordDescription') }),
-  })
-  .superRefine((data, ctx) => {
-    if (
-      data.newPasswd &&
-      data.confirmPasswd &&
-      data.newPasswd !== data.confirmPasswd
-    ) {
-      ctx.addIssue({
-        path: ['confirmPasswd'],
-        message: t('setting.confirmPasswordNonMatchMessage'),
-        code: z.ZodIssueCode.custom,
-      });
-    }
-  });
+const nameSchema = baseSchema;
 
 const ProfilePage: FC = () => {
   const { t } = useTranslate('setting');
@@ -97,16 +58,17 @@ const ProfilePage: FC = () => {
     isEditing,
     submitLoading,
     editForm,
+    passwordError,
     handleEditClick,
     handleCancel,
     handleSave,
     handleAvatarUpload,
+    handlePasswordChange,
+    handlePasswordSave,
   } = useProfile();
 
-  const form = useForm<z.infer<typeof baseSchema | typeof passwordSchema>>({
-    resolver: zodResolver(
-      editType === EditType.editPassword ? passwordSchema : nameSchema,
-    ),
+  const form = useForm<z.infer<typeof nameSchema>>({
+    resolver: zodResolver(nameSchema),
     defaultValues: {
       userName: '',
       timeZone: '',
@@ -114,7 +76,7 @@ const ProfilePage: FC = () => {
     // shouldUnregister: true,
   });
   useEffect(() => {
-    form.reset({ ...editForm, currPasswd: undefined });
+    form.reset(editForm);
   }, [editForm, form]);
 
   //   const ModalContent: FC = () => {
@@ -221,10 +183,38 @@ const ProfilePage: FC = () => {
           <label className="w-[190px] text-sm font-medium">
             {t('password')}
           </label>
-          <div className="flex-1 flex items-center gap-4">
-            <div className="text-sm text-text-primary border border-border-button flex-1 rounded-md py-1.5 px-2">
-              <span className="inline-block translate-y-0.5">********</span>
+          <div className="flex-1 flex items-start gap-4">
+            <div className="flex-1">
+              <Input
+                type="password"
+                value={profile.password}
+                onChange={(event) => handlePasswordChange(event.target.value)}
+                placeholder={t('noPassword')}
+                autoComplete="new-password"
+              />
+              {passwordError && (
+                <p className="mt-2 text-xs text-state-error">
+                  {t('newPasswordMessage')}
+                </p>
+              )}
+              {!profile.hasPassword && (
+                <p className="mt-2 text-xs text-text-secondary">
+                  {t('createPasswordHint')}
+                </p>
+              )}
             </div>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={handlePasswordSave}
+              disabled={submitLoading}
+            >
+              {submitLoading && <Loader2Icon className="animate-spin" />}
+              <PenLine size={12} />{' '}
+              {profile.hasPassword
+                ? t('changePassword')
+                : t('createPassword')}
+            </Button>
           </div>
         </div>
       </div>
@@ -300,98 +290,6 @@ const ProfilePage: FC = () => {
                     </FormItem>
                   )}
                 />
-              )}
-
-              {editType === EditType.editPassword && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="currPasswd"
-                    render={({ field }) => (
-                      <FormItem className="items-center space-y-0">
-                        <div className="flex flex-col w-full gap-2">
-                          <FormLabel
-                            required
-                            className="text-sm flex text-text-secondary whitespace-nowrap"
-                          >
-                            {t('currentPassword')}
-                          </FormLabel>
-                          <FormControl className="w-full">
-                            <PasswordInput
-                              {...field}
-                              autoComplete="current-password"
-                              className="bg-bg-input border-border-default"
-                            />
-                          </FormControl>
-                        </div>
-                        <div className="flex w-full pt-1">
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="newPasswd"
-                    render={({ field }) => (
-                      <FormItem className=" items-center space-y-0">
-                        <div className="flex flex-col w-full gap-2">
-                          <FormLabel
-                            required
-                            className="text-sm text-text-secondary whitespace-nowrap"
-                          >
-                            {t('newPassword')}
-                          </FormLabel>
-                          <FormControl className="w-full">
-                            <PasswordInput
-                              {...field}
-                              autoComplete="new-password"
-                              className="bg-bg-input border-border-default"
-                            />
-                          </FormControl>
-                        </div>
-                        <div className="flex w-full pt-1">
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="confirmPasswd"
-                    render={({ field }) => (
-                      <FormItem className=" items-center space-y-0">
-                        <div className="flex flex-col w-full gap-2">
-                          <FormLabel
-                            required
-                            className="text-sm text-text-secondary whitespace-nowrap"
-                          >
-                            {t('confirmPassword')}
-                          </FormLabel>
-                          <FormControl className="w-full">
-                            <PasswordInput
-                              {...field}
-                              className="bg-bg-input border-border-default"
-                              autoComplete="new-password"
-                              onBlur={() => {
-                                form.trigger('confirmPasswd');
-                              }}
-                              onChange={(ev) => {
-                                form.setValue(
-                                  'confirmPasswd',
-                                  ev.target.value.trim(),
-                                );
-                              }}
-                            />
-                          </FormControl>
-                        </div>
-                        <div className="flex w-full pt-1">
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                </>
               )}
 
               <div className="w-full text-right space-x-4 !mt-11">

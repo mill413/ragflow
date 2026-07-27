@@ -29,6 +29,7 @@ import { useFetchAppConf } from '@/hooks/logic-hooks';
 import { cn } from '@/lib/utils';
 import { Routes } from '@/routes';
 import { rsaPsw } from '@/utils';
+import { passwordRule } from '@/utils/password';
 import { adminAuthorizationUtil } from '@/utils/authorization-util';
 
 import { login } from '@/services/admin-service';
@@ -103,7 +104,7 @@ function AdminLogin() {
       .string()
       .email()
       .min(1, { message: t('emailPlaceholder') }),
-    password: z.string().min(1, { message: t('passwordPlaceholder') }),
+    password: passwordRule(t('passwordPlaceholder')),
     remember: z.boolean().optional(),
   });
 
