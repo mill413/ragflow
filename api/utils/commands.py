@@ -21,7 +21,7 @@ import re
 from quart import Quart
 
 from api.db.services import UserService
-from api.utils.crypt import generate_password_hash
+from api.utils.crypt import generate_password_hash, validate_password
 
 
 @click.command("reset-password", help="Reset the account password.")
@@ -29,7 +29,12 @@ from api.utils.crypt import generate_password_hash
 @click.option("--new-password", prompt=True, help="the new password.")
 @click.option("--password-confirm", prompt=True, help="the new password confirm.")
 def reset_password(email, new_password, password_confirm):
-    if str(new_password).strip() != str(password_confirm).strip():
+    try:
+        validate_password(new_password)
+    except ValueError as exc:
+        click.echo(click.style(str(exc), fg="red"))
+        return
+    if new_password != password_confirm:
         click.echo(click.style("sorry. The two passwords do not match.", fg="red"))
         return
     user = UserService.query(email=email)

@@ -15,8 +15,6 @@
 #
 
 import asyncio
-import base64
-import binascii
 import json
 import logging
 import os
@@ -68,7 +66,7 @@ from api.db.db_models import (
     UserCanvas,
     UserTenant,
 )
-from api.utils.crypt import check_password_hash, decrypt
+from api.utils.crypt import check_password_hash, decrypt, get_plain_password, validate_password
 from api.utils.model_utils import calculate_model_type, get_model_type_human
 from api.utils import health_utils
 from api.db.services.resource_reference_service import ResourceReferenceService
@@ -278,24 +276,12 @@ class UserMgr:
                     "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
                     "is_superuser": user.is_superuser,
-                    "password_plain": UserMgr.get_plain_password(user.password),
+                    "password_plain": get_plain_password(user.password),
                     **departments_by_user.get(user.id, {"department_id": None, "department_path": ""}),
                     **usage_by_user[user.id],
                 }
             )
         return result
-
-    @staticmethod
-    def get_plain_password(password):
-        prefix = "{noop}"
-        password = str(password or "")
-        if not password.startswith(prefix):
-            return ""
-        encoded = password[len(prefix) :]
-        try:
-            return base64.b64decode(encoded, validate=True).decode("utf-8")
-        except (binascii.Error, ValueError, UnicodeDecodeError):
-            return encoded
 
     @staticmethod
     def get_user_login_url(username):
@@ -387,7 +373,7 @@ class UserMgr:
                     "avatar": user.avatar,
                     "email": user.email,
                     "nickname": user.nickname,
-                    "password_plain": UserMgr.get_plain_password(user.password),
+                    "password_plain": get_plain_password(user.password),
                     "language": user.language,
                     "last_login_time": user.last_login_time,
                     "is_active": user.is_active,
@@ -426,7 +412,12 @@ class UserMgr:
         department_id = data.get("department_id")
         if department_id:
             OrganizationMgr.ensure_department_exists(department_id)
-        password = decrypt(data["password"]) if data.get("password") else None
+        password = None
+        if "password" in data:
+            try:
+                password = validate_password(decrypt(data["password"]))
+            except (TypeError, ValueError) as exc:
+                raise AdminException(str(exc), 400) from exc
         remark = str(data.get("remark") or "").strip()
         if len(remark) > 2000:
             raise AdminException("Remark must be at most 2000 characters", 400)
@@ -465,10 +456,14 @@ class UserMgr:
         if len(nickname) > 100:
             raise AdminException("Nickname must be at most 100 characters", 400)
         # Construct user info data
+        try:
+            password = validate_password(decrypt(password))
+        except (TypeError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
         user_info_dict = {
             "email": username,
             "nickname": nickname,
-            "password": decrypt(password),
+            "password": password,
             "login_channel": "password",
             "is_superuser": role == "admin",
         }
@@ -499,9 +494,10 @@ class UserMgr:
             raise AdminException(f"Exist more than 1 user: {username}!")
         # check new_password different from old.
         usr = user_list[0]
-        psw = decrypt(new_password)
-        # SSO-provisioned users (OIDC/OAuth) have no local password (usr.password is None):
-        # skip the equality check, which would otherwise crash inside werkzeug's split().
+        try:
+            psw = validate_password(decrypt(new_password))
+        except (TypeError, ValueError) as exc:
+            raise AdminException(str(exc), 400) from exc
         if usr.password and check_password_hash(usr.password, psw):
             return "Same password, no need to update!"
         # update password

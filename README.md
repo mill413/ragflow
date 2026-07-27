@@ -119,7 +119,11 @@ fetch('/api/v1/admin/workspaces/<workspace_id>/chunk-methods/example_chunk', {
 - Git
 - 建议预留足够的磁盘空间用于 Elasticsearch、MySQL、MinIO 和模型镜像
 
-首次部署前，请检查 [`docker/.env`](./docker/.env) 中的密码、端口、时区和服务配置。生产环境不要继续使用示例密码。
+首次部署前，复制环境变量模板并检查其中的密码、端口、时区和服务配置。生产环境不要继续使用示例密码。
+
+```bash
+cp docker/.env.example docker/.env
+```
 
 ### 构建镜像
 

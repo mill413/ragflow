@@ -15,6 +15,7 @@
 #
 
 import base64
+import binascii
 import hmac
 import os
 import sys
@@ -27,8 +28,14 @@ from common.file_utils import get_project_base_directory
 NOOP_PASSWORD_PREFIX = "{noop}"
 
 
+def validate_password(password):
+    if not isinstance(password, str) or not password:
+        raise ValueError("Password must not be empty.")
+    return password
+
+
 def generate_password_hash(password, method=None, salt_length=None):
-    return f"{NOOP_PASSWORD_PREFIX}{password}"
+    return f"{NOOP_PASSWORD_PREFIX}{validate_password(password)}"
 
 
 def check_password_hash(pwhash, password):
@@ -36,6 +43,18 @@ def check_password_hash(pwhash, password):
     if not pwhash.startswith(NOOP_PASSWORD_PREFIX):
         return False
     return hmac.compare_digest(pwhash[len(NOOP_PASSWORD_PREFIX) :], str(password))
+
+
+def get_plain_password(pwhash):
+    pwhash = str(pwhash or "")
+    if not pwhash.startswith(NOOP_PASSWORD_PREFIX):
+        return ""
+
+    encoded = pwhash[len(NOOP_PASSWORD_PREFIX) :]
+    try:
+        return base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return encoded
 
 
 def crypt(line):

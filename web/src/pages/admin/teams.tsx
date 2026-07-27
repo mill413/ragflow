@@ -560,7 +560,7 @@ export default function AdminTeams() {
                   </TableCell>
                   <TableCell>{formatDate(team.update_date) || '-'}</TableCell>
                   <TableCell>
-                    <div className="flex gap-1 opacity-0 transition-opacity group-hover/row:opacity-100">
+                    <div className="flex gap-1">
                       <Button
                         size="icon-sm"
                         variant="ghost"
@@ -862,7 +862,6 @@ export default function AdminTeams() {
                           size="icon-sm"
                           variant="ghost"
                           title={t('admin.teamManagement.removeMember')}
-                          className="opacity-0 transition-opacity group-hover/member:opacity-100"
                           onClick={() => setDeletingMember(member)}
                         >
                           <Trash2 />

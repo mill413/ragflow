@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { passwordRule } from '@/utils/password';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
@@ -47,6 +48,9 @@ type LoginFormContentProps = {
   t: ReturnType<typeof useTranslation>['t'];
   disablePasswordLogin?: boolean;
 };
+
+const loginButtonClassName =
+  'bg-metallic-gradient border-b-[#00BEB4] border-b-2 hover:bg-metallic-gradient hover:border-b-[#02bcdd] w-full';
 
 function LoginFormContent({
   isLoginPage,
@@ -179,7 +183,7 @@ function LoginFormContent({
                 data-testid="auth-submit"
                 type="submit"
                 loading={loading}
-                className="bg-metallic-gradient border-b-[#00BEB4] border-b-2 hover:bg-metallic-gradient hover:border-b-[#02bcdd] w-full my-8"
+                className={cn(loginButtonClassName, 'my-8')}
               >
                 {title === 'login' ? t('login') : t('continue')}
               </ButtonLoading>
@@ -188,16 +192,19 @@ function LoginFormContent({
         )}
 
         {title === 'login' && channels && channels.length > 0 && (
-          <div className={disablePasswordLogin ? 'py-8' : 'mt-3 border'}>
+          <div
+            className={cn('flex flex-col gap-3', {
+              'py-8': disablePasswordLogin,
+              'mt-3 mb-8': !disablePasswordLogin,
+            })}
+          >
             {channels.map((item) => (
               <Button
-                variant={'transparent'}
                 key={item.channel}
                 onClick={() => handleLoginWithChannel(item.channel)}
-                style={{ marginTop: 10 }}
-                className={disablePasswordLogin ? 'w-full' : ''}
+                className={loginButtonClassName}
               >
-                <div className="flex items-center">
+                <div className="flex items-center justify-center">
                   <SvgIcon
                     name={item.icon || 'sso'}
                     width={20}
@@ -298,7 +305,7 @@ const Login = () => {
         .string()
         .email()
         .min(1, { message: t('emailPlaceholder') }),
-      password: z.string().min(1, { message: t('passwordPlaceholder') }),
+      password: passwordRule(t('passwordPlaceholder')),
       remember: z.boolean().optional(),
     })
     .superRefine((data, ctx) => {
@@ -344,7 +351,7 @@ const Login = () => {
         }
       } else {
         const code = await register({
-          nickname: params.nickname,
+          nickname: params.nickname ?? '',
           email: params.email,
           password: rsaPassWord,
         });

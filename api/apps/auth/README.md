@@ -20,7 +20,9 @@ oauth_config = {
     "authorization_url": "https://your-oauth-provider.com/oauth/authorize",
     "token_url": "https://your-oauth-provider.com/oauth/token",
     "userinfo_url": "https://your-oauth-provider.com/oauth/userinfo",
-    "redirect_uri": "https://your-app.com/api/v1/auth/oauth/<channel>/callback"
+    "redirect_uri": "https://your-app.com/api/v1/auth/oauth/<channel>/callback",
+    "request_timeout": 30,
+    "userinfo_client_id_header": "X-CLIENT-ID"
 }
 
 # OIDC configuration

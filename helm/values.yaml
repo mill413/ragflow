@@ -34,6 +34,12 @@ env:
   # Product icon and browser favicon URL. Supports absolute HTTP(S) URLs.
   # APP_ICON_URL: "https://example.com/logo.svg"
 
+  # Initial superuser. Uncomment these values together with
+  # ragflow.api.args --init-superuser for the first deployment only.
+  # DEFAULT_SUPERUSER_NICKNAME: "admin"
+  # DEFAULT_SUPERUSER_EMAIL: "admin@ragflow.io"
+  # DEFAULT_SUPERUSER_PASSWORD: "admin"
+
   # The document engine used by this chart.
   DOC_ENGINE: elasticsearch
 
@@ -127,6 +133,26 @@ ragflow:
   # inside the RAGFlow container
   # https://ragflow.io/docs/dev/configurations#service-configuration
   service_conf:
+
+  # Optional OA login channel. Password login remains available unless
+  # authentication.disable_password_login is enabled in service_conf.
+  oa:
+    enabled: false
+    displayName: "OA"
+    icon: sso
+    clientId: ""
+    authorizationUrl: ""
+    tokenUrl: ""
+    userinfoUrl: ""
+    # Must exactly match the callback registered with the OA service.
+    redirectUri: ""
+    scope: api
+    requestTimeout: 30
+    # Prefer an existing Secret in production. When existingSecret is empty,
+    # clientSecret is stored in the chart-managed env Secret.
+    clientSecret: ""
+    existingSecret: ""
+    existingSecretKey: client-secret
 
   # Optional yaml formatted override for the
   # llm_factories.json file inside the RAGFlow

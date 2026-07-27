@@ -153,7 +153,7 @@ function AdminServiceStatus() {
         id: 'actions',
         header: t('admin.actions'),
         cell: ({ row }) => (
-          <div className="opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 transition-opacity">
+          <div className="flex items-center">
             <Button
               variant="transparent"
               size="icon"

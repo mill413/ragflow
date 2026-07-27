@@ -288,6 +288,10 @@ def _load_user_app(monkeypatch):
             return True
 
         @staticmethod
+        def update_user(_user_id, _payload):
+            return True
+
+        @staticmethod
         def update_user_password(_user_id, _new_password):
             return True
 
@@ -341,6 +345,14 @@ def _load_user_app(monkeypatch):
     crypt_mod.check_password_hash = lambda _stored, _candidate: False
     crypt_mod.decrypt = lambda value: value
     crypt_mod.generate_password_hash = lambda value: value
+    crypt_mod.get_plain_password = lambda value: str(value or "")
+
+    def _validate_password(value):
+        if not value:
+            raise ValueError("Password must not be empty.")
+        return value
+
+    crypt_mod.validate_password = _validate_password
     monkeypatch.setitem(sys.modules, "api.utils.crypt", crypt_mod)
 
     web_utils_mod = ModuleType("api.utils.web_utils")
@@ -730,7 +742,7 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
         update_calls["payload"] = payload
         return True
 
-    monkeypatch.setattr(module.UserService, "update_by_id", _update_by_id)
+    monkeypatch.setattr(module.UserService, "update_user", _update_by_id)
     res = _run(module.setting_user())
     assert res["code"] == 0
     assert res["data"] is True
@@ -741,19 +753,37 @@ def test_logout_setting_profile_matrix_unit(monkeypatch):
     assert "email" not in update_calls["payload"]
     assert "status" not in update_calls["payload"]
 
+    current_user.password = None
+    monkeypatch.setattr(module, "decrypt", lambda _value: "")
+    _set_request_json(monkeypatch, module, {"new_password": "encrypted-empty-password"})
+    res = _run(module.setting_user())
+    assert res["code"] == module.RetCode.ARGUMENT_ERROR
+
+    monkeypatch.setattr(module, "decrypt", lambda value: f"dec:{value}")
+    _set_request_json(monkeypatch, module, {"new_password": "created-password"})
+    update_calls.clear()
+    res = _run(module.setting_user())
+    assert res["code"] == 0
+    assert update_calls["payload"]["password"] == "hash:dec:created-password"
+    current_user.password = "stored-password"
+
     _set_request_json(monkeypatch, module, {"nickname": "neo"})
 
     def _raise_update(_user_id, _payload):
         raise RuntimeError("update explode")
 
-    monkeypatch.setattr(module.UserService, "update_by_id", _raise_update)
+    monkeypatch.setattr(module.UserService, "update_user", _raise_update)
     res = _run(module.setting_user())
     assert res["code"] == module.RetCode.EXCEPTION_ERROR
     assert "Update failure" in res["message"]
 
     res = _run(module.user_profile())
     assert res["code"] == 0
-    assert res["data"] == current_user.to_dict()
+    assert res["data"] == {
+        **current_user.to_dict(),
+        "password_plain": "stored-password",
+        "has_password": True,
+    }
 
 
 @pytest.mark.p2

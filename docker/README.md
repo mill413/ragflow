@@ -44,7 +44,13 @@ Exported images are always written to `docker/dist/`; the optional export argume
 
 ## 🐬 Docker environment variables
 
-The [.env](./.env) file contains important environment variables for Docker.
+Copy the tracked environment template before the first deployment:
+
+```bash
+cp docker/.env.example docker/.env
+```
+
+The ignored `.env` file contains the active Docker environment variables.
 
 ### Elasticsearch
 
@@ -182,17 +188,29 @@ The [.env](./.env) file contains important environment variables for Docker.
 - `oauth`
   The OAuth configuration for signing up or signing in to RAGFlow using a third-party account.
   - `<channel>`: Custom channel ID.
-    - `type`: Authentication type, options include `oauth2`, `oidc`, `github`. Default is `oauth2`, when `issuer` parameter is provided, defaults to `oidc`.
+    - `type`: Authentication type, options include `oauth2`, `oidc`, and `github`. Default is `oauth2`; when `issuer` is provided, it defaults to `oidc`.
     - `icon`: Icon ID, options include `github`, `sso`, default is `sso`.
     - `display_name`: Channel name, defaults to the Title Case format of the channel ID.
     - `client_id`: Required, unique identifier assigned to the client application.
     - `client_secret`: Required, secret key for the client application, used for communication with the authentication server.
+    - `client_secret_env`: Optional environment variable containing the client secret.
     - `authorization_url`: Base URL for obtaining user authorization.
     - `token_url`: URL for exchanging authorization code and obtaining access token.
     - `userinfo_url`: URL for obtaining user information (username, email, etc.).
+    - `userinfo_client_id_header`: Optional request header that sends `client_id` when retrieving user information.
     - `issuer`: Base URL of the identity provider. OIDC clients can dynamically obtain the identity provider's metadata (`authorization_url`, `token_url`, `userinfo_url`) through `issuer`.
     - `scope`: Requested permission scope, a space-separated string. For example, `openid profile email`.
-    - `redirect_uri`: Required, URI to which the authorization server redirects during the authentication flow to return results. Must match the callback URI registered with the authentication server. Format: `https://your-app.com/v1/user/oauth/callback/<channel>`. For local configuration, you can directly use `http://127.0.0.1:80/v1/user/oauth/callback/<channel>`.
+    - `redirect_uri`: Required, URI to which the authorization server redirects during the authentication flow to return results. Must match the callback URI registered with the authentication server. Format: `https://your-app.com/api/v1/auth/oauth/<channel>/callback`. For local configuration, you can directly use `http://127.0.0.1/api/v1/auth/oauth/<channel>/callback`.
+    - `request_timeout`: Optional request timeout in seconds. It defaults to `7`.
+
+  `OAuthClient` accepts both standard OAuth JSON responses and providers that
+  return the access token and user information inside a `data` object.
+
+  OA login can also be enabled without editing `service_conf.yaml.template`.
+  Set the following variables in `.env`: `OA_ENABLED`, `OA_CLIENT_ID`,
+  `OA_CLIENT_SECRET`, `OA_AUTHORIZATION_URL`, `OA_TOKEN_URL`,
+  `OA_USERINFO_URL`, and `OA_REDIRECT_URI`. Optional variables are
+  `OA_DISPLAY_NAME`, `OA_ICON`, `OA_SCOPE`, and `OA_REQUEST_TIMEOUT`.
 
 - `user_default_llm`
   The default LLM to use for a new RAGFlow user. It is disabled by default. To enable this feature, uncomment the corresponding lines in **service_conf.yaml.template**.
