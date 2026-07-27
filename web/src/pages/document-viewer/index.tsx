@@ -57,11 +57,13 @@ const DocumentViewer = () => {
       {ext === 'pdf' && (
         <PdfPreview url={api} className="!h-dvh p-5"></PdfPreview>
       )}
-      {(ext === 'xlsx' || ext === 'xls') && (
+      {(ext === 'xlsx' || ext === 'xlsm' || ext === 'xls') && (
         <ExcelCsvPreviewer url={api}></ExcelCsvPreviewer>
       )}
 
-      {ext === 'docx' && <DocPreviewer url={api}></DocPreviewer>}
+      {(ext === 'docx' || ext === 'docm') && (
+        <DocPreviewer url={api}></DocPreviewer>
+      )}
 
       {(ext === 'ppt' || ext === 'pptx') && (
         <PptPreviewer url={api} className="!h-dvh p-5"></PptPreviewer>

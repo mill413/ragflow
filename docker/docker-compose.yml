@@ -40,7 +40,6 @@ services:
     environment:
       APP_NAME: ${APP_NAME:-RAGFlow}
       APP_ICON_URL: ${APP_ICON_URL:-/logo.svg}
-      API_PROXY_SCHEME: python
       DOC_ENGINE: elasticsearch
       ES_HOST: es01
       MYSQL_HOST: mysql

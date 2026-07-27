@@ -12,7 +12,7 @@ export async function extractTableColumns(file: File): Promise<string[]> {
     return extractCsvColumns(file);
   }
 
-  if (['xlsx', 'xls'].includes(ext)) {
+  if (['xlsx', 'xlsm', 'xls'].includes(ext)) {
     return extractExcelColumns(file);
   }
 
@@ -72,5 +72,5 @@ function extractExcelColumns(file: File): Promise<string[]> {
  */
 export function isTableFile(file: File): boolean {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  return ['csv', 'xlsx', 'xls'].includes(ext);
+  return ['csv', 'xlsx', 'xlsm', 'xls'].includes(ext);
 }

@@ -39,12 +39,16 @@ export function DocumentDownloadButton({
     if (downloadInfo.mime_type === 'application/pdf') return 'PDF Document';
     if (
       downloadInfo.mime_type ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      downloadInfo.mime_type ===
+        'application/vnd.ms-word.document.macroEnabled.12'
     )
       return 'Word Document';
     if (
       downloadInfo.mime_type ===
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      downloadInfo.mime_type ===
+        'application/vnd.ms-excel.sheet.macroEnabled.12'
     )
       return 'Excel Document';
     if (downloadInfo.mime_type === 'text/plain') return 'Text Document';
@@ -53,8 +57,8 @@ export function DocumentDownloadButton({
 
     const ext = downloadInfo.filename.split('.').pop()?.toUpperCase();
     if (ext === 'PDF') return 'PDF Document';
-    if (ext === 'DOCX') return 'Word Document';
-    if (ext === 'XLSX') return 'Excel Document';
+    if (ext === 'DOCX' || ext === 'DOCM') return 'Word Document';
+    if (ext === 'XLSX' || ext === 'XLSM') return 'Excel Document';
     if (ext === 'TXT') return 'Text Document';
     if (ext === 'MD') return 'Markdown Document';
     if (ext === 'HTML' || ext === 'HTM') return 'HTML Document';

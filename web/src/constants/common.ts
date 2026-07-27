@@ -7,6 +7,7 @@ export const fileIconMap = {
   dmg: 'dmg.svg',
   doc: 'doc.svg',
   docx: 'docx.svg',
+  docm: 'docx.svg',
   eps: 'eps.svg',
   exe: 'exe.svg',
   fig: 'fig.svg',
@@ -38,6 +39,7 @@ export const fileIconMap = {
   webp: 'webp.svg',
   xls: 'xls.svg',
   xlsx: 'xlsx.svg',
+  xlsm: 'xlsx.svg',
   xml: 'xml.svg',
 };
 
@@ -126,6 +128,7 @@ export enum FileMimeType {
   Odt = 'application/vnd.oasis.opendocument.text',
   Doc = 'application/msword',
   Docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  Docm = 'application/vnd.ms-word.document.macroEnabled.12',
   Gif = 'image/gif',
   Htm = 'text/htm',
   Html = 'text/html',
@@ -139,6 +142,7 @@ export enum FileMimeType {
   Txt = 'text/plain',
   Xls = 'application/vnd.ms-excel',
   Xlsx = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  Xlsm = 'application/vnd.ms-excel.sheet.macroEnabled.12',
   Mp4 = 'video/mp4',
   Json = 'application/json',
   Md = 'text/markdown',
@@ -164,9 +168,11 @@ export const Images = [
 // Without FileViewer
 export const ExceptiveType = [
   'xlsx',
+  'xlsm',
   'xls',
   'pdf',
   'docx',
+  'docm',
   'ppt',
   'pptx',
   'txt',

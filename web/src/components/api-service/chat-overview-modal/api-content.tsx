@@ -25,7 +25,7 @@ const ApiContent = ({ id, idKey }: { id?: string; idKey: string }) => {
     visible: tocVisible,
     hideModal: hideToc,
     showModal: showToc,
-  } = useSetModalState();
+  } = useSetModalState(true);
 
   const isDarkTheme = useIsDarkTheme();
 

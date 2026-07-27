@@ -56,11 +56,20 @@ def _configure_openpyxl():
 
 def _configure_python_docx():
     from docx.oxml import parser as docx_parser
+    from docx.opc.constants import CONTENT_TYPE
+    from docx.opc.part import PartFactory
+    from docx.parts.document import DocumentPart
+
+    class DocmDocumentPart(DocumentPart):
+        content_type = CONTENT_TYPE.WML_DOCUMENT_MAIN
 
     docx_parser.oxml_parser = _xml_parser(
         remove_blank_text=True,
         element_class_lookup=docx_parser.element_class_lookup,
     )
+    PartFactory.part_type_for[
+        "application/vnd.ms-word.document.macroEnabled.main+xml"
+    ] = DocmDocumentPart
 
 
 def _configure_python_pptx():

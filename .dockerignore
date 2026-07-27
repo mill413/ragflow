@@ -30,10 +30,7 @@ docker/seekdb/
 # ── Version-control metadata ────────────────────────────────────────────
 .git/
 
-# ── Go and C++ build outputs ────────────────────────────────────────────────
-internal/binding/cpp/build/
-internal/binding/cpp/cmake-build-release/
-internal/binding/cpp/cmake-build-debug/
+# ── Native build outputs ────────────────────────────────────────────────────
 target/
 
 # ── ragflow_deps build context (built as a separate image, mounted ──

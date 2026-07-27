@@ -210,25 +210,11 @@ if config_path.parent.is_dir():
 PY
 
 # -----------------------------------------------------------------------------
-# Select Nginx Configuration based on API_PROXY_SCHEME
+# Install the Python API Nginx configuration
 # -----------------------------------------------------------------------------
 NGINX_CONF_DIR="/etc/nginx/conf.d"
-if [ -n "$API_PROXY_SCHEME" ]; then
-    if [[ "${API_PROXY_SCHEME}" == "hybrid" ]]; then
-        cp -f "$NGINX_CONF_DIR/ragflow.conf.hybrid" "$NGINX_CONF_DIR/ragflow.conf"
-        echo "Applied nginx config: ragflow.conf.hybrid"
-    elif [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-        cp -f "$NGINX_CONF_DIR/ragflow.conf.golang" "$NGINX_CONF_DIR/ragflow.conf"
-        echo "Applied nginx config: ragflow.conf.golang (default)"
-    else
-        cp -f "$NGINX_CONF_DIR/ragflow.conf.python" "$NGINX_CONF_DIR/ragflow.conf"
-        echo "Applied nginx config: ragflow.conf.python"
-    fi
-else
-    # Default to python backend
-    cp -f "$NGINX_CONF_DIR/ragflow.conf.python" "$NGINX_CONF_DIR/ragflow.conf"
-    echo "Default: applied nginx config: ragflow.conf.python"
-fi
+cp -f "$NGINX_CONF_DIR/ragflow.conf.python" "$NGINX_CONF_DIR/ragflow.conf"
+echo "Applied nginx config: ragflow.conf.python"
 
 # -----------------------------------------------------------------------------
 # Function(s)
@@ -284,46 +270,24 @@ if [[ "${INIT_MODEL_PROVIDER_TABLES}" -eq 1 ]]; then
 fi
 
 if [[ "${ENABLE_ADMIN_SERVER}" -eq 1 ]]; then
-    if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "python" ]]; then
-        while true; do
-            echo "Attempt to start Admin python server..."
-            "$PY" admin/server/admin_server.py
-            echo "Admin python server started"
-            sleep 1;
-        done &
-    fi
-
-    if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-        while true; do
-            echo "Starting Admin go server..."
-            bin/ragflow_server --admin
-            echo "Admin go server started."
-            sleep 1;
-        done &
-    fi
+    while true; do
+        echo "Attempt to start Admin python server..."
+        "$PY" admin/server/admin_server.py
+        echo "Admin python server started"
+        sleep 1;
+    done &
 fi
 
 if [[ "${ENABLE_WEBSERVER}" -eq 1 ]]; then
     echo "Starting nginx..."
     /usr/sbin/nginx
 
-    if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "python" ]]; then
-        while true; do
-            echo "Attempt to start RAGFlow python server..."
-            "$PY" api/ragflow_server.py ${INIT_SUPERUSER_ARGS}
-            echo "RAGFlow python server started."
-            sleep 1;
-        done &
-    fi
-
-    if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-        while true; do
-            echo "Starting RAGFlow go server..."
-            bin/ragflow_server --api
-            echo "RAGFlow go server started."
-            sleep 1;
-        done &
-    fi
+    while true; do
+        echo "Attempt to start RAGFlow python server..."
+        "$PY" api/ragflow_server.py ${INIT_SUPERUSER_ARGS}
+        echo "RAGFlow python server started."
+        sleep 1;
+    done &
 fi
 
 if [[ "${ENABLE_DATASYNC}" -eq 1 ]]; then
@@ -342,39 +306,19 @@ fi
 
 if [[ "${ENABLE_TASKEXECUTOR}" -eq 1 ]]; then
     if [[ "${CONSUMER_NO_END}" -gt "${CONSUMER_NO_BEG}" ]]; then
-        if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "python" ]]; then
-            echo "Starting python task executors on host '${HOST_ID}' for IDs in [${CONSUMER_NO_BEG}, ${CONSUMER_NO_END})..."
-            for (( i=CONSUMER_NO_BEG; i<CONSUMER_NO_END; i++ ))
-            do
-              task_exe "${i}" "${HOST_ID}" &
-            done
-        fi
-
-        if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-            while true; do
-                echo "Starting go ingestor..."
-                bin/ragflow_server --ingestor
-                sleep 1;
-            done &
-        fi
+        echo "Starting python task executors on host '${HOST_ID}' for IDs in [${CONSUMER_NO_BEG}, ${CONSUMER_NO_END})..."
+        for (( i=CONSUMER_NO_BEG; i<CONSUMER_NO_END; i++ ))
+        do
+          task_exe "${i}" "${HOST_ID}" &
+        done
     else
         # Otherwise, start a fixed number of workers
         echo "Starting ${WORKERS} task executor(s) on host '${HOST_ID}'..."
         for (( i=0; i<WORKERS; i++ ))
         do
-          if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "python" ]]; then
-              echo "Starting python task executor..."
-              task_exe "${i}" "${HOST_ID}" &
-              sleep 1;
-          fi
-
-          if [[ "${API_PROXY_SCHEME}" == "hybrid" ]] || [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-              while true; do
-                  echo "Starting go ingestor..."
-                  bin/ragflow_server --ingestor
-                  sleep 1;
-              done &
-          fi
+          echo "Starting python task executor..."
+          task_exe "${i}" "${HOST_ID}" &
+          sleep 1;
         done
     fi
 fi

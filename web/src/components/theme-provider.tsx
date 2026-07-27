@@ -12,6 +12,18 @@ type ThemeProviderState = {
   setTheme: (theme: ThemeEnum) => void;
 };
 
+const systemThemeQuery = '(prefers-color-scheme: dark)';
+
+function getSystemTheme() {
+  return window.matchMedia(systemThemeQuery).matches
+    ? ThemeEnum.Dark
+    : ThemeEnum.Light;
+}
+
+function resolveTheme(theme: ThemeEnum) {
+  return theme === ThemeEnum.System ? getSystemTheme() : theme;
+}
+
 const initialState: ThemeProviderState = {
   theme: ThemeEnum.Light,
   setTheme: () => null,
@@ -21,27 +33,46 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 export function ThemeProvider({
   children,
-  defaultTheme = ThemeEnum.Dark,
+  defaultTheme = ThemeEnum.System,
   storageKey = 'vite-ui-theme',
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<ThemeEnum>(
+  const [themePreference, setThemePreference] = useState<ThemeEnum>(
     () => (localStorage.getItem(storageKey) as ThemeEnum) || defaultTheme,
+  );
+  const [theme, setResolvedTheme] = useState<ThemeEnum>(() =>
+    resolveTheme(themePreference),
   );
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove(ThemeEnum.Light, ThemeEnum.Dark);
-    localStorage.setItem(storageKey, theme);
-    root.classList.add(theme);
-  }, [storageKey, theme]);
+    const mediaQuery = window.matchMedia(systemThemeQuery);
+
+    const applyTheme = () => {
+      const resolvedTheme =
+        themePreference === ThemeEnum.System
+          ? getSystemTheme()
+          : themePreference;
+      root.classList.remove(ThemeEnum.Light, ThemeEnum.Dark);
+      root.classList.add(resolvedTheme);
+      setResolvedTheme(resolvedTheme);
+    };
+
+    localStorage.setItem(storageKey, themePreference);
+    applyTheme();
+
+    if (themePreference === ThemeEnum.System) {
+      mediaQuery.addEventListener('change', applyTheme);
+      return () => mediaQuery.removeEventListener('change', applyTheme);
+    }
+  }, [storageKey, themePreference]);
 
   return (
     <ThemeProviderContext.Provider
       {...props}
       value={{
         theme,
-        setTheme,
+        setTheme: setThemePreference,
       }}
     >
       {children}

@@ -41,6 +41,7 @@ import {
 import { rsaPsw } from '@/utils';
 import { cn } from '@/lib/utils';
 
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -693,13 +694,23 @@ function AdminUserManagement() {
                   {t('admin.userMonitoring.description')}
                 </div>
               </div>
-              <Button
-                className="h-10 px-4"
-                onClick={() => setCreateUserModalOpen(true)}
-              >
-                <LucideUserPlus />
-                {t('admin.newUser')}
-              </Button>
+              <div className="flex items-center gap-3">
+                <AdminRefreshButton
+                  queryKeys={[
+                    ['admin/listUsers'],
+                    ['admin/listRoles'],
+                    ['admin/departments'],
+                    ['admin/userDetail'],
+                  ]}
+                />
+                <Button
+                  className="h-10 px-4"
+                  onClick={() => setCreateUserModalOpen(true)}
+                >
+                  <LucideUserPlus />
+                  {t('admin.newUser')}
+                </Button>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1321,6 +1322,16 @@ export default function AdminResources() {
                   )}
                 </div>
               </div>
+              <AdminRefreshButton
+                queryKeys={[
+                  ['admin/resources'],
+                  ['admin/resources/failures'],
+                  ['admin/resources/dataset-detail'],
+                  ['admin/resources/detail'],
+                  ['admin/monitoring'],
+                  ['admin/model-workspaces'],
+                ]}
+              />
             </div>
 
             <div

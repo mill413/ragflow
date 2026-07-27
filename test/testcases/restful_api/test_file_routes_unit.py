@@ -126,7 +126,7 @@ def _load_file_api_module(monkeypatch):
     async def _create_folder(_workspace_id, _actor_id, _name, _parent_id=None, _file_type=None):
         return True, {"id": "folder1"}
 
-    async def _delete_files(_tenant_id, _ids, _auth_header="", _workspace_id=None):
+    async def _delete_files(_tenant_id, _ids, _workspace_id=None):
         return True, True
 
     async def _move_files(_tenant_id, _src_file_ids, _dest_file_id=None, _new_name=None, _workspace_id=None):

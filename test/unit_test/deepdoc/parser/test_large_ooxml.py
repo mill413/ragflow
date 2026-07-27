@@ -16,16 +16,23 @@
 
 import gc
 import importlib.util
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 
-def test_large_ooxml_text_nodes_are_supported():
+def _load_large_ooxml_module():
     module_path = (
         Path(__file__).parents[4] / "deepdoc" / "parser" / "large_ooxml.py"
     )
     spec = importlib.util.spec_from_file_location("large_ooxml", module_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def test_large_ooxml_text_nodes_are_supported():
+    module = _load_large_ooxml_module()
     module.configure_large_ooxml_parsers()
 
     from docx.oxml import parse_xml as parse_docx_xml
@@ -52,3 +59,38 @@ def test_large_ooxml_text_nodes_are_supported():
         f'<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:extLst>{large_text}</p:extLst></p:presentation>'
     )
     assert len(pptx_root.xpath("string(.//p:extLst)")) == text_size
+
+
+def test_docm_opens_without_rewriting_or_executing_macro_parts():
+    module = _load_large_ooxml_module()
+    from docx import Document
+    module.configure_large_ooxml_parsers()
+
+    document = Document()
+    document.add_paragraph("DOCM content")
+    docx = BytesIO()
+    document.save(docx)
+
+    docm = BytesIO()
+    with ZipFile(BytesIO(docx.getvalue())) as source, ZipFile(
+        docm, "w", ZIP_DEFLATED
+    ) as target:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            if info.filename == "[Content_Types].xml":
+                data = data.replace(
+                    b"application/vnd.openxmlformats-officedocument."
+                    b"wordprocessingml.document.main+xml",
+                    b"application/vnd.ms-word.document.macroEnabled.main+xml",
+                )
+            target.writestr(info, data)
+        target.writestr("word/vbaProject.bin", b"macro payload")
+
+    original = docm.getvalue()
+    parsed = Document(BytesIO(original))
+
+    assert [paragraph.text for paragraph in parsed.paragraphs] == [
+        "DOCM content"
+    ]
+    with ZipFile(BytesIO(original)) as archive:
+        assert archive.read("word/vbaProject.bin") == b"macro payload"

@@ -50,7 +50,7 @@ def chunk(filename, binary=None, lang="Chinese", callback=None, **kwargs):
     rag_tokenizer.tokenizer.set_language(lang)
     res = []
     doc = {"docnm_kwd": filename, "title_tks": rag_tokenizer.tokenize(re.sub(r"\.[a-zA-Z]+$", "", filename))}
-    if re.search(r"\.xlsx?$", filename, re.IGNORECASE):
+    if re.search(r"\.(xls|xlsx|xlsm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         excel_parser = Excel()
         for ii, (q, a) in enumerate(excel_parser(filename, binary, callback)):

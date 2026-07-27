@@ -16,10 +16,8 @@
 // other mismatch (semantic field, position, edge topology, …) is
 // a real bug and fails the test.
 //
-// To add a new fixture, drop a JSON file under
-// `internal/agent/dsl/testdata/` and add a `describe`
-// block keyed by the fixture name. The diff helper classifies
-// React-Flow internals automatically — no per-fixture work needed.
+// Add new fixtures as self-contained `describe` blocks. The diff helper
+// classifies React-Flow internals automatically.
 
 jest.mock('../../utils', () => ({
   buildDslComponentsByGraph: jest.fn(
@@ -157,9 +155,7 @@ const roundTrip = (bridge: any, input: any): any => {
 };
 
 describe('dsl-bridge round-trip stability', () => {
-  // Realistic v2 fixture with React-Flow-internal fields. Mirrors
-  // the structure of internal/agent/dsl/testdata/browser.json
-  // but inlined here so the test is self-contained.
+  // Realistic v2 fixture with React-Flow-internal fields.
   const v2BrowserLike = {
     graph: {
       nodes: [

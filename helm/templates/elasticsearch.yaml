@@ -1,16 +1,45 @@
-{{- if eq .Values.env.DOC_ENGINE "elasticsearch" -}}
+{{- if .Values.elasticsearch.storage.hostPath }}
+{{- if not (hasPrefix "/" .Values.elasticsearch.storage.hostPath) }}
+{{- fail "elasticsearch.storage.hostPath must be an absolute path" }}
+{{- end }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ printf "%s-es-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  annotations:
+    {{- include "ragflow.persistentResourceAnnotations" . | nindent 4 }}
+  labels:
+    {{- include "ragflow.labels" . | nindent 4 }}
+    app.kubernetes.io/component: elasticsearch
+spec:
+  capacity:
+    storage: {{ .Values.elasticsearch.storage.capacity }}
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: {{ .Values.elasticsearch.storage.hostPath | quote }}
+    type: DirectoryOrCreate
+---
+{{- end }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "ragflow.fullname" . }}-es-data
   annotations:
-    "helm.sh/resource-policy": keep
+    {{- include "ragflow.persistentResourceAnnotations" . | nindent 4 }}
   labels:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: elasticsearch
 spec:
+  {{- if .Values.elasticsearch.storage.hostPath }}
+  storageClassName: ""
+  volumeName: {{ printf "%s-es-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
+  {{- else }}
   {{- with .Values.elasticsearch.storage.className }}
   storageClassName: {{ . }}
+  {{- end }}
   {{- end }}
   accessModes:
     - ReadWriteOnce
@@ -26,6 +55,7 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: elasticsearch
 spec:
+  serviceName: {{ include "ragflow.fullname" . }}-es
   replicas: 1
   selector:
     matchLabels:
@@ -44,6 +74,14 @@ spec:
         checksum/config-es: {{ include (print $.Template.BasePath "/elasticsearch-config.yaml") . | sha256sum }}
         checksum/config-env: {{ include (print $.Template.BasePath "/env.yaml") . | sha256sum }}
     spec:
+      {{- with .Values.global.nodeName }}
+      nodeName: {{ . | quote }}
+      {{- else }}
+      {{- with .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       {{- if or .Values.global.imagePullSecrets .Values.elasticsearch.image.pullSecrets }}
       imagePullSecrets:
         {{- with .Values.global.imagePullSecrets }}
@@ -127,5 +165,7 @@ spec:
     - protocol: TCP
       port: 9200
       targetPort: http
+      {{- if and (eq .Values.elasticsearch.service.type "NodePort") .Values.elasticsearch.service.nodePort }}
+      nodePort: {{ .Values.elasticsearch.service.nodePort }}
+      {{- end }}
   type: {{ .Values.elasticsearch.service.type }}
-{{- end -}}

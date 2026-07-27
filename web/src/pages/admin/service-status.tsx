@@ -60,6 +60,7 @@ import 'react18-json-view/src/style.css';
 
 import ServiceDetail from './service-detail';
 import TaskExecutorDetail from './task-executor-detail';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import MonitoringPanel from './components/monitoring-panel';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 
@@ -207,9 +208,24 @@ function AdminServiceStatus() {
         <Spotlight />
 
         <ScrollArea className="size-full">
+          <CardHeader className="flex flex-row items-start justify-between gap-6">
+            <div>
+              <CardTitle>{t('admin.serviceStatus')}</CardTitle>
+              <div className="mt-2 text-sm text-text-secondary">
+                {t('admin.monitoringPage.description')}
+              </div>
+            </div>
+            <AdminRefreshButton
+              queryKeys={[
+                ['admin/monitoring'],
+                ['admin/listServices'],
+                ['admin/serviceDetails'],
+              ]}
+            />
+          </CardHeader>
           <MonitoringPanel />
           <CardHeader className="space-y-0 flex flex-row justify-between items-center">
-            <CardTitle>{t('admin.serviceStatus')}</CardTitle>
+            <CardTitle>{t('admin.serviceListTitle')}</CardTitle>
 
             <div className="flex flex-wrap items-center justify-end gap-4">
               <AdminTableMultiFilters

@@ -41,6 +41,8 @@ class TestFilenameType:
             ("a.PDF", FileType.PDF.value),
             ("x.png", FileType.VISUAL.value),
             ("file.docx", FileType.DOC.value),
+            ("macro-enabled.docm", FileType.DOC.value),
+            ("macro-enabled.xlsm", FileType.DOC.value),
             ("a/b/c.pdf", FileType.PDF.value),
             ("path/to/file.txt", FileType.DOC.value),
             ("book.epub", FileType.DOC.value),

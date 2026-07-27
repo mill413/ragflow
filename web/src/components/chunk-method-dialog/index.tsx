@@ -211,7 +211,8 @@ export function ChunkMethodDialog({
   const showEntityTypes = selectedTag === DocumentParserType.KnowledgeGraph;
 
   const showExcelToHtml =
-    selectedTag === DocumentParserType.Naive && documentExtension === 'xlsx';
+    selectedTag === DocumentParserType.Naive &&
+    ['xlsx', 'xlsm'].includes(documentExtension);
 
   const showAutoKeywords = useShowAutoKeywords();
 

@@ -35,9 +35,7 @@ History
 - An earlier attempt at the fix widened `cpn_id` to `[a-zA-Z0-9_]+`,
   which accidentally dropped colon support. Colon-bearing ids
   (`UserFillUp:CateInput`, `Retrieval:KBSearch`) are real and used
-  inside templates + DSL fixtures
-  (e.g. `internal/agent/dsl/testdata/all.json`,
-  `test/testcases/test_web_api/test_canvas_app/test_iteration_runtime_unit.py`).
+  inside templates and DSL fixtures.
 
 The current shape is `[a-zA-Z0-9_:]+` for `cpn_id`, which is a strict
 superset of both pre-existing shapes and matches the
@@ -122,10 +120,8 @@ def test_variable_ref_patt_matches_colon_bearing_component_ids(base_module):
     """Legacy DSL ids like `UserFillUp:CateInput@text` must still resolve.
 
     Regression for the "Keep colon support" follow-up note from CR on #16792:
-    these ids are scattered across ``internal/agent/dsl/testdata/all.json``,
-    ``test_iteration_runtime_unit.py``, and other templates. Dropping the
-    colon would leave them literal at runtime, silently breaking template
-    substitution.
+    these ids are used throughout templates. Dropping the colon would leave
+    them literal at runtime, silently breaking template substitution.
     """
     patt = base_module.ComponentBase.variable_ref_patt_re
 

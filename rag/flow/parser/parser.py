@@ -136,6 +136,7 @@ class ParserParam(ProcessParamBase):
                 "suffix": [
                     "xls",
                     "xlsx",
+                    "xlsm",
                     "csv",
                 ],
             },
@@ -153,6 +154,7 @@ class ParserParam(ProcessParamBase):
                 "remove_header_footer": False,
                 "suffix": [
                     "docx",
+                    "docm",
                 ],
                 "output_format": "json",
             },
@@ -748,7 +750,7 @@ class Parser(ProcessBase):
                 raise RuntimeError("TCADP parser not available. Please check Tencent Cloud API configuration.")
 
             # Determine file type based on extension
-            if re.search(r"\.xlsx?$", name, re.IGNORECASE):
+            if re.search(r"\.(xls|xlsx|xlsm)$", name, re.IGNORECASE):
                 file_type = "XLSX"
             else:
                 file_type = "CSV"

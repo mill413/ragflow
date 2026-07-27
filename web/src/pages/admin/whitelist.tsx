@@ -68,6 +68,7 @@ import useCreateEmailForm from './forms/email-form';
 import useImportExcelForm, {
   ImportExcelFormData,
 } from './forms/import-excel-form';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import {
   createFilterOptions,
@@ -246,6 +247,7 @@ function AdminWhitelist() {
             <CardTitle>{t('admin.whitelistManagement')}</CardTitle>
 
             <div className="flex flex-wrap items-center justify-end gap-4">
+              <AdminRefreshButton queryKeys={[['admin/listWhitelist']]} />
               <AdminTableMultiFilters
                 filters={[
                   {

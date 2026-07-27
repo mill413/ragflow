@@ -176,7 +176,7 @@ def chunk(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang=
     # is it English
     eng = lang.lower() == "english"  # is_english(sections)
 
-    if re.search(r"\.docx$", filename, re.IGNORECASE):
+    if re.search(r"\.(docx|docm)$", filename, re.IGNORECASE):
         callback(0.1, "Start to parse.")
         chunks = Docx()(filename, binary)
         callback(0.7, "Finish parsing.")

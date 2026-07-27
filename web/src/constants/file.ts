@@ -1,9 +1,11 @@
-export const FileIconMap = {
+export const FileIconMap: Record<string, string> = {
   doc: 'doc',
   docx: 'doc',
+  docm: 'doc',
   pdf: 'pdf',
   xls: 'excel',
   xlsx: 'excel',
+  xlsm: 'excel',
   ppt: 'ppt',
   pptx: 'ppt',
   jpg: 'jpg',

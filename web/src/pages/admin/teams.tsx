@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 
 import Spotlight from '@/components/spotlight';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -376,9 +377,19 @@ export default function AdminTeams() {
                 {t('admin.teamManagement.description')}
               </div>
             </div>
-            <Button onClick={openCreateTeam}>
-              <Plus /> {t('admin.teamManagement.newTeam')}
-            </Button>
+            <div className="flex items-center gap-3">
+              <AdminRefreshButton
+                queryKeys={[
+                  ['admin/teams'],
+                  ['admin/teams/members'],
+                  ['admin/teams/resources'],
+                  ['admin/listUsers'],
+                ]}
+              />
+              <Button className="h-10 px-4" onClick={openCreateTeam}>
+                <Plus /> {t('admin.teamManagement.newTeam')}
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

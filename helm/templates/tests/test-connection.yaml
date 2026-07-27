@@ -6,7 +6,16 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
 spec:
+  {{- with .Values.global.nodeName }}
+  nodeName: {{ . | quote }}
+  {{- else }}
+  {{- with .Values.global.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
   containers:
     - name: wget
       image: {{ include "ragflow.imageRepo" (dict "root" . "repo" "busybox") }}

@@ -9,9 +9,9 @@ usage() {
     echo
     echo "Without arguments, starts ragflow and task_executor."
     echo "Available service types:"
-    echo "  ragflow         Start RAGFlow server based on API_PROXY_SCHEME"
+    echo "  ragflow         Start the Python RAGFlow server"
     echo "  task_executor   Start rag/svr/task_executor.py workers"
-    echo "  admin           Start Admin server based on API_PROXY_SCHEME"
+    echo "  admin           Start the Python Admin server"
     echo "  data_sync       Start rag/svr/sync_data_source.py"
     echo
     echo "Examples:"
@@ -115,11 +115,6 @@ task_exe(){
 run_server(){
     local server_name="ragflow_server.py"
     local -a server_cmd=("$PY" "api/ragflow_server.py")
-    if [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-        prepare_for_go
-        server_name="ragflow_server"
-        server_cmd=("bin/ragflow_server" "--api")
-    fi
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting $server_name (Attempt $((retry_count+1)))"
@@ -145,11 +140,6 @@ run_server(){
 run_admin_server(){
     local server_name="admin_server.py"
     local -a server_cmd=("$PY" "admin/server/admin_server.py")
-    if [[ "${API_PROXY_SCHEME}" == "go" ]]; then
-        prepare_for_go
-        server_name="admin_server"
-        server_cmd=("bin/ragflow_server" "--admin")
-    fi
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting $server_name (Attempt $((retry_count+1)))"
@@ -201,21 +191,6 @@ ensure_db_init() {
 
 run_mysql_migrations() {
     tools/scripts/run_migrations.sh
-}
-
-prepare_for_go() {
-    if [ -d /usr/share/infinity/resource ]; then
-        echo "Resource directory already exists. Skipping preparation."
-        return
-    fi
-    mkdir -p /usr/share/infinity/resource
-    if [ "$NEED_MIRROR" == "1" ]; then
-        git clone --depth 1 --single-branch https://gitee.com/infiniflow/resource /tmp/resource;
-    else
-        git clone --depth 1 --single-branch https://github.com/infiniflow/resource.git /tmp/resource;
-    fi
-    cp -r /tmp/resource/* /usr/share/infinity/resource
-    rm -rf /tmp/resource
 }
 
 START_RAGFLOW=0

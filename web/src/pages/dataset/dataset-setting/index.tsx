@@ -20,7 +20,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ChunkMethodForm } from './chunk-method-form';
-import ChunkMethodLearnMore from './chunk-method-learn-more';
+import ChunkMethodIntroduction from './chunk-method-introduction';
 import LinkDataSource, {
   IDataSourceNodeProps,
 } from './components/link-data-source';
@@ -326,7 +326,7 @@ export default function DatasetSettings() {
 
           <div className="flex-1 p-5 overflow-auto">
             {parseType === ParseType.BuiltIn && (
-              <ChunkMethodLearnMore parserId={selectedTag} />
+              <ChunkMethodIntroduction parserId={selectedTag} />
             )}
           </div>
         </CardContent>

@@ -54,6 +54,7 @@ import Spotlight from '@/components/spotlight';
 import message from '@/components/ui/message';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { AdminRefreshButton } from './components/admin-refresh-button';
 
 // Provider icons mapping
 const PROVIDER_ICONS: Record<string, React.ElementType> = {
@@ -482,13 +483,24 @@ function AdminSandboxSettings() {
         <Spotlight />
 
         <ScrollArea className="size-full">
-          <CardHeader className="space-y-0">
-            <CardTitle className="leading-10">
-              {t('admin.sandboxSettings')}
-            </CardTitle>
-            <CardDescription className="text-text-secondary">
-              {t('admin.sandboxSettingsPage.description')}
-            </CardDescription>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <CardTitle className="leading-10">
+                  {t('admin.sandboxSettings')}
+                </CardTitle>
+                <CardDescription className="text-text-secondary">
+                  {t('admin.sandboxSettingsPage.description')}
+                </CardDescription>
+              </div>
+              <AdminRefreshButton
+                queryKeys={[
+                  ['admin/listSandboxProviders'],
+                  ['admin/getSandboxConfig'],
+                  ['admin/getSandboxProviderSchema'],
+                ]}
+              />
+            </div>
           </CardHeader>
 
           <CardContent>

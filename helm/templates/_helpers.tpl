@@ -76,6 +76,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Keep persistent storage across uninstall and allow a release with the same
+name and namespace to reuse it on a later install.
+*/}}
+{{- define "ragflow.persistentResourceAnnotations" -}}
+"helm.sh/resource-policy": keep
+"meta.helm.sh/release-name": {{ .Release.Name | quote }}
+"meta.helm.sh/release-namespace": {{ .Release.Namespace | quote }}
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "ragflow.serviceAccountName" -}}

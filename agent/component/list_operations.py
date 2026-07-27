@@ -19,8 +19,7 @@ class ListOperationsParam(ComponentParamBase):
         # Comma-separated list of map keys to sort by (primary,
         # tiebreak, ...). Empty / unset falls back to the legacy
         # full-hashable-key behaviour (sort by the lexicographically
-        # first field). Mirrors internal/agent/component/list_operations.go
-        # parseSortByFieldList + opSort's SortBy path.
+        # first field).
         self.sort_by = ""
         self.filter = {"operator": "=", "value": ""}
         self.outputs = {"result": {"value": [], "type": "Array of ?"}, "first": {"value": "", "type": "?"}, "last": {"value": "", "type": "?"}}

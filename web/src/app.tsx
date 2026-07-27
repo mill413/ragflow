@@ -87,8 +87,8 @@ const RootProvider = ({ children }: React.PropsWithChildren) => {
     <TooltipProvider>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider
-          defaultTheme={ThemeEnum.Dark}
-          storageKey="ragflow-ui-theme"
+          defaultTheme={ThemeEnum.System}
+          storageKey="ragflow-ui-theme-preference"
         >
           <Root>{children}</Root>
         </ThemeProvider>

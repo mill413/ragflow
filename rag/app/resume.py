@@ -921,7 +921,7 @@ def extract_text(filename: str, binary: bytes) -> tuple[str, list[str], list[dic
             # Build line-indexed text (with coordinate info)
             return _build_indexed_text(sorted_blocks)
 
-        elif fname_lower.endswith(".docx"):
+        elif fname_lower.endswith((".docx", ".docm")):
             from docx import Document
 
             doc = Document(BytesIO(binary))
