@@ -53,6 +53,12 @@ encoder = tiktoken.get_encoding("cl100k_base")
 # call. Default None means "not inside a tracked run" and callers must no-op.
 token_usage_sink: contextvars.ContextVar = contextvars.ContextVar("ragflow_token_usage_sink", default=None)
 
+# Per-run Langfuse correlating attributes (e.g. {"session_id": ..., "user_id": ...}).
+# Installed by Canvas.run so RAGFlow's own Langfuse generations can be grouped by
+# session and user even though the agent's LLMBundles are created without them.
+langfuse_run_attrs: contextvars.ContextVar = contextvars.ContextVar("ragflow_langfuse_run_attrs", default=None)
+
+
 # Guards sink mutations: concurrent tool calls (asyncio.gather + thread_pool_exec,
 # which copies the context so worker threads share the same sink dict) can otherwise
 # race on the read-modify-write of the counters.

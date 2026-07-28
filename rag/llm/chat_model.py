@@ -231,7 +231,7 @@ class Base(ABC):
         self.tools = []
         self.toolcall_sessions = {}
         # Token usage split (prompt/completion/total) of the most recent chat call.
-        # Consumed by LLMBundle for accurate run aggregation.
+        # Consumed by LLMBundle for accurate Langfuse reporting and run aggregation.
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     def _get_delay(self):
@@ -768,7 +768,7 @@ class Base(ABC):
 
         response = await self.async_client.chat.completions.create(model=self.model_name, messages=history, **gen_conf, **kwargs)
 
-        # Capture prompt/completion split for accurate run aggregation.
+        # Capture prompt/completion split for accurate Langfuse + run aggregation.
         self.last_usage = usage_from_response(response)
         if not response.choices or not response.choices[0].message or not response.choices[0].message.content:
             return "", 0
@@ -1606,7 +1606,7 @@ class LiteLLMBase(ABC):
         self.tools = []
         self.toolcall_sessions = {}
         # Token usage split (prompt/completion/total) of the most recent chat call.
-        # Consumed by LLMBundle for accurate run aggregation.
+        # Consumed by LLMBundle for accurate Langfuse reporting and run aggregation.
         self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
         # Factory specific fields
@@ -1697,7 +1697,7 @@ class LiteLLMBase(ABC):
                 )
 
                 # Capture the prompt/completion split for accurate per-call usage
-                # reporting and agent run aggregation.
+                # reporting (Langfuse + agent run aggregation).
                 self.last_usage = usage_from_response(response)
                 if not response.choices or not response.choices[0].message or not response.choices[0].message.content:
                     return "", 0
