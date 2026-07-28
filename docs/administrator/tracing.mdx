@@ -39,10 +39,20 @@ Langfuse stores traces, spans and prompt payloads in a purpose-built observabili
 
 ## 2. Add the keys to RAGFlow
 
-RAGFlow stores the credentials _per tenant_. Configure them through the authenticated HTTP API:
+RAGFlow stores the credentials _per tenant_. To configure them from the web UI:
+
+1. Sign in to RAGFlow and open **Profile ▸ API**.
+2. Find the API information card at the top of the page.
+3. Click **Langfuse** on the far right of the API key row.
+4. Enter the Langfuse **Host**, **Public Key**, and **Secret Key**, then click **Save**.
+
+Once a configuration is saved, the **View** button next to the Langfuse entry
+opens the configured project.
+
+You can also configure Langfuse through the authenticated HTTP API:
 
 ```bash
-curl --request POST \
+curl --request PUT \
   --url http://127.0.0.1/api/v1/langfuse/api-key \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer <access-token>' \
@@ -53,9 +63,9 @@ curl --request POST \
   }'
 ```
 
-Use `PUT` to replace the saved configuration, `GET` to inspect it, and `DELETE`
-to remove it. All four operations use `/api/v1/langfuse/api-key` and require an
-authenticated RAGFlow account.
+`POST` and `PUT` both save the configuration. Use `GET` to inspect it and
+`DELETE` to remove it. All four operations use `/api/v1/langfuse/api-key` and
+require an authenticated RAGFlow account.
 
 Once saved, RAGFlow starts emitting traces automatically – no code change required.
 

@@ -3945,6 +3945,115 @@ curl --request GET \
 ```
 
 不存在或无权读取时返回 `NOT_FOUND` 类型的错误响应。
+
+---
+
+## Langfuse 追踪配置
+
+Langfuse 配置与当前登录账号的个人工作空间绑定。配置成功后，聊天、检索和模型调用链会自动向对应的 Langfuse 项目发送追踪数据。
+
+网页端可以在个人中心的 **API** 页面顶部，点击 API Key 同一行最右侧的 **Langfuse** 按钮进行配置。以下接口可用于程序化管理相同的配置。
+
+### 查询 Langfuse 配置
+
+**GET** `/api/v1/langfuse/api-key`
+
+#### 请求示例
+
+```bash
+curl --request GET \
+  --url 'http://{address}/api/v1/langfuse/api-key' \
+  --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": {
+    "host": "https://cloud.langfuse.com",
+    "public_key": "<PUBLIC_KEY>",
+    "secret_key": "<SECRET_KEY>",
+    "project_id": "<PROJECT_ID>",
+    "project_name": "<PROJECT_NAME>"
+  },
+  "message": ""
+}
+```
+
+尚未配置时，`data` 为空，并通过 `message` 说明当前没有 Langfuse 配置。
+
+### 保存 Langfuse 配置
+
+**PUT** `/api/v1/langfuse/api-key`
+
+`POST` 方法具有相同行为。服务端会先验证 Host 和密钥；验证通过后创建或覆盖当前账号的配置。
+
+#### 请求体
+
+| 字段         | 类型     | 必填 | 说明                                  |
+| ------------ | -------- | ---- | ------------------------------------- |
+| `host`       | `string` | 是   | Langfuse 服务地址，不包含项目页面路径 |
+| `public_key` | `string` | 是   | Langfuse 项目的 Public Key            |
+| `secret_key` | `string` | 是   | Langfuse 项目的 Secret Key            |
+
+#### 请求示例
+
+```bash
+curl --request PUT \
+  --url 'http://{address}/api/v1/langfuse/api-key' \
+  --header 'Authorization: Bearer <API_TOKEN>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "host": "https://cloud.langfuse.com",
+    "public_key": "<PUBLIC_KEY>",
+    "secret_key": "<SECRET_KEY>"
+  }'
+```
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": {
+    "host": "https://cloud.langfuse.com",
+    "public_key": "<PUBLIC_KEY>",
+    "secret_key": "<SECRET_KEY>"
+  },
+  "message": ""
+}
+```
+
+密钥验证失败时返回非零业务状态码，并在 `message` 中说明配置无效。
+
+### 删除 Langfuse 配置
+
+**DELETE** `/api/v1/langfuse/api-key`
+
+#### 请求示例
+
+```bash
+curl --request DELETE \
+  --url 'http://{address}/api/v1/langfuse/api-key' \
+  --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "data": true,
+  "message": ""
+}
+```
+
+删除后，后续调用不再向 Langfuse 发送追踪数据。
+
+---
+
 ## 系统接口
 
 ---
