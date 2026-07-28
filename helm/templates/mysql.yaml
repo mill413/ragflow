@@ -1,8 +1,6 @@
 {{- if .Values.mysql.enabled }}
-{{- if .Values.mysql.storage.hostPath }}
-{{- if not (hasPrefix "/" .Values.mysql.storage.hostPath) }}
-{{- fail "mysql.storage.hostPath must be an absolute path" }}
-{{- end }}
+{{- $hostPath := include "ragflow.storageHostPath" (dict "root" . "path" .Values.mysql.storage.hostPath "defaultSubPath" "mysql" "valueName" "mysql.storage.hostPath") | trim }}
+{{- if $hostPath }}
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -21,7 +19,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: {{ .Values.mysql.storage.hostPath | quote }}
+    path: {{ $hostPath | quote }}
     type: DirectoryOrCreate
 {{- end }}
 ---
@@ -35,7 +33,7 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: mysql
 spec:
-  {{- if .Values.mysql.storage.hostPath }}
+  {{- if $hostPath }}
   storageClassName: ""
   volumeName: {{ printf "%s-mysql-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
   {{- else }}

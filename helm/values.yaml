@@ -1,25 +1,32 @@
-# Based on docker compose .env file
+# 基于 Docker Compose 的 .env 文件
 
-# Global image pull secrets configuration
+# 全局镜像、存储与调度配置
 global:
-  # Global image repo prefix to render all images from a mirror/registry.
-  # Example: "registry.example.com/myproj"
-  # When set, template will replace the registry part of each image and keep the path.
-  # Leave empty to use per-image repositories as-is.
+  # 全局镜像仓库前缀，用于通过镜像站或私有仓库拉取所有镜像。
+  # 示例："registry.example.com/myproj"
+  # 配置后，模板会替换每个镜像地址的仓库部分并保留镜像路径。
+  # 留空则使用各组件自身配置的镜像仓库。
   repo: ""
-  # Global image pull secrets for all pods
+  # 所有使用 HostPath 的组件存储卷的可选根目录。
+  # 配置后，Chart 会拼接各组件的 storage.hostPath；如果组件路径为空，
+  # 则拼接该组件的默认目录名。
+  # 示例：配置为 "/data/ragflow" 时会生成 "/data/ragflow/es"、
+  # "/data/ragflow/mysql"、"/data/ragflow/minio" 和 "/data/ragflow/redis"。
+  # 留空则保持各组件原有的 storage.hostPath 行为。
+  hostPath: ""
+  # 所有 Pod 共用的镜像拉取 Secret。
   imagePullSecrets: []
-  # Schedule all chart pods onto nodes matching these labels.
-  # Example:
+  # 将 Chart 中的所有 Pod 调度到匹配以下标签的节点。
+  # 示例：
   # nodeSelector:
   #   kubernetes.io/arch: amd64
   nodeSelector: {}
-  # Schedule all chart pods onto the exact node name shown by
-  # `kubectl get nodes`. When set, this takes precedence over nodeSelector.
+  # 将 Chart 中的所有 Pod 调度到 `kubectl get nodes` 显示的指定节点。
+  # 配置后，此项的优先级高于 nodeSelector。
   nodeName: ""
 
 env:
-  # RAGFlow runtime settings. Keep these defaults aligned with docker/docker-compose.yml.
+  # RAGFlow 运行时配置。以下默认值应与 docker/docker-compose.yml 保持一致。
   API_PROXY_SCHEME: python
   ALLOW_ANY_HOST: "0"
   REGISTER_ENABLED: "1"
@@ -28,80 +35,80 @@ env:
   THREAD_POOL_MAX_WORKERS: "128"
   DISABLE_PASSWORD_LOGIN: "false"
 
-  # Browser title and user-facing product name. Prefer setting this during
-  # deployment instead of committing a deployment-specific value here.
+  # 浏览器标题和面向用户显示的产品名称。建议在部署时设置，
+  # 不要在此处提交特定部署环境使用的值。
   # APP_NAME: ""
-  # Product icon and browser favicon URL. Supports absolute HTTP(S) URLs.
+  # 产品图标和浏览器 favicon 地址，支持 HTTP(S) 绝对 URL。
   # APP_ICON_URL: "https://example.com/logo.svg"
 
-  # Initial superuser. Uncomment these values together with
-  # ragflow.api.args --init-superuser for the first deployment only.
+  # 初始超级管理员。仅在首次部署时取消以下配置的注释，
+  # 并同时在 ragflow.api.args 中启用 --init-superuser。
   # DEFAULT_SUPERUSER_NICKNAME: "admin"
   # DEFAULT_SUPERUSER_EMAIL: "admin@ragflow.io"
   # DEFAULT_SUPERUSER_PASSWORD: "admin"
 
-  # The document engine used by this chart.
+  # 此 Chart 使用的文档引擎。
   DOC_ENGINE: elasticsearch
 
-  # The version of Elasticsearch.
+  # Elasticsearch 版本。
   STACK_VERSION: "8.11.3"
 
-  # The username and password for Elasticsearch.
+  # Elasticsearch 用户名和密码。
   ES_USER: elastic
-  # The password for Elasticsearch
+  # Elasticsearch 密码。
   ELASTIC_PASSWORD: infini_rag_flow_helm
 
-  # MySQL connection settings.
+  # MySQL 连接配置。
   MYSQL_USER: root
   MYSQL_PASSWORD: infini_rag_flow_helm
   MYSQL_DBNAME: rag_flow
   MYSQL_MAX_PACKET: "1073741824"
-  # External MySQL host (only required when mysql.enabled=false)
+  # 外部 MySQL 主机地址（仅在 mysql.enabled=false 时需要）。
   # MYSQL_HOST: ""
-  # External MySQL port (defaults to 3306 if not set)
+  # 外部 MySQL 端口（未设置时默认为 3306）。
   # MYSQL_PORT: "3306"
 
-  # The username for MinIO.
+  # MinIO 用户名。
   MINIO_USER: rag_flow
-  # The password for MinIO
+  # MinIO 密码。
   MINIO_PASSWORD: infini_rag_flow_helm
-  # External MinIO host
+  # 外部 MinIO 主机地址。
   # MINIO_HOST: ""
-  # External MinIO port (defaults to 9000 if not set)
+  # 外部 MinIO 端口（未设置时默认为 9000）。
   # MINIO_PORT: "9000"
 
-  # The password for Redis
+  # Redis 密码。
   REDIS_PASSWORD: infini_rag_flow_helm
-  # External Redis host (only required when redis.enabled=false)
+  # 外部 Redis 主机地址（仅在 redis.enabled=false 时需要）。
   # REDIS_HOST: ""
-  # External Redis port (defaults to 6379 if not set)
+  # 外部 Redis 端口（未设置时默认为 6379）。
   # REDIS_PORT: "6379"
 
-  # The local time zone.
+  # 本地时区。
   TZ: "Asia/Shanghai"
 
-  # Uncomment the following line if you have limited access to huggingface.co:
+  # 如果访问 huggingface.co 受限，可取消下一行的注释：
   # HF_ENDPOINT: https://hf-mirror.com
 
-  # The maximum total size of one upload request, in bytes (2 GiB).
+  # 单次上传请求允许的最大总大小，单位为字节（2 GiB）。
   MAX_CONTENT_LENGTH: "2147483648"
-  # After making the change, ensure you update `client_max_body_size` in nginx/nginx.conf correspondingly.
+  # 修改后，请同步更新 nginx/nginx.conf 中的 `client_max_body_size`。
 
-  # The number of document chunks processed in a single batch during document parsing.
+  # 文档解析时单批处理的文档分块数量。
   DOC_BULK_SIZE: 4
 
-  # The number of text chunks processed in a single batch during embedding vectorization.
+  # 嵌入向量化时单批处理的文本分块数量。
   EMBEDDING_BATCH_SIZE: 16
 
-  # Keep parsing concurrency conservative for the shared test server.
-  # Two task executors with one concurrent task each allow at most two
-  # parsing tasks to run at the same time; additional tasks remain queued.
+  # 共享测试服务器采用较为保守的解析并发配置。
+  # 两个任务执行器各允许一个并发任务，因此最多同时运行两个解析任务；
+  # 其余任务继续在队列中等待。
   MAX_CONCURRENT_TASKS: "1"
   MAX_CONCURRENT_CHUNK_BUILDERS: "1"
   MAX_CONCURRENT_MINIO: "8"
 
-  # Elasticsearch runs with a 10 GiB container limit below. Keep the JVM heap
-  # at 4 GiB so the remaining memory is available to Lucene and the OS cache.
+  # Elasticsearch 容器的内存上限在下方设置为 10 GiB。JVM 堆保持为 4 GiB，
+  # 以便将其余内存留给 Lucene 和操作系统缓存。
   ES_JAVA_OPTS: "-Xms4g -Xmx4g"
 
 ragflow:
@@ -110,7 +117,7 @@ ragflow:
     tag: v0.26.4
     pullPolicy: IfNotPresent
     pullSecrets: []
-  # Other supported arguments:
+  # 其他支持的启动参数：
   # - --disable-webserver
   # - --disable-taskexecutor
   # - --disable-datasync
@@ -128,14 +135,13 @@ ragflow:
   # - --no-transport-sse-enabled
   # - --no-transport-streamable-http-enabled
   # - --no-json-response
-  # Optional service configuration overrides
-  # to be written to local.service_conf.yaml
-  # inside the RAGFlow container
+  # 可选的服务配置覆盖项，将写入 RAGFlow 容器内的
+  # local.service_conf.yaml 文件。
   # https://ragflow.io/docs/dev/configurations#service-configuration
   service_conf:
 
-  # Optional OA login channel. Password login remains available unless
-  # authentication.disable_password_login is enabled in service_conf.
+  # 可选的 OA 登录渠道。除非在 service_conf 中启用
+  # authentication.disable_password_login，否则密码登录仍然可用。
   oa:
     enabled: false
     displayName: "OA"
@@ -144,19 +150,18 @@ ragflow:
     authorizationUrl: ""
     tokenUrl: ""
     userinfoUrl: ""
-    # Must exactly match the callback registered with the OA service.
+    # 必须与 OA 服务中注册的回调地址完全一致。
     redirectUri: ""
     scope: api
     requestTimeout: 30
-    # Prefer an existing Secret in production. When existingSecret is empty,
-    # clientSecret is stored in the chart-managed env Secret.
+    # 生产环境建议使用已有的 Secret。existingSecret 为空时，
+    # clientSecret 将存储在由此 Chart 管理的环境变量 Secret 中。
     clientSecret: ""
     existingSecret: ""
     existingSecretKey: client-secret
 
-  # Optional yaml formatted override for the
-  # llm_factories.json file inside the RAGFlow
-  # container.
+  # 可选的 YAML 格式覆盖配置，用于修改 RAGFlow
+  # 容器内的 llm_factories.json 文件。
   llm_factories:
     # factory_llm_infos:
     # - name: OpenAI-API-Compatible
@@ -172,24 +177,24 @@ ragflow:
 
   service:
     type: NodePort
-    # Used only when type is NodePort. Leave empty for automatic allocation.
+    # 仅在 type 为 NodePort 时使用，留空则由集群自动分配。
     nodePort:
   admin:
-    # Enable Admin Service
+    # 是否启用管理后台服务。
     enabled: true
-    # Admin Service port configuration
+    # 管理后台服务端口配置。
     port: 9381
   api:
     replicas: 1
-    # The API deployment serves the web UI, API, admin server, and data sync.
-    # Parsing is disabled and handled by the dedicated worker deployment.
+    # API Deployment 提供 Web 界面、API、管理后台和数据同步服务。
+    # 此 Deployment 不执行解析任务，解析由独立的 Worker Deployment 处理。
     args:
       - --enable-adminserver
       - --init-model-provider-tables
       - --disable-taskexecutor
     deployment:
       strategy:
-      # Test-server limit: 4 CPU / 4 GiB.
+      # 测试服务器资源上限：4 核 CPU / 4 GiB 内存。
       resources:
         requests:
           cpu: "2"
@@ -201,14 +206,14 @@ ragflow:
       enabled: true
   worker:
     replicas: 1
-    # The worker deployment consumes parsing tasks without exposing a service.
+    # Worker Deployment 负责消费解析任务，无需对外提供 Service。
     args:
       - --disable-webserver
       - --disable-datasync
       - --workers=2
     deployment:
       strategy:
-      # Test-server limit: 12 CPU / 10 GiB.
+      # 测试服务器资源上限：12 核 CPU / 10 GiB 内存。
       resources:
         requests:
           cpu: "6"
@@ -235,12 +240,12 @@ elasticsearch:
   storage:
     className:
     capacity: 20Gi
-    # Optional absolute node path for a static HostPath PV.
-    # Leave empty to use dynamic provisioning from the cluster.
+    # 静态 HostPath PV 使用的可选节点绝对路径。配置 global.hostPath 后，
+    # 此项改为可选的路径后缀。两者都留空时使用集群动态存储供应。
     hostPath: ""
   deployment:
     strategy:
-    # Test-server limit: 8 CPU / 10 GiB.
+    # 测试服务器资源上限：8 核 CPU / 10 GiB 内存。
     resources:
       requests:
         cpu: "4"
@@ -250,7 +255,7 @@ elasticsearch:
         memory: "10Gi"
   service:
     type: NodePort
-    # Used only when type is NodePort.
+    # 仅在 type 为 NodePort 时使用。
     nodePort:
 
 minio:
@@ -263,12 +268,12 @@ minio:
   storage:
     className:
     capacity: 5Gi
-    # Optional absolute node path for a static HostPath PV.
-    # Leave empty to use dynamic provisioning from the cluster.
+    # 静态 HostPath PV 使用的可选节点绝对路径。配置 global.hostPath 后，
+    # 此项改为可选的路径后缀。两者都留空时使用集群动态存储供应。
     hostPath: ""
   deployment:
     strategy:
-    # Test-server limit: 3 CPU / 3 GiB.
+    # 测试服务器资源上限：3 核 CPU / 3 GiB 内存。
     resources:
       requests:
         cpu: "1"
@@ -278,7 +283,7 @@ minio:
         memory: "3Gi"
   service:
     type: NodePort
-    # Used only when type is NodePort.
+    # 仅在 type 为 NodePort 时使用。
     nodePorts:
       s3:
       console:
@@ -293,12 +298,12 @@ mysql:
   storage:
     className:
     capacity: 5Gi
-    # Optional absolute node path for a static HostPath PV.
-    # Leave empty to use dynamic provisioning from the cluster.
+    # 静态 HostPath PV 使用的可选节点绝对路径。配置 global.hostPath 后，
+    # 此项改为可选的路径后缀。两者都留空时使用集群动态存储供应。
     hostPath: ""
   deployment:
     strategy:
-    # Test-server limit: 3 CPU / 3 GiB.
+    # 测试服务器资源上限：3 核 CPU / 3 GiB 内存。
     resources:
       requests:
         cpu: "1"
@@ -308,7 +313,7 @@ mysql:
         memory: "3Gi"
   service:
     type: NodePort
-    # Used only when type is NodePort.
+    # 仅在 type 为 NodePort 时使用。
     nodePort:
 
 redis:
@@ -321,19 +326,19 @@ redis:
   storage:
     className:
     capacity: 5Gi
-    # Optional absolute node path for a static HostPath PV.
-    # Leave empty to use dynamic provisioning from the cluster.
+    # 静态 HostPath PV 使用的可选节点绝对路径。配置 global.hostPath 后，
+    # 此项改为可选的路径后缀。两者都留空时使用集群动态存储供应。
     hostPath: ""
   persistence:
     enabled: true
-    # Set's the retention policy for the persistent storage (only available in k8s 1.32 or later)
+    # 设置持久化存储的保留策略（仅适用于 Kubernetes 1.32 及更高版本）。
     # https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
     # retentionPolicy:
       # whenDeleted: Delete
       # whenScaled: Delete
   deployment:
     strategy:
-    # Test-server limit: 2 CPU / 2 GiB.
+    # 测试服务器资源上限：2 核 CPU / 2 GiB 内存。
     resources:
       requests:
         cpu: "500m"
@@ -341,7 +346,7 @@ redis:
       limits:
         cpu: "2"
         memory: "2Gi"
-# This block is for setting up web service ingress. For more information, see:
+# 此配置块用于设置 Web 服务的 Ingress。更多信息请参阅：
 # https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false

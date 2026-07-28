@@ -1,8 +1,6 @@
 {{- if .Values.redis.enabled }}
-{{- if and .Values.redis.persistence.enabled .Values.redis.storage.hostPath }}
-{{- if not (hasPrefix "/" .Values.redis.storage.hostPath) }}
-{{- fail "redis.storage.hostPath must be an absolute path" }}
-{{- end }}
+{{- $hostPath := include "ragflow.storageHostPath" (dict "root" . "path" .Values.redis.storage.hostPath "defaultSubPath" "redis" "valueName" "redis.storage.hostPath") | trim }}
+{{- if and .Values.redis.persistence.enabled $hostPath }}
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -21,7 +19,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: {{ .Values.redis.storage.hostPath | quote }}
+    path: {{ $hostPath | quote }}
     type: DirectoryOrCreate
 {{- end }}
 ---
@@ -128,7 +126,7 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        {{- if .Values.redis.storage.hostPath }}
+        {{- if $hostPath }}
         storageClassName: ""
         volumeName: {{ printf "%s-redis-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
         {{- else }}

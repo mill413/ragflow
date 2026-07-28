@@ -1,7 +1,5 @@
-{{- if .Values.elasticsearch.storage.hostPath }}
-{{- if not (hasPrefix "/" .Values.elasticsearch.storage.hostPath) }}
-{{- fail "elasticsearch.storage.hostPath must be an absolute path" }}
-{{- end }}
+{{- $hostPath := include "ragflow.storageHostPath" (dict "root" . "path" .Values.elasticsearch.storage.hostPath "defaultSubPath" "es" "valueName" "elasticsearch.storage.hostPath") | trim }}
+{{- if $hostPath }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -19,7 +17,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: {{ .Values.elasticsearch.storage.hostPath | quote }}
+    path: {{ $hostPath | quote }}
     type: DirectoryOrCreate
 ---
 {{- end }}
@@ -33,7 +31,7 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: elasticsearch
 spec:
-  {{- if .Values.elasticsearch.storage.hostPath }}
+  {{- if $hostPath }}
   storageClassName: ""
   volumeName: {{ printf "%s-es-data-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
   {{- else }}

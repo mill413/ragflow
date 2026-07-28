@@ -28,6 +28,12 @@ namespace itself is not removed by `helm uninstall`.
 - `global.repo`: Prepend a global image registry prefix for all images.
   - Behavior: Replaces the registry part and keeps the image path (e.g., `quay.io/minio/minio` -> `registry.example.com/myproj/minio/minio`).
   - Example: `global.repo: "registry.example.com/myproj"`
+- `global.hostPath`: Place all HostPath-backed component volumes below one
+  absolute node directory.
+  - Example: `global.hostPath: "/data/ragflow"` produces the default
+    directories `es`, `mysql`, `minio`, and `redis` below that prefix.
+  - Component `storage.hostPath` values become optional suffix overrides while
+    the global prefix is set.
 - `global.imagePullSecrets`: List of image pull secrets applied to all Pods.
   - Example:
     ```yaml
@@ -186,35 +192,60 @@ private `ClusterIP` services.
 ## Persistent Volume Paths
 
 Elasticsearch, MySQL, MinIO, and Redis use PVCs. By default, the cluster's
-StorageClass dynamically provisions their volumes. To bind a component to a
-directory on a Kubernetes node, set an absolute `storage.hostPath`:
+StorageClass dynamically provisions their volumes. To place all component data
+below one node directory, set a common absolute prefix:
 
 ```yaml
 global:
   nodeName: worker-01
+  hostPath: /data/ragflow
+```
+
+This produces:
+
+```text
+/data/ragflow/es
+/data/ragflow/mysql
+/data/ragflow/minio
+/data/ragflow/redis
+```
+
+Each component can override its suffix:
+
+```yaml
+global:
+  nodeName: worker-01
+  hostPath: /data/ragflow
 
 elasticsearch:
   storage:
-    hostPath: /data/ragflow/elasticsearch
+    hostPath: search-data
 
 mysql:
   storage:
-    hostPath: /data/ragflow/mysql
+    hostPath: database
 
 minio:
   storage:
-    hostPath: /data/ragflow/minio
+    hostPath: objects
 
 redis:
   storage:
-    hostPath: /data/ragflow/redis
+    hostPath: cache
 ```
 
-When `hostPath` is set, the chart creates a retained static PV and binds the
-component's PVC to it. HostPath storage is node-local, so use
-`global.nodeName` to schedule the Pods onto the node that owns these
-directories. Leave every `hostPath` empty for cluster-managed dynamic
+The resulting paths are `/data/ragflow/search-data`,
+`/data/ragflow/database`, `/data/ragflow/objects`, and
+`/data/ragflow/cache`.
+
+When `global.hostPath` is empty, existing per-component behavior is preserved:
+each non-empty `storage.hostPath` must be absolute and is used unchanged. Leave
+the global prefix and every component path empty for cluster-managed dynamic
 provisioning.
+
+Any resolved HostPath creates a retained static PV and binds the component's
+PVC to it. HostPath storage is node-local, so use `global.nodeName` to schedule
+the Pods onto the node that owns these directories.
 
 ## OA Login
 

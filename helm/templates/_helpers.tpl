@@ -68,6 +68,38 @@ Usage: {{ include "ragflow.imageRepo" (dict "root" . "repo" .Values.foo.image.re
 {{- end }}
 
 {{/*
+Resolve a component HostPath with an optional global prefix.
+
+Without global.hostPath, an explicitly configured component path is returned
+unchanged and must be absolute. An empty path keeps dynamic provisioning.
+
+With global.hostPath, every persistent component receives a HostPath. Its
+component path is treated as a suffix; when empty, defaultSubPath is used.
+*/}}
+{{- define "ragflow.storageHostPath" -}}
+{{- $root := .root -}}
+{{- $path := default "" .path -}}
+{{- $prefix := default "" $root.Values.global.hostPath -}}
+{{- $valueName := .valueName -}}
+{{- if $prefix -}}
+  {{- if not (hasPrefix "/" $prefix) -}}
+    {{- fail "global.hostPath must be an absolute path" -}}
+  {{- end -}}
+  {{- $suffix := default .defaultSubPath $path -}}
+  {{- $suffix = trimAll "/" $suffix -}}
+  {{- if or (not $suffix) (regexMatch "(^|/)\\.\\.(/|$)" $suffix) -}}
+    {{- fail (printf "%s must resolve to a non-empty path below global.hostPath" $valueName) -}}
+  {{- end -}}
+  {{- printf "%s/%s" (trimSuffix "/" (clean $prefix)) $suffix | clean -}}
+{{- else if $path -}}
+  {{- if not (hasPrefix "/" $path) -}}
+    {{- fail (printf "%s must be an absolute path when global.hostPath is empty" $valueName) -}}
+  {{- end -}}
+  {{- clean $path -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Selector labels
 */}}
 {{- define "ragflow.selectorLabels" -}}
