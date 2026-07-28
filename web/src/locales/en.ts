@@ -2053,7 +2053,13 @@ Example: Virtual Hosted Style`,
       sureQuit: 'Are you sure you want to quit the team you joined?',
       secretKey: 'Secret key',
       publicKey: 'Public key',
+      secretKeyMessage: 'Please enter the secret key',
+      publicKeyMessage: 'Please enter the public key',
+      hostMessage: 'Please enter the host',
       configuration: 'Configuration',
+      langfuseDescription:
+        'Traces, evals, prompt management and metrics to debug and improve your LLM application.',
+      viewLangfuseSDocumentation: "View Langfuse's documentation",
       view: 'View',
       modelsToBeAddedTooltip:
         'If your model provider is not listed but claims to be "OpenAI-compatible", select the OpenAI-API-compatible card to add the relevant model(s). ',

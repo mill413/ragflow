@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime
 from functools import partial
 from timeit import default_timer as timer
+from langfuse import Langfuse, propagate_attributes
 from peewee import fn
 from api.db.services.file_service import FileService
 from common.constants import LLMType, ParserType, StatusEnum
@@ -32,6 +33,7 @@ from api.db.db_models import DB, Dialog, Tenant
 from api.db.services.common_service import CommonService
 from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
+from api.db.services.langfuse_service import TenantLangfuseService
 from api.db.services.llm_service import LLMBundle
 from common.metadata_utils import apply_meta_data_filter
 from api.utils.reference_metadata_utils import (
@@ -311,7 +313,7 @@ async def async_chat_solo(dialog, messages, stream=True, session_id=None):
     else:
         model_config = get_tenant_default_model_by_type(dialog.tenant_id, LLMType.CHAT)
 
-    chat_mdl = LLMBundle(dialog.tenant_id, model_config)
+    chat_mdl = LLMBundle(dialog.tenant_id, model_config, langfuse_session_id=session_id)
     factory = model_config.get("llm_factory", "") if model_config else ""
     if "files" in messages[-1]:
         if model_config["model_type"] == "chat":
@@ -324,7 +326,7 @@ async def async_chat_solo(dialog, messages, stream=True, session_id=None):
     tts_mdl = None
     if prompt_config.get("tts"):
         default_tts_model = get_tenant_default_model_by_type(dialog.tenant_id, LLMType.TTS)
-        tts_mdl = LLMBundle(dialog.tenant_id, default_tts_model)
+        tts_mdl = LLMBundle(dialog.tenant_id, default_tts_model, trace_context=chat_mdl.trace_context, langfuse_session_id=session_id)
     msg = [{"role": m["role"], "content": re.sub(r"##\d+\$\$", "", m["content"])} for m in messages if m["role"] != "system"]
     if attachments and msg:
         msg[-1]["content"] += attachments
@@ -351,7 +353,7 @@ async def async_chat_solo(dialog, messages, stream=True, session_id=None):
         yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, answer), "prompt": "", "created_at": time.time()}
 
 
-def get_models(dialog):
+def get_models(dialog, trace_context=None, langfuse_session_id=None):
     embd_mdl, chat_mdl, rerank_mdl, tts_mdl = None, None, None, None
     kbs = KnowledgebaseService.get_by_ids(dialog.kb_ids)
     err = validate_dataset_embedding_models(kbs)
@@ -361,7 +363,7 @@ def get_models(dialog):
     if kbs and kbs[0].embd_id:
         embd_owner_tenant_id = kbs[0].tenant_id
         embd_model_config = resolve_model_config(embd_owner_tenant_id, LLMType.EMBEDDING, kbs[0].embd_id)
-        embd_mdl = LLMBundle(embd_owner_tenant_id, embd_model_config)
+        embd_mdl = LLMBundle(embd_owner_tenant_id, embd_model_config, trace_context=trace_context, langfuse_session_id=langfuse_session_id)
         if not embd_mdl:
             raise LookupError("Embedding model(%s) not found" % kbs[0].embd_id)
 
@@ -376,7 +378,7 @@ def get_models(dialog):
     else:
         chat_model_config = get_tenant_default_model_by_type(dialog.tenant_id, LLMType.CHAT)
 
-    chat_mdl = LLMBundle(dialog.tenant_id, chat_model_config)
+    chat_mdl = LLMBundle(dialog.tenant_id, chat_model_config, trace_context=trace_context, langfuse_session_id=langfuse_session_id)
 
     if dialog.rerank_id:
         if dialog.tenant_rerank_id:
@@ -386,11 +388,11 @@ def get_models(dialog):
                 rerank_model_config = resolve_model_config(dialog.tenant_id, LLMType.RERANK, dialog.rerank_id)
         else:
             rerank_model_config = resolve_model_config(dialog.tenant_id, LLMType.RERANK, dialog.rerank_id)
-        rerank_mdl = LLMBundle(dialog.tenant_id, rerank_model_config)
+        rerank_mdl = LLMBundle(dialog.tenant_id, rerank_model_config, trace_context=trace_context, langfuse_session_id=langfuse_session_id)
 
     if dialog.prompt_config.get("tts"):
         default_tts_model_config = get_tenant_default_model_by_type(dialog.tenant_id, LLMType.TTS)
-        tts_mdl = LLMBundle(dialog.tenant_id, default_tts_model_config)
+        tts_mdl = LLMBundle(dialog.tenant_id, default_tts_model_config, trace_context=trace_context, langfuse_session_id=langfuse_session_id)
     return kbs, embd_mdl, rerank_mdl, chat_mdl, tts_mdl
 
 
@@ -604,7 +606,23 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
 
     check_llm_ts = timer()
 
-    kbs, embd_mdl, rerank_mdl, chat_mdl, tts_mdl = get_models(dialog)
+    langfuse_tracer = None
+    langfuse_generation = None
+    trace_context = {}
+    langfuse_keys = TenantLangfuseService.filter_by_tenant(tenant_id=dialog.tenant_id)
+    if langfuse_keys:
+        langfuse = Langfuse(public_key=langfuse_keys.public_key, secret_key=langfuse_keys.secret_key, host=langfuse_keys.host)
+        try:
+            if langfuse.auth_check():
+                langfuse_tracer = langfuse
+                trace_id = langfuse_tracer.create_trace_id()
+                trace_context = {"trace_id": trace_id}
+        except Exception:
+            # Skip langfuse tracing if connection fails
+            pass
+
+    check_langfuse_tracer_ts = timer()
+    kbs, embd_mdl, rerank_mdl, chat_mdl, tts_mdl = get_models(dialog, trace_context=trace_context, langfuse_session_id=session_id)
     toolcall_session, tools = kwargs.get("toolcall_session"), kwargs.get("tools")
     if toolcall_session and tools:
         chat_mdl.bind_tools(toolcall_session, tools)
@@ -763,7 +781,7 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
             if prompt_config.get("use_kg"):
                 default_chat_model = get_tenant_default_model_by_type(dialog.tenant_id, LLMType.CHAT)
                 ck = await settings.kg_retriever.retrieval(
-                    " ".join(questions), tenant_ids, dialog.kb_ids, embd_mdl, LLMBundle(dialog.tenant_id, default_chat_model)
+                    " ".join(questions), tenant_ids, dialog.kb_ids, embd_mdl, LLMBundle(dialog.tenant_id, default_chat_model, trace_context=trace_context, langfuse_session_id=session_id)
                 )
                 if ck["content_with_weight"]:
                     kbinfos["chunks"].insert(0, ck)
@@ -815,7 +833,7 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
         gen_conf["max_tokens"] = min(gen_conf["max_tokens"], max_tokens - used_token_count)
 
     async def decorate_answer(answer):
-        nonlocal embd_mdl, prompt_config, knowledges, kwargs, kbinfos, prompt, retrieval_ts, questions
+        nonlocal embd_mdl, prompt_config, knowledges, kwargs, kbinfos, prompt, retrieval_ts, questions, langfuse_generation
 
         refs = []
         ans = answer.split("</think>")
@@ -864,7 +882,8 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
 
         total_time_cost = (finish_chat_ts - chat_start_ts) * 1000
         check_llm_time_cost = (check_llm_ts - chat_start_ts) * 1000
-        bind_embedding_time_cost = (bind_models_ts - check_llm_ts) * 1000
+        check_langfuse_tracer_cost = (check_langfuse_tracer_ts - check_llm_ts) * 1000
+        bind_embedding_time_cost = (bind_models_ts - check_langfuse_tracer_ts) * 1000
         refine_question_time_cost = (refine_question_ts - bind_models_ts) * 1000
         retrieval_time_cost = (retrieval_ts - refine_question_ts) * 1000
         generate_result_time_cost = (finish_chat_ts - retrieval_ts) * 1000
@@ -876,6 +895,7 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
             "## Time elapsed:\n"
             f"  - Total: {total_time_cost:.1f}ms\n"
             f"  - Check LLM: {check_llm_time_cost:.1f}ms\n"
+            f"  - Check Langfuse tracer: {check_langfuse_tracer_cost:.1f}ms\n"
             f"  - Bind models: {bind_embedding_time_cost:.1f}ms\n"
             f"  - Query refinement(LLM): {refine_question_time_cost:.1f}ms\n"
             f"  - Retrieval: {retrieval_time_cost:.1f}ms\n"
@@ -885,7 +905,40 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
             f"  - Token speed: {int(tk_num / (generate_result_time_cost / 1000.0))}/s"
         )
 
+        # Add a condition check to call the end method only if langfuse_generation exists
+        if langfuse_generation is not None:
+            langfuse_output = "\n" + re.sub(r"^.*?(### Query:.*)", r"\1", prompt, flags=re.DOTALL)
+            langfuse_output = {"time_elapsed:": re.sub(r"\n", "  \n", langfuse_output), "created_at": time.time()}
+            langfuse_generation.update(
+                output=langfuse_output,
+                usage_details={
+                    "input": used_token_count,
+                    "output": tk_num,
+                    "total": used_token_count + tk_num,
+                },
+            )
+            langfuse_generation.end()
+
         return {"answer": think + answer, "reference": refs, "prompt": re.sub(r"\n", "  \n", prompt), "created_at": time.time()}
+
+    if langfuse_tracer:
+        try:
+            observation_kwargs = {
+                "as_type": "generation",
+                "trace_context": trace_context,
+                "name": "chat",
+                "model": llm_model_config["llm_name"],
+                "input": {"prompt": prompt, "prompt4citation": prompt4citation, "messages": msg},
+            }
+            if session_id:
+                with propagate_attributes(session_id=session_id):
+                    langfuse_generation = langfuse_tracer.start_observation(**observation_kwargs)
+            else:
+                langfuse_generation = langfuse_tracer.start_observation(**observation_kwargs)
+        except Exception as e:  # noqa: BLE001 - tracing must not break chat flow
+            logger.warning("Langfuse start_observation failed; continuing without tracing: %s", e)
+            langfuse_tracer = None
+            langfuse_generation = None
 
     if stream:
         if llm_model_config["model_type"] == "chat":
