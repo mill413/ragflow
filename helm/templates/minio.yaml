@@ -1,8 +1,6 @@
 {{- if .Values.minio.enabled }}
-{{- if .Values.minio.storage.hostPath }}
-{{- if not (hasPrefix "/" .Values.minio.storage.hostPath) }}
-{{- fail "minio.storage.hostPath must be an absolute path" }}
-{{- end }}
+{{- $hostPath := include "ragflow.storageHostPath" (dict "root" . "path" .Values.minio.storage.hostPath "defaultSubPath" "minio" "valueName" "minio.storage.hostPath") | trim }}
+{{- if $hostPath }}
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -21,7 +19,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath:
-    path: {{ .Values.minio.storage.hostPath | quote }}
+    path: {{ $hostPath | quote }}
     type: DirectoryOrCreate
 {{- end }}
 ---
@@ -35,7 +33,7 @@ metadata:
     {{- include "ragflow.labels" . | nindent 4 }}
     app.kubernetes.io/component: minio
 spec:
-  {{- if .Values.minio.storage.hostPath }}
+  {{- if $hostPath }}
   storageClassName: ""
   volumeName: {{ printf "%s-minio-%s" (include "ragflow.fullname" .) .Release.Namespace | trunc 63 | trimSuffix "-" }}
   {{- else }}
