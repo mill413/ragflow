@@ -323,6 +323,7 @@ def test_async_chat_uses_all_docs_when_no_doc_ids_selected(monkeypatch):
         "resolve_model_config",
         lambda *_args, **_kwargs: {"llm_factory": "unit", "max_tokens": 4096, "model_type": "chat"},
     )
+    monkeypatch.setattr(dialog_service.TenantLangfuseService, "filter_by_tenant", lambda **_kwargs: None)
     monkeypatch.setattr(
         dialog_service,
         "get_models",

@@ -1807,7 +1807,13 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       sureQuit: '确定退出加入的团队吗？',
       secretKey: '密钥',
       publicKey: '公钥',
+      secretKeyMessage: '请输入私钥',
+      publicKeyMessage: '请输入公钥',
+      hostMessage: '请输入 host',
       configuration: '配置',
+      langfuseDescription:
+        '跟踪、评估、提示管理和指标，以调试和改进您的 LLM 应用程序。',
+      viewLangfuseSDocumentation: '查看 Langfuse 的文档',
       view: '查看',
       modelsToBeAddedTooltip:
         '如果你的模型供应商在这里没有列出，但是宣称 OpenAI-compatible，可以通过选择卡片 OpenAI-API-compatible 设置相关模型。',

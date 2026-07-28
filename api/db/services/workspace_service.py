@@ -39,6 +39,7 @@ from api.db.db_models import (
     MCPServer,
     Search,
     Tenant,
+    TenantLangfuse,
     TenantLLM,
     TenantModel,
     TenantModelGroupMapping,
@@ -966,6 +967,7 @@ class TeamService:
                 File2Document.delete().where(File2Document.file_id.in_(file_ids)).execute()
                 File.delete().where(File.tenant_id == tenant_id).execute()
                 APIToken.delete().where(APIToken.tenant_id == tenant_id).execute()
+                TenantLangfuse.delete().where(TenantLangfuse.tenant_id == tenant_id).execute()
                 TenantLLM.delete().where(TenantLLM.tenant_id == tenant_id).execute()
                 TenantModelGroupMapping.delete().where(
                     (TenantModelGroupMapping.provider_id.in_(provider_ids))

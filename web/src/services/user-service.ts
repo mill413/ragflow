@@ -14,6 +14,7 @@ const {
   removeSystemToken,
   createSystemToken,
   getSystemConfig,
+  setLangfuseConfig,
 } = api;
 
 const methods = {
@@ -60,6 +61,18 @@ const methods = {
   getSystemConfig: {
     url: getSystemConfig,
     method: 'get',
+  },
+  setLangfuseConfig: {
+    url: setLangfuseConfig,
+    method: 'put',
+  },
+  getLangfuseConfig: {
+    url: setLangfuseConfig,
+    method: 'get',
+  },
+  deleteLangfuseConfig: {
+    url: setLangfuseConfig,
+    method: 'delete',
   },
 } as const;
 
