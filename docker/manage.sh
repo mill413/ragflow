@@ -9,6 +9,8 @@ readonly PROJECT_ROOT
 readonly ENV_FILE="${SCRIPT_DIR}/.env"
 readonly LOCAL_COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.local.yml"
 readonly TEST_COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+readonly BASE_DOCKERFILE="${PROJECT_ROOT}/Dockerfile.base"
+readonly FINAL_DOCKERFILE="${PROJECT_ROOT}/Dockerfile.final"
 
 readonly COLOR_RED=$'\033[0;31m'
 readonly COLOR_GREEN=$'\033[0;32m'
@@ -33,6 +35,7 @@ usage() {
 Usage: docker/manage.sh <command> [arguments]
 
 Commands:
+  build-base [IMAGE]                Build the reusable RAGFlow build base.
   build [IMAGE]                     Build the RAGFlow image.
   deploy <local|dev|test> [options] Deploy an environment.
   stop <local|dev|test> [--volumes] Stop an environment.
@@ -53,11 +56,13 @@ Deploy/restart options:
   --no-detach                       Run Compose in the foreground.
 
 Image selection:
+  RAGFLOW_BUILD_BASE_IMAGE selects the base used by the final build.
   By default, the image is tagged as ragflow-local:<version>.<git-hash>.
   RAGFLOW_IMAGE overrides the image used by build and test deployment.
   RAGFLOW_LOCAL_IMAGE can override the image used by local deployment.
 
 Examples:
+  docker/manage.sh build-base
   docker/manage.sh build
   docker/manage.sh deploy local
   docker/manage.sh deploy test --kibana
@@ -72,15 +77,18 @@ require_command() {
 
 read_env_value() {
   local key="$1"
+  [[ -f "${ENV_FILE}" ]] || return 0
   awk -F= -v key="${key}" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "${ENV_FILE}"
 }
 
 initialize_image_names() {
+  local configured_base_image
   local configured_image
   local git_commit
   local ragflow_version
   local versioned_image
 
+  configured_base_image="$(read_env_value RAGFLOW_BUILD_BASE_IMAGE)"
   configured_image="$(read_env_value RAGFLOW_IMAGE)"
   ragflow_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${PROJECT_ROOT}/pyproject.toml" | head -n 1)"
   git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=9 HEAD)"
@@ -88,8 +96,27 @@ initialize_image_names() {
   [[ -n "${git_commit}" ]] || die "unable to resolve the current Git commit"
 
   versioned_image="ragflow-local:${ragflow_version}.${git_commit}"
+  export RAGFLOW_BUILD_BASE_IMAGE="${RAGFLOW_BUILD_BASE_IMAGE:-${configured_base_image:-ragflow-build-base:${ragflow_version}}}"
   export RAGFLOW_IMAGE="${RAGFLOW_IMAGE:-${configured_image:-${versioned_image}}}"
   export RAGFLOW_LOCAL_IMAGE="${RAGFLOW_LOCAL_IMAGE:-${RAGFLOW_IMAGE}}"
+}
+
+build_source_arguments=()
+
+prepare_build_source_arguments() {
+  build_source_arguments=()
+
+  local key
+  local value
+  for key in "$@"; do
+    value="${!key:-}"
+    if [[ -z "${value}" ]]; then
+      value="$(read_env_value "${key}")"
+    fi
+    if [[ -n "${value}" ]]; then
+      build_source_arguments+=(--build-arg "${key}=${value}")
+    fi
+  done
 }
 
 normalize_environment() {
@@ -123,6 +150,8 @@ compose_file_for() {
 compose() {
   local environment="$1"
   shift
+  [[ -f "${ENV_FILE}" ]] || die "environment file not found: ${ENV_FILE}"
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
   docker compose --env-file "${ENV_FILE}" -f "$(compose_file_for "${environment}")" "$@"
 }
 
@@ -173,17 +202,43 @@ parse_deploy_options() {
   done
 }
 
+build_base_image() {
+  local image_name="${1:-${RAGFLOW_BUILD_BASE_IMAGE}}"
+
+  require_command docker
+  prepare_build_source_arguments \
+    NEED_MIRROR \
+    UBUNTU_MIRROR \
+    UBUNTU_IMAGE \
+    RAGFLOW_DEPS_IMAGE \
+    GRASPOLOGIC_REPOSITORY \
+    GRASPOLOGIC_COMMIT \
+    SPACY_MODEL_URL
+  log_info "Building reusable base ${image_name}"
+  docker build \
+    "${build_source_arguments[@]}" \
+    --tag "${image_name}" \
+    --file "${BASE_DOCKERFILE}" \
+    "${PROJECT_ROOT}"
+}
+
 build_image() {
   local image_name="${1:-${RAGFLOW_IMAGE}}"
   local git_commit
   git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=9 HEAD)"
 
   require_command docker
+  if [[ "${RAGFLOW_BUILD_BASE_IMAGE}" != */* ]] && ! docker image inspect "${RAGFLOW_BUILD_BASE_IMAGE}" >/dev/null 2>&1; then
+    die "build base is not available locally: ${RAGFLOW_BUILD_BASE_IMAGE}; run docker/manage.sh build-base first"
+  fi
+  prepare_build_source_arguments NEED_MIRROR UBUNTU_MIRROR PYPI_INDEX_URL NPM_REGISTRY
   log_info "Building ${image_name} from commit ${git_commit}"
   docker build \
+    "${build_source_arguments[@]}" \
+    --build-arg "BUILD_BASE_IMAGE=${RAGFLOW_BUILD_BASE_IMAGE}" \
     --build-arg "GIT_COMMIT=${git_commit}" \
     --tag "${image_name}" \
-    --file "${PROJECT_ROOT}/Dockerfile" \
+    --file "${FINAL_DOCKERFILE}" \
     "${PROJECT_ROOT}"
 }
 
@@ -334,8 +389,6 @@ import_images() {
 
 main() {
   require_command docker
-  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
-  [[ -f "${ENV_FILE}" ]] || die "environment file not found: ${ENV_FILE}"
   initialize_image_names
 
   local command="${1:-help}"
@@ -344,6 +397,10 @@ main() {
   fi
 
   case "${command}" in
+    build-base)
+      (($# <= 1)) || die "build-base accepts at most one image name"
+      build_base_image "${1:-}"
+      ;;
     build)
       (($# <= 1)) || die "build accepts at most one image name"
       build_image "${1:-}"
