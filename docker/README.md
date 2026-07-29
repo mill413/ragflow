@@ -24,6 +24,9 @@ Both deployments use Elasticsearch as their only document engine. Kibana and the
 Use `docker/manage.sh` as the single entry point for image and container operations:
 
 ```bash
+# Build ragflow-build-base:<version>
+docker/manage.sh build-base
+
 # Build ragflow-local:<version>.<9-character-git-hash>
 docker/manage.sh build
 
@@ -41,6 +44,23 @@ docker/manage.sh import docker/dist/ragflow-image.tar.gz
 ```
 
 Exported images are always written to `docker/dist/`; the optional export argument is a file name, not an output path. The script refuses to deploy the local environment unless the `ragflow` service has positive CPU and memory limits. Pass `--volumes` to `stop` only when the environment's named volumes should also be deleted.
+
+`Dockerfile.base` builds the reusable toolchain image. `Dockerfile.final` uses
+that image to install locked Python and frontend dependencies and assemble the
+application image. Set `RAGFLOW_BUILD_BASE_IMAGE` to a GHCR image when the base
+is built externally. `UBUNTU_MIRROR`, `PYPI_INDEX_URL`, and `NPM_REGISTRY` are
+forwarded by `docker/manage.sh` when they are defined in `docker/.env` or the
+shell environment.
+
+`Dockerfile.base` also vendors the RAGFlow `graspologic` fork and the spaCy
+English model as wheels. `Dockerfile.final` resolves those dependencies from the
+base image, so an internal build does not contact their original Gitee or GitHub
+URLs.
+
+The release workflow gives the build base a fixed RAGFlow version tag and checks
+GHCR before building it. If the tag already exists, the workflow reuses it. Bump
+the RAGFlow version or remove that GHCR tag when the base dependencies need to
+be rebuilt.
 
 ## 🐬 Docker environment variables
 
@@ -112,6 +132,15 @@ The ignored `.env` file contains the active Docker environment variables.
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
   Overrides the image name used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<9-character-git-hash>`.
+- `RAGFLOW_BUILD_BASE_IMAGE`
+  Selects the reusable image consumed by `Dockerfile.final`. Build it locally
+  with `docker/manage.sh build-base`, or set this to a GHCR image.
+- `UBUNTU_MIRROR`
+  Optional Ubuntu 24.04 package mirror used while building both images.
+- `PYPI_INDEX_URL`
+  Optional PEP 503-compatible Python package index used by the final build.
+- `NPM_REGISTRY`
+  Optional npm registry used by the final build.
 
 
 > [!TIP]

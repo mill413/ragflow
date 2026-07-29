@@ -33,6 +33,8 @@ jobs:
           fi
           {
             echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "BUILD_BASE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ragflow-build-base"
+            echo "BUILD_BASE_TAG=${RAGFLOW_VERSION}"
             echo "GIT_COMMIT=${GIT_COMMIT}"
             echo "RELEASE_VERSION=${RAGFLOW_VERSION}.${GIT_COMMIT}"
           } >> "${GITHUB_ENV}"
@@ -56,15 +58,40 @@ jobs:
             type=raw,value=latest
             type=raw,value=${{ env.RELEASE_VERSION }}
 
+      - name: Check build base image
+        id: check-build-base
+        shell: bash
+        run: |
+          if docker buildx imagetools inspect \
+            "${BUILD_BASE_IMAGE}:${BUILD_BASE_TAG}" >/dev/null 2>&1; then
+            echo "Build base already exists: ${BUILD_BASE_IMAGE}:${BUILD_BASE_TAG}"
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Build base does not exist: ${BUILD_BASE_IMAGE}:${BUILD_BASE_TAG}"
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build and publish build base
+        if: steps.check-build-base.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.base
+          push: true
+          tags: ${{ env.BUILD_BASE_IMAGE }}:${{ env.BUILD_BASE_TAG }}
+          cache-from: type=gha,scope=build-base
+          cache-to: type=gha,mode=max,scope=build-base
+
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile.final
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
+            BUILD_BASE_IMAGE=${{ env.BUILD_BASE_IMAGE }}:${{ env.BUILD_BASE_TAG }}
             GIT_COMMIT=${{ env.GIT_COMMIT }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=final
+          cache-to: type=gha,mode=max,scope=final

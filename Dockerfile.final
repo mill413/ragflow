@@ -1,0 +1,160 @@
+# syntax=docker/dockerfile:1.7
+
+ARG BUILD_BASE_IMAGE=ragflow-build-base:latest
+
+FROM ${BUILD_BASE_IMAGE} AS builder
+
+USER root
+SHELL ["/bin/bash", "-c"]
+WORKDIR /ragflow
+
+ARG NEED_MIRROR=0
+ARG UBUNTU_MIRROR=""
+ARG PYPI_INDEX_URL=""
+ARG NPM_REGISTRY=""
+
+# Public nginx.org and Microsoft repositories inherited from the base are not
+# needed by final builds. Build tools are already provided by the base image.
+RUN rm -f /etc/apt/sources.list.d/nginx.list /etc/apt/sources.list.d/mssql-release.list && \
+    ubuntu_mirror="$UBUNTU_MIRROR"; \
+    if [ -z "$ubuntu_mirror" ] && [ "$NEED_MIRROR" == "1" ]; then \
+        ubuntu_mirror="http://mirrors.aliyun.com/ubuntu"; \
+    fi; \
+    if [ -n "$ubuntu_mirror" ]; then \
+        case "$ubuntu_mirror" in \
+            http://*|https://*) ;; \
+            *) echo "UBUNTU_MIRROR must be an HTTP or HTTPS URL" >&2; exit 1 ;; \
+        esac; \
+        ubuntu_mirror="${ubuntu_mirror%/}"; \
+        sed -i -E "s|^URIs: .*$|URIs: ${ubuntu_mirror}|g" /etc/apt/sources.list.d/ubuntu.sources; \
+        echo "Using Ubuntu package mirror: ${ubuntu_mirror}"; \
+    fi
+
+# Replace direct network dependencies with wheels vendored by Dockerfile.base,
+# then install the lock from the selected package index. Only the copies inside
+# this image are modified; the repository files remain unchanged.
+COPY pyproject.toml uv.lock ./
+COPY docker/prepare_python_build.py /usr/local/bin/prepare-python-build
+RUN --mount=type=cache,id=ragflow_final_uv,target=/root/.cache/uv,sharing=locked \
+    pypi_index="$PYPI_INDEX_URL"; \
+    if [ -n "$pypi_index" ]; then \
+        case "$pypi_index" in \
+            http://*|https://*) ;; \
+            *) echo "PYPI_INDEX_URL must be an HTTP or HTTPS URL" >&2; exit 1 ;; \
+        esac; \
+        pypi_index="${pypi_index%/}"; \
+        rm -f /etc/uv/uv.toml && \
+        python3 /usr/local/bin/prepare-python-build \
+            --project pyproject.toml \
+            --wheel-dir /opt/ragflow/wheels \
+            --index-url "$pypi_index"; \
+    else \
+        python3 /usr/local/bin/prepare-python-build \
+            --project pyproject.toml \
+            --wheel-dir /opt/ragflow/wheels; \
+    fi; \
+    if [ -n "$pypi_index" ]; then \
+        :; \
+    elif [ "$NEED_MIRROR" == "1" ]; then \
+        sed -i 's|pypi.org|mirrors.aliyun.com/pypi|g' uv.lock && \
+        sed -i 's|pypi.tuna.tsinghua.edu.cn|mirrors.aliyun.com/pypi|g' uv.lock; \
+    else \
+        sed -i 's|mirrors.aliyun.com/pypi|pypi.org|g' uv.lock && \
+        sed -i 's|pypi.tuna.tsinghua.edu.cn|pypi.org|g' uv.lock && \
+        sed -i 's|gitee.com|github.com|g' uv.lock; \
+    fi; \
+    if [ -n "$pypi_index" ]; then \
+        UV_DEFAULT_INDEX="$pypi_index" uv lock; \
+    else \
+        uv lock; \
+    fi && \
+    ! grep -Eq 'gitee\.com/infiniflow/graspologic|github\.com/explosion/spacy-models' pyproject.toml uv.lock && \
+    if [ -n "$pypi_index" ]; then \
+        UV_DEFAULT_INDEX="$pypi_index" uv sync --python 3.13 --frozen --refresh-package litellm; \
+    else \
+        uv sync --python 3.13 --frozen --refresh-package litellm; \
+    fi && \
+    .venv/bin/python3 -m ensurepip --upgrade
+
+# Install frontend dependencies before copying the source so code-only changes
+# reuse this layer.
+COPY web/package.json web/package-lock.json web/.npmrc ./web/
+RUN --mount=type=cache,id=ragflow_final_npm,target=/root/.npm,sharing=locked \
+    cd web && \
+    npm_registry="$NPM_REGISTRY"; \
+    if [ -n "$npm_registry" ]; then \
+        case "$npm_registry" in \
+            http://*|https://*) ;; \
+            *) echo "NPM_REGISTRY must be an HTTP or HTTPS URL" >&2; exit 1 ;; \
+        esac; \
+        npm_registry="${npm_registry%/}"; \
+        NPM_REGISTRY="$npm_registry" python3 -c 'import os; from pathlib import Path; registry = os.environ["NPM_REGISTRY"]; paths = (Path("package-lock.json"), Path(".npmrc")); [path.write_text(path.read_text().replace("https://registry.npmmirror.com", registry)) for path in paths]' && \
+        npm config set registry "$npm_registry"; \
+    fi; \
+    NODE_OPTIONS="--max-old-space-size=8192" npm ci --no-audit --no-fund
+
+COPY web web
+COPY docs docs
+RUN --mount=type=cache,id=ragflow_final_npm,target=/root/.npm,sharing=locked \
+    cd web && \
+    NODE_OPTIONS="--max-old-space-size=8192" \
+    VITE_BUILD_SOURCEMAP=false \
+    VITE_MINIFY=esbuild \
+    npm run build
+
+ARG GIT_COMMIT
+RUN ragflow_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1) && \
+    git_commit=$(printf '%s' "$GIT_COMMIT" | cut -c1-9) && \
+    test -n "$ragflow_version" && \
+    test -n "$git_commit" && \
+    printf '%s.%s\n' "$ragflow_version" "$git_commit" > /ragflow/VERSION
+
+FROM ${BUILD_BASE_IMAGE} AS production
+
+USER root
+SHELL ["/bin/bash", "-c"]
+WORKDIR /ragflow
+
+ARG UBUNTU_MIRROR=""
+
+# Remove build-time external repositories and optionally retain the internal
+# Ubuntu source for future package maintenance inside the image.
+RUN rm -f /etc/apt/sources.list.d/nginx.list /etc/apt/sources.list.d/mssql-release.list && \
+    if [ -n "$UBUNTU_MIRROR" ]; then \
+        case "$UBUNTU_MIRROR" in \
+            http://*|https://*) ;; \
+            *) echo "UBUNTU_MIRROR must be an HTTP or HTTPS URL" >&2; exit 1 ;; \
+        esac; \
+        ubuntu_mirror="${UBUNTU_MIRROR%/}"; \
+        sed -i -E "s|^URIs: .*$|URIs: ${ubuntu_mirror}|g" /etc/apt/sources.list.d/ubuntu.sources; \
+    fi
+
+ENV VIRTUAL_ENV=/ragflow/.venv
+COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+ENV PYTHONPATH=/ragflow/
+
+COPY admin admin
+COPY api api
+COPY conf conf
+COPY deepdoc deepdoc
+COPY rag rag
+COPY agent agent
+COPY --from=builder /ragflow/pyproject.toml /ragflow/uv.lock ./
+COPY mcp mcp
+COPY common common
+COPY memory memory
+COPY tools/scripts tools/scripts
+
+COPY docker/service_conf.yaml.template ./conf/service_conf.yaml.template
+COPY docker/entrypoint.sh ./
+RUN chmod +x ./entrypoint*.sh
+
+COPY docker/nginx/ragflow.conf.python docker/nginx/nginx.conf docker/nginx/proxy.conf /etc/nginx/
+RUN mv /etc/nginx/ragflow.conf.python /etc/nginx/conf.d/ragflow.conf.python && \
+    rm -f /etc/nginx/sites-enabled/default
+
+COPY --from=builder /ragflow/web/dist /ragflow/web/dist
+COPY --from=builder /ragflow/VERSION /ragflow/VERSION
+
+ENTRYPOINT ["./entrypoint.sh"]

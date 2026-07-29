@@ -274,16 +274,26 @@ This image is approximately 2 GB in size and relies on external LLM and embeddin
 ```bash
 git clone https://github.com/infiniflow/ragflow.git
 cd ragflow/
-docker build --platform linux/amd64 -f Dockerfile -t infiniflow/ragflow:nightly .
+docker build --platform linux/amd64 -f Dockerfile.base -t ragflow-build-base:nightly .
+docker build --platform linux/amd64 -f Dockerfile.final \
+  --build-arg BUILD_BASE_IMAGE=ragflow-build-base:nightly \
+  --build-arg GIT_COMMIT="$(git rev-parse --short=9 HEAD)" \
+  -t infiniflow/ragflow:nightly .
 ```
 
 Or if you are behind a proxy, you can pass proxy arguments:
 
 ```bash
-docker build --platform linux/amd64 \
+docker build --platform linux/amd64 -f Dockerfile.base \
   --build-arg http_proxy=http://YOUR_PROXY:PORT \
   --build-arg https_proxy=http://YOUR_PROXY:PORT \
-  -f Dockerfile -t infiniflow/ragflow:nightly .
+  -t ragflow-build-base:nightly .
+docker build --platform linux/amd64 -f Dockerfile.final \
+  --build-arg BUILD_BASE_IMAGE=ragflow-build-base:nightly \
+  --build-arg GIT_COMMIT="$(git rev-parse --short=9 HEAD)" \
+  --build-arg http_proxy=http://YOUR_PROXY:PORT \
+  --build-arg https_proxy=http://YOUR_PROXY:PORT \
+  -t infiniflow/ragflow:nightly .
 ```
 
 ## 🔨 Launch service from source for development

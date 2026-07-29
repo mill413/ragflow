@@ -1,0 +1,160 @@
+# syntax=docker/dockerfile:1.7
+
+ARG UBUNTU_IMAGE=ubuntu:24.04
+ARG RAGFLOW_DEPS_IMAGE=infiniflow/ragflow_deps:latest
+
+FROM ${RAGFLOW_DEPS_IMAGE} AS ragflow-deps
+FROM ${UBUNTU_IMAGE} AS build-base
+
+USER root
+SHELL ["/bin/bash", "-c"]
+
+ARG NEED_MIRROR=0
+ARG UBUNTU_MIRROR=""
+
+WORKDIR /ragflow
+
+# Copy models downloaded via download_deps.py.
+RUN mkdir -p /ragflow/rag/res/deepdoc /root/.ragflow
+RUN --mount=type=bind,from=ragflow-deps,source=/huggingface.co,target=/huggingface.co \
+    tar --exclude='.*' -cf - \
+        /huggingface.co/InfiniFlow/text_concat_xgb_v1.0 \
+        /huggingface.co/InfiniFlow/deepdoc \
+        | tar -xf - --strip-components=3 -C /ragflow/rag/res/deepdoc
+
+# Keep Tika, NLTK, and tokenizer resources available without runtime downloads.
+RUN --mount=type=bind,from=ragflow-deps,source=/,target=/deps \
+    cp -r /deps/nltk_data /root/ && \
+    cp /deps/tika-server-standard-3.3.0.jar /deps/tika-server-standard-3.3.0.jar.md5 /ragflow/ && \
+    cp /deps/cl100k_base.tiktoken /ragflow/9b5ad71b2ce5302211f9c61530b329a4922fc6a4
+
+ENV TIKA_SERVER_JAR="file:///ragflow/tika-server-standard-3.3.0.jar"
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime and build dependencies shared by final image stages.
+RUN --mount=type=cache,id=ragflow_base_apt,target=/var/cache/apt,sharing=locked \
+    ubuntu_mirror="$UBUNTU_MIRROR"; \
+    if [ -z "$ubuntu_mirror" ] && [ "$NEED_MIRROR" == "1" ]; then \
+        ubuntu_mirror="http://mirrors.aliyun.com/ubuntu"; \
+    fi; \
+    if [ -n "$ubuntu_mirror" ]; then \
+        case "$ubuntu_mirror" in \
+            http://*|https://*) ;; \
+            *) echo "UBUNTU_MIRROR must be an HTTP or HTTPS URL" >&2; exit 1 ;; \
+        esac; \
+        ubuntu_mirror="${ubuntu_mirror%/}"; \
+        sed -i -E "s|^URIs: .*$|URIs: ${ubuntu_mirror}|g" /etc/apt/sources.list.d/ubuntu.sources; \
+        echo "Using Ubuntu package mirror: ${ubuntu_mirror}"; \
+    fi; \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache && \
+    chmod 1777 /tmp && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libglib2.0-0 libglx-mesa0 libgl1 pkg-config libgdiplus default-jdk libatk-bridge2.0-0 \
+        libgtk-4-1 libnss3 xdg-utils libjemalloc-dev gnupg unzip curl wget git vim less \
+        build-essential libpython3-dev libicu-dev libgbm-dev \
+        libwps-tools \
+        ghostscript pandoc texlive texlive-latex-extra texlive-xetex texlive-lang-chinese \
+        fonts-freefont-ttf fonts-noto-cjk postgresql-client
+
+# Infinity tokenizer resources are retained because the Python tokenizer imports
+# infinity.rag_tokenizer even when Elasticsearch is the configured document engine.
+RUN mkdir -p /usr/share/infinity/resource && \
+    if [ "$NEED_MIRROR" == "1" ]; then \
+        git clone --depth 1 --single-branch https://gitee.com/infiniflow/resource /tmp/resource; \
+    else \
+        git clone --depth 1 --single-branch https://github.com/infiniflow/resource.git /tmp/resource; \
+    fi && \
+    cp -r /tmp/resource/* /usr/share/infinity/resource && \
+    rm -rf /tmp/resource
+
+ARG NGINX_VERSION=1.31.2-1~noble
+RUN --mount=type=cache,id=ragflow_base_apt,target=/var/cache/apt,sharing=locked \
+    mkdir -p /etc/apt/keyrings && \
+    curl --retry 5 --retry-delay 2 --retry-all-errors -fsSL https://nginx.org/keys/nginx_signing.key \
+        | gpg --dearmor -o /etc/apt/keyrings/nginx-archive-keyring.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nginx-archive-keyring.gpg] https://nginx.org/packages/mainline/ubuntu/ noble nginx" \
+        > /etc/apt/sources.list.d/nginx.list && \
+    apt-get -o Acquire::Retries=5 update && \
+    apt-get -o Acquire::Retries=5 install -y nginx=${NGINX_VERSION} && \
+    apt-mark hold nginx
+
+# Install uv and its managed Python 3.13 interpreter.
+RUN --mount=type=bind,from=ragflow-deps,source=/,target=/deps \
+    if [ "$NEED_MIRROR" == "1" ]; then \
+        mkdir -p /etc/uv && \
+        echo 'python-install-mirror = "https://registry.npmmirror.com/-/binary/python-build-standalone/"' > /etc/uv/uv.toml && \
+        echo '[[index]]' >> /etc/uv/uv.toml && \
+        echo 'url = "https://mirrors.aliyun.com/pypi/simple"' >> /etc/uv/uv.toml && \
+        echo 'default = true' >> /etc/uv/uv.toml; \
+    fi; \
+    arch="$(uname -m)"; \
+    if [ "$arch" = "x86_64" ]; then uv_arch="x86_64"; else uv_arch="aarch64"; fi; \
+    tar xzf "/deps/uv-${uv_arch}-unknown-linux-gnu.tar.gz" && \
+    cp "uv-${uv_arch}-unknown-linux-gnu/"* /usr/local/bin/ && \
+    rm -rf "uv-${uv_arch}-unknown-linux-gnu" && \
+    uv python install 3.13
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+    UV_HTTP_TIMEOUT=200 \
+    UV_HTTP_RETRIES=3 \
+    PATH=/root/.local/bin:$PATH
+
+# Vendor direct Git/URL dependencies into the base image. Final builds resolve
+# them from this wheelhouse and never need access to Gitee or GitHub.
+ARG GRASPOLOGIC_REPOSITORY=https://gitee.com/infiniflow/graspologic.git
+ARG GRASPOLOGIC_COMMIT=38e680cab72bc9fb68a7992c3bcc2d53b24e42fd
+ARG SPACY_MODEL_URL=https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+RUN --mount=type=cache,id=ragflow_base_uv,target=/root/.cache/uv,sharing=locked \
+    mkdir -p /opt/ragflow/wheels && \
+    git clone --quiet "$GRASPOLOGIC_REPOSITORY" /tmp/graspologic && \
+    git -C /tmp/graspologic checkout --quiet "$GRASPOLOGIC_COMMIT" && \
+    uv build --wheel --out-dir /opt/ragflow/wheels /tmp/graspologic && \
+    curl --retry 5 --retry-delay 2 --retry-all-errors -fL \
+        "$SPACY_MODEL_URL" \
+        -o /opt/ragflow/wheels/en_core_web_sm-3.8.0-py3-none-any.whl && \
+    rm -rf /tmp/graspologic && \
+    python3 -c 'from pathlib import Path; wheels = Path("/opt/ragflow/wheels"); assert len(list(wheels.glob("graspologic-*.whl"))) == 1; assert len(list(wheels.glob("en_core_web_sm-*.whl"))) == 1'
+
+# Node.js is part of the build base so final builds only need access to npm.
+RUN --mount=type=cache,id=ragflow_base_apt,target=/var/cache/apt,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get purge -y nodejs npm && \
+    apt-get autoremove -y && \
+    apt-get update && \
+    apt-get install -y nodejs
+
+# Keep ODBC support aligned with the existing image.
+RUN --mount=type=cache,id=ragflow_base_apt,target=/var/cache/apt,sharing=locked \
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+        > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    arch="$(uname -m)"; \
+    if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then \
+        ACCEPT_EULA=Y apt-get install -y unixodbc-dev msodbcsql18; \
+    else \
+        ACCEPT_EULA=Y apt-get install -y unixodbc-dev msodbcsql17; \
+    fi || { echo "Failed to install ODBC driver"; exit 1; }
+
+# Add Chrome and ChromeDriver for Selenium.
+RUN --mount=type=bind,from=ragflow-deps,source=/chrome-linux64-121-0-6167-85,target=/chrome-linux64.zip \
+    unzip /chrome-linux64.zip && \
+    mv chrome-linux64 /opt/chrome && \
+    ln -s /opt/chrome/chrome /usr/local/bin/
+RUN --mount=type=bind,from=ragflow-deps,source=/chromedriver-linux64-121-0-6167-85,target=/chromedriver-linux64.zip \
+    unzip -j /chromedriver-linux64.zip chromedriver-linux64/chromedriver && \
+    mv chromedriver /usr/local/bin/ && \
+    rm -f /usr/bin/google-chrome
+
+RUN --mount=type=bind,from=ragflow-deps,source=/,target=/deps \
+    if [ "$(uname -m)" = "x86_64" ]; then \
+        dpkg -i /deps/libssl1.1_1.1.1f-1ubuntu2_amd64.deb; \
+    elif [ "$(uname -m)" = "aarch64" ]; then \
+        dpkg -i /deps/libssl1.1_1.1.1f-1ubuntu2_arm64.deb; \
+    fi
+
+RUN node --version && npm --version && uv --version && uv python find 3.13

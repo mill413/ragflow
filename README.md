@@ -127,6 +127,14 @@ cp docker/.env.example docker/.env
 
 ### 构建镜像
 
+先构建包含系统工具链、Python、Node.js、Nginx、Chrome 和解析资源的构建基础镜像：
+
+```bash
+docker/manage.sh build-base
+```
+
+再基于该镜像安装项目依赖、构建前端并组装最终镜像：
+
 ```bash
 docker/manage.sh build
 ```
@@ -134,10 +142,11 @@ docker/manage.sh build
 默认镜像标签格式为：
 
 ```text
+ragflow-build-base:<RAGFlow版本>
 ragflow-local:<RAGFlow版本>.<9位Git提交哈希>
 ```
 
-可以通过 `RAGFLOW_IMAGE` 指定其他镜像名称。
+可以通过 `RAGFLOW_BUILD_BASE_IMAGE` 和 `RAGFLOW_IMAGE` 指定其他镜像名称。联网环境可以将构建基础镜像发布到 GHCR；内部环境只需拉取该基础镜像，并通过 `UBUNTU_MIRROR`、`PYPI_INDEX_URL` 和 `NPM_REGISTRY` 配置内部软件源后构建最终镜像。
 
 ### 部署测试环境
 

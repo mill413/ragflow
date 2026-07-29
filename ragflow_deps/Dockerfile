@@ -1,4 +1,4 @@
-# This builds an image that contains the resources needed by Dockerfile
+# This builds an image that contains the resources needed by Dockerfile.base
 #
 FROM scratch
 
