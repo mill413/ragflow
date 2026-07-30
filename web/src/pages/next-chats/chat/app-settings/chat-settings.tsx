@@ -34,7 +34,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
   const { t } = useTranslation();
 
   const { visible: settingVisible, switchVisible: switchSettingVisible } =
-    useSetModalState(false);
+    useSetModalState(true);
 
   type FormSchemaType = z.infer<typeof formSchema>;
 
