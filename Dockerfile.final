@@ -104,7 +104,7 @@ RUN --mount=type=cache,id=ragflow_final_npm,target=/root/.npm,sharing=locked \
 
 ARG GIT_COMMIT
 RUN ragflow_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1) && \
-    git_commit=$(printf '%s' "$GIT_COMMIT" | cut -c1-9) && \
+    git_commit=$(printf '%s' "$GIT_COMMIT" | cut -c1-7) && \
     test -n "$ragflow_version" && \
     test -n "$git_commit" && \
     printf '%s.%s\n' "$ragflow_version" "$git_commit" > /ragflow/VERSION

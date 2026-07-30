@@ -42,7 +42,7 @@ cd ..
 docker build -f Dockerfile.base -t ragflow-build-base:nightly .
 docker build -f Dockerfile.final \
   --build-arg BUILD_BASE_IMAGE=ragflow-build-base:nightly \
-  --build-arg GIT_COMMIT="$(git rev-parse --short=9 HEAD)" \
+  --build-arg GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
   -t infiniflow/ragflow:nightly .
 ```
 

@@ -91,7 +91,7 @@ initialize_image_names() {
   configured_base_image="$(read_env_value RAGFLOW_BUILD_BASE_IMAGE)"
   configured_image="$(read_env_value RAGFLOW_IMAGE)"
   ragflow_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${PROJECT_ROOT}/pyproject.toml" | head -n 1)"
-  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=9 HEAD)"
+  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=7 HEAD)"
   [[ -n "${ragflow_version}" ]] || die "unable to read the RAGFlow version from pyproject.toml"
   [[ -n "${git_commit}" ]] || die "unable to resolve the current Git commit"
 
@@ -225,7 +225,7 @@ build_base_image() {
 build_image() {
   local image_name="${1:-${RAGFLOW_IMAGE}}"
   local git_commit
-  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=9 HEAD)"
+  git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=7 HEAD)"
 
   require_command docker
   if [[ "${RAGFLOW_BUILD_BASE_IMAGE}" != */* ]] && ! docker image inspect "${RAGFLOW_BUILD_BASE_IMAGE}" >/dev/null 2>&1; then

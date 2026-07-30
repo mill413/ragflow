@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           RAGFLOW_VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1)"
-          GIT_COMMIT="${GITHUB_SHA::9}"
+          GIT_COMMIT="${GITHUB_SHA::7}"
           if [[ -z "${RAGFLOW_VERSION}" ]]; then
             echo "Unable to read the RAGFlow version from pyproject.toml" >&2
             exit 1

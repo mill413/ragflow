@@ -27,7 +27,7 @@ Use `docker/manage.sh` as the single entry point for image and container operati
 # Build ragflow-build-base:<version>
 docker/manage.sh build-base
 
-# Build ragflow-local:<version>.<9-character-git-hash>
+# Build ragflow-local:<version>.<7-character-git-hash>
 docker/manage.sh build
 
 # Deploy the resource-limited hot-reload environment
@@ -131,7 +131,7 @@ The ignored `.env` file contains the active Docker environment variables.
 - `SVR_HTTP_PORT`
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
-  Overrides the image name used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<9-character-git-hash>`.
+  Overrides the image name used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<7-character-git-hash>`.
 - `RAGFLOW_BUILD_BASE_IMAGE`
   Selects the reusable image consumed by `Dockerfile.final`. Build it locally
   with `docker/manage.sh build-base`, or set this to a GHCR image.

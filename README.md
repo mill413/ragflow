@@ -119,7 +119,7 @@ docker/manage.sh build
 
 ```text
 ragflow-build-base:<RAGFlow版本>
-ragflow-local:<RAGFlow版本>.<9位Git提交哈希>
+ragflow-local:<RAGFlow版本>.<7位Git提交哈希>
 ```
 
 可以通过 `RAGFLOW_BUILD_BASE_IMAGE` 和 `RAGFLOW_IMAGE` 指定其他镜像名称。联网环境可以将构建基础镜像发布到 GHCR；内部环境只需拉取该基础镜像，并通过 `UBUNTU_MIRROR`、`PYPI_INDEX_URL` 和 `NPM_REGISTRY` 配置内部软件源后构建最终镜像。
