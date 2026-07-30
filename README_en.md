@@ -277,7 +277,7 @@ cd ragflow/
 docker build --platform linux/amd64 -f Dockerfile.base -t ragflow-build-base:nightly .
 docker build --platform linux/amd64 -f Dockerfile.final \
   --build-arg BUILD_BASE_IMAGE=ragflow-build-base:nightly \
-  --build-arg GIT_COMMIT="$(git rev-parse --short=9 HEAD)" \
+  --build-arg GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
   -t infiniflow/ragflow:nightly .
 ```
 
@@ -290,7 +290,7 @@ docker build --platform linux/amd64 -f Dockerfile.base \
   -t ragflow-build-base:nightly .
 docker build --platform linux/amd64 -f Dockerfile.final \
   --build-arg BUILD_BASE_IMAGE=ragflow-build-base:nightly \
-  --build-arg GIT_COMMIT="$(git rev-parse --short=9 HEAD)" \
+  --build-arg GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
   --build-arg http_proxy=http://YOUR_PROXY:PORT \
   --build-arg https_proxy=http://YOUR_PROXY:PORT \
   -t infiniflow/ragflow:nightly .

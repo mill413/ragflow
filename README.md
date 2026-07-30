@@ -46,38 +46,14 @@
 - OpenAI 兼容模型和 MinerU 提供独立的连通性验证与超时提示。
 - 数据源界面保留 S3、IMAP、MySQL 和 PostgreSQL。
 
-### 扩展分块方法可见性
+### 扩展分块方法
 
-扩展的内置分块方法默认不对工作空间开放。管理员登录管理后台后，可以通过以下接口按工作空间启用或禁用“扩展示例分块”：
+- 扩展的内置分块方法可以按个人或团队工作空间启用，默认不开放。
+- 管理员可以在管理后台的用户详情或团队详情中配置扩展分块方法的可见性。
+- 前端隐藏未授权方法，后端同时校验知识库创建、配置修改和文件重新解析请求。
+- 项目提供“扩展示例分块”作为函数签名、标准返回结构、PDF 解析器复用和可见性控制的参考实现。
 
-也可以在管理后台的用户详情或团队详情中，通过“扩展分块方法”开关直接配置对应个人或团队工作空间。
-
-```http
-PATCH /api/v1/admin/workspaces/<workspace_id>/chunk-methods/example_chunk
-Content-Type: application/json
-
-{
-  "enabled": true
-}
-```
-
-- `workspace_id` 为工作空间 ID；个人工作空间 ID 与用户 ID 相同，团队工作空间使用团队 ID。
-- `enabled: true` 表示启用，`enabled: false` 表示禁用。
-- 配置立即生效，无需重启服务。
-- 禁用后前端不再展示该方法，后端也会拒绝创建、修改或重新解析使用该方法的资源。
-- “扩展示例分块”仅支持 PDF。它通过知识库的 PDF 解析器配置复用 DeepDOC、MinerU 或 Plain Text 等现有解析器，扩展代码只处理解析器返回的段落和表格，不需要实现 PDF 解析器。
-
-在已登录管理后台的浏览器开发者工具中，也可以执行：
-
-```javascript
-fetch('/api/v1/admin/workspaces/<workspace_id>/chunk-methods/example_chunk', {
-  method: 'PATCH',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ enabled: true }),
-})
-  .then((response) => response.json())
-  .then(console.log);
-```
+新增独立分块方法时，需要同时注册 Python 实现、任务执行器、API 校验、前端配置和工作空间可见性。完整步骤参见 [新增内置分块方法](./docs/develop/add_custom_chunk_method.md)。
 
 ### 部署流程
 
@@ -143,7 +119,7 @@ docker/manage.sh build
 
 ```text
 ragflow-build-base:<RAGFlow版本>
-ragflow-local:<RAGFlow版本>.<9位Git提交哈希>
+ragflow-local:<RAGFlow版本>.<7位Git提交哈希>
 ```
 
 可以通过 `RAGFLOW_BUILD_BASE_IMAGE` 和 `RAGFLOW_IMAGE` 指定其他镜像名称。联网环境可以将构建基础镜像发布到 GHCR；内部环境只需拉取该基础镜像，并通过 `UBUNTU_MIRROR`、`PYPI_INDEX_URL` 和 `NPM_REGISTRY` 配置内部软件源后构建最终镜像。

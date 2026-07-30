@@ -378,8 +378,12 @@ declare namespace AdminService {
     workspace_name: string;
     workspace_type: 'personal' | 'team';
     failure_reason: string;
+    parser_id?: string;
+    process_begin_at?: string;
+    process_duration?: number;
     size: number;
     create_date: string;
+    update_date?: string;
   };
 
   export type FailedDocumentList = {

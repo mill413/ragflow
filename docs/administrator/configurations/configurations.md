@@ -101,7 +101,7 @@ RAGFlow utilizes MinIO as its object storage solution, leveraging its scalabilit
 - `SVR_HTTP_PORT`
   The port used to expose RAGFlow's HTTP API service to the host machine, allowing **external** access to the service running inside the Docker container. Defaults to `9380`.
 - `RAGFLOW_IMAGE`
-  Overrides the image used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<9-character-git-hash>`.
+  Overrides the image used by `docker/manage.sh`. When unset, the script uses `ragflow-local:<pyproject-version>.<7-character-git-hash>`.
 
 :::tip NOTE
 If you cannot download the RAGFlow Docker image, try the following mirrors.

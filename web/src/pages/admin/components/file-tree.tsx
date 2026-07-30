@@ -128,6 +128,21 @@ export function buildAdminFileTreeRows(
   return rows;
 }
 
+export function getExpandableAdminFileIds(
+  resources: AdminService.ManagedResourceItem[],
+) {
+  const byId = new Map(resources.map((resource) => [resource.id, resource]));
+  return new Set(
+    resources.flatMap((resource) => {
+      if (!resource.parent_id || resource.parent_id === resource.id) return [];
+      const parent = byId.get(resource.parent_id);
+      return parent && parent.workspace_id === resource.workspace_id
+        ? [parent.id]
+        : [];
+    }),
+  );
+}
+
 export function AdminFileTreeName({
   row: { resource, depth, hasChildren, expanded, workspaceRoot },
   onToggle,

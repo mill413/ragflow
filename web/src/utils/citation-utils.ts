@@ -22,3 +22,6 @@ export const parseCitationIndex = (value: string) => {
 
 export const citationMarkerReg =
   /\[(?:ID:)?([0-9\u0660-\u0669\u06F0-\u06F9]+)\]/g;
+
+export const formatCitationLabel = (zeroBasedIndex: number) =>
+  `Ref. ${zeroBasedIndex + 1}`;

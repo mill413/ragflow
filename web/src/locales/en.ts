@@ -164,6 +164,7 @@ export default {
       dataset: 'Dataset',
       memories: 'Memory',
       help: 'Help',
+      adminConsole: 'Admin console',
       onboarding: {
         ariaLabel: 'Getting started',
         progress: 'Step {{current}} of {{total}}',
@@ -3691,7 +3692,15 @@ Important structured information may include: names, dates, locations, events, k
         failures: 'Parse failures',
         failureDescription:
           'View files that failed to parse in datasets and their failure reasons.',
-        viewFullFailureReason: 'Click the row to view the full reason',
+        viewFullFailureReason:
+          'Select the row or View details for the full log',
+        viewFailureDetail: 'View parse failure details',
+        importantFailureMessages: 'Key error messages',
+        fullParseLog: 'Full parse log',
+        noFailureReason:
+          'No parse log was recorded. Check the parsing worker logs using the document ID.',
+        parseStartedAt: 'Parsing started at',
+        parseDuration: 'Parsing duration',
         sessions: 'Sessions',
         referencedDatasets: 'Datasets',
         referencedDocuments: 'Selected files',
@@ -3707,6 +3716,8 @@ Important structured information may include: names, dates, locations, events, k
         creator: 'Creator',
         expandFolder: 'Expand folder {{name}}',
         collapseFolder: 'Collapse folder {{name}}',
+        expandAllFolders: 'Expand all',
+        collapseAllFolders: 'Collapse all',
         resourceInformation: 'Resource information',
         resourceId: 'Resource ID',
         resourceType: 'Resource type',

@@ -173,6 +173,569 @@ curl --request GET \
 > 兼容接口只用于迁移现有调用。后续版本可能删除这些别名，客户端应尽快切换到替代接口。
 
 ---
+## 团队管理
+
+本章介绍团队的创建、查询、删除和成员管理接口。团队是独立的工作空间，团队成员角色包括：
+
+| 角色 | 值 | 说明 |
+| --- | --- | --- |
+| 所有者 | `owner` | 管理团队和成员，并且可以删除团队 |
+| 管理员 | `admin` | 管理团队和普通成员，但不能删除团队或移除所有者 |
+| 普通成员 | `normal` | 访问团队资源，可以主动退出团队 |
+| 待接受邀请 | `invite` | 已收到邀请但尚未成为正式成员 |
+
+团队接口均需要身份认证。普通用户只能查询自己已经加入的团队；超级管理员可以查询和管理所有团队。
+
+团队对象中的常用字段如下。部分响应还可能包含该工作空间的默认模型和解析器配置。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `tenant_id` | `string` | 团队及其工作空间的唯一 ID |
+| `name` | `string` | 团队名称 |
+| `role` | `string` | 当前调用用户在团队中的角色 |
+| `workspace_type` | `string` | 团队固定为 `team` |
+| `capabilities` | `object` | 当前调用用户对团队的操作能力 |
+
+`capabilities` 中的常用字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `read` | `boolean` | 是否可以查看团队 |
+| `manage_members` | `boolean` | 是否可以邀请、移除或调整成员 |
+| `update` | `boolean` | 是否可以修改团队信息 |
+| `delete` | `boolean` | 是否可以删除团队 |
+| `create_knowledgebase` | `boolean` | 是否可以在团队工作空间创建知识库 |
+| `create_shared_resource` | `boolean` | 是否可以创建团队共享资源 |
+| `create_collaborative_resource` | `boolean` | 是否可以创建团队协作资源 |
+
+---
+
+### 创建团队
+
+**POST** `/api/v1/teams`
+
+创建一个团队，并将当前用户设置为团队所有者。新团队不会复制所有者个人工作空间中的模型配置。
+
+#### 请求示例
+
+```bash
+curl --request POST \
+     --url 'http://{address}/api/v1/teams' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "name": "产品研发团队"
+     }'
+```
+
+#### 请求体参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `string` | 是 | 团队名称；去除首尾空白后长度必须为 1 至 100 个字符 |
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+    "name": "产品研发团队",
+    "role": "owner",
+    "workspace_type": "team",
+    "capabilities": {
+      "read": true,
+      "create_knowledgebase": true,
+      "create_shared_resource": true,
+      "create_collaborative_resource": true,
+      "manage_members": true,
+      "update": true,
+      "delete": true
+    }
+  }
+}
+```
+
+如果当前用户没有个人工作空间、团队数量已达到配额，或名称不符合要求，接口返回非零业务状态码。
+
+---
+
+### 获取团队列表
+
+**GET** `/api/v1/teams`
+
+普通用户获取自己已经加入的团队。尚未接受的邀请不会出现在此列表中；超级管理员获取所有有效团队。
+
+#### 请求示例
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/teams' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+该接口当前不支持分页、搜索或排序参数。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+      "name": "产品研发团队",
+      "role": "owner",
+      "workspace_type": "team",
+      "capabilities": {
+        "read": true,
+        "create_knowledgebase": true,
+        "create_shared_resource": true,
+        "create_collaborative_resource": true,
+        "manage_members": true,
+        "update": true,
+        "delete": true
+      }
+    }
+  ]
+}
+```
+
+没有已加入的团队时，`data` 返回空数组。
+
+---
+
+### 获取待接受的团队邀请
+
+**GET** `/api/v1/teams/invitations`
+
+获取当前用户尚未接受的团队邀请。待接受邀请不会出现在团队列表中。
+
+#### 请求示例
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/teams/invitations' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+该接口当前不支持分页、搜索或排序参数。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+      "name": "产品研发团队",
+      "role": "invite",
+      "invited_by": "91fc7a26ee8b11f0a1740242ac120002",
+      "workspace_type": "team"
+    }
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `tenant_id` | `string` | 被邀请加入的团队 ID |
+| `name` | `string` | 团队名称 |
+| `role` | `string` | 待接受邀请固定为 `invite` |
+| `invited_by` | `string` | 发起邀请的用户 ID |
+| `workspace_type` | `string` | 固定为 `team` |
+
+没有待接受邀请时，`data` 返回空数组。
+
+---
+
+### 获取团队详情
+
+**GET** `/api/v1/teams/{team_id}`
+
+团队有效成员和超级管理员可以获取团队详情。待接受邀请的用户不属于有效成员。
+
+#### 请求示例
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/teams/{team_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+    "name": "产品研发团队",
+    "role": "normal",
+    "workspace_type": "team",
+    "capabilities": {
+      "read": true,
+      "create_knowledgebase": false,
+      "create_shared_resource": false,
+      "create_collaborative_resource": true,
+      "manage_members": false,
+      "update": false,
+      "delete": false
+    }
+  }
+}
+```
+
+团队不存在时返回 `404` 业务状态码；当前用户无权访问时返回 `403`。
+
+---
+
+### 修改团队
+
+**PATCH** `/api/v1/teams/{team_id}`
+
+团队所有者、团队管理员和超级管理员可以修改团队名称。
+
+#### 请求示例
+
+```bash
+curl --request PATCH \
+     --url 'http://{address}/api/v1/teams/{team_id}' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "name": "产品平台团队"
+     }'
+```
+
+#### 参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+| `name` | 请求体 | `string` | 是 | 新团队名称；去除首尾空白后长度必须为 1 至 100 个字符 |
+
+#### 成功响应
+
+成功时，`data` 返回修改后的完整团队对象：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+    "name": "产品平台团队",
+    "role": "admin",
+    "workspace_type": "team",
+    "capabilities": {
+      "read": true,
+      "create_knowledgebase": true,
+      "create_shared_resource": true,
+      "create_collaborative_resource": true,
+      "manage_members": true,
+      "update": true,
+      "delete": false
+    }
+  }
+}
+```
+
+当前用户没有团队管理权限、团队不存在或名称不符合要求时，接口返回非零业务状态码。
+
+---
+
+### 删除团队
+
+**DELETE** `/api/v1/teams/{team_id}`
+
+只有团队所有者和超级管理员可以删除团队。删除前必须先删除团队中的知识库、聊天、搜索、智能体、记忆、数据源、MCP、知识编译模板和普通文件等资源。
+
+#### 请求示例
+
+```bash
+curl --request DELETE \
+     --url 'http://{address}/api/v1/teams/{team_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 待删除的团队 ID |
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": true
+}
+```
+
+删除操作会停用团队及其成员关系，并清理团队的 Token、模型配置和配额配置。团队中仍存在资源时，服务端拒绝删除并返回非零业务状态码。
+
+---
+
+### 邀请团队成员
+
+**POST** `/api/v1/teams/{team_id}/invitations`
+
+团队所有者、团队管理员和超级管理员可以邀请已经注册的用户。邀请创建后，该用户的角色为 `invite`；用户接受邀请后才会成为 `normal` 普通成员。
+
+#### 请求示例
+
+```bash
+curl --request POST \
+     --url 'http://{address}/api/v1/teams/{team_id}/invitations' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "email": "member@example.com"
+     }'
+```
+
+#### 参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+| `email` | 请求体 | `string` | 是 | 已注册用户的邮箱地址 |
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "id": "513c9e5eee8c11f0a1740242ac120002",
+    "email": "member@example.com",
+    "nickname": "张三",
+    "avatar": null
+  }
+}
+```
+
+以下情况会导致邀请失败：
+
+- 邮箱对应的用户不存在；
+- 用户已经是团队成员或已有待接受邀请；
+- 当前调用用户没有成员管理权限。
+
+服务端会异步尝试发送邀请邮件；邮件发送失败不会撤销已经创建的邀请关系。
+
+---
+
+### 接受团队邀请
+
+**POST** `/api/v1/teams/{team_id}/invitations/accept`
+
+当前用户接受指定团队的邀请。只有在该团队中处于 `invite` 状态的用户可以调用；接受成功后，用户角色变为 `normal`。
+
+#### 请求示例
+
+```bash
+curl --request POST \
+     --url 'http://{address}/api/v1/teams/{team_id}/invitations/accept' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 接受邀请的团队 ID |
+
+该接口不需要请求体。
+
+#### 成功响应
+
+成功时，`data` 返回加入后的完整团队对象：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "tenant_id": "8f4e67d8ee8b11f0a1740242ac120002",
+    "name": "产品研发团队",
+    "role": "normal",
+    "workspace_type": "team",
+    "capabilities": {
+      "read": true,
+      "create_knowledgebase": false,
+      "create_shared_resource": false,
+      "create_collaborative_resource": true,
+      "manage_members": false,
+      "update": false,
+      "delete": false
+    }
+  }
+}
+```
+
+邀请不存在、已接受或已经失效时，接口返回 `404` 业务状态码。
+
+---
+
+### 获取团队成员列表
+
+**GET** `/api/v1/teams/{team_id}/members`
+
+团队有效成员和超级管理员可以获取成员列表。列表包含正式成员以及尚未接受邀请的用户，可通过 `role` 区分。
+
+#### 请求示例
+
+```bash
+curl --request GET \
+     --url 'http://{address}/api/v1/teams/{team_id}/members' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+
+该接口当前不支持分页、搜索或排序参数。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": [
+    {
+      "id": "63348632ee8c11f0a1740242ac120002",
+      "user_id": "513c9e5eee8c11f0a1740242ac120002",
+      "role": "normal",
+      "nickname": "张三",
+      "email": "member@example.com",
+      "avatar": null,
+      "is_superuser": false
+    },
+    {
+      "id": "74af68b0ee8c11f0a1740242ac120002",
+      "user_id": "6151a650ee8c11f0a1740242ac120002",
+      "role": "invite",
+      "nickname": "李四",
+      "email": "invitee@example.com",
+      "avatar": null,
+      "is_superuser": false
+    }
+  ]
+}
+```
+
+成员对象中的 `id` 是成员关系 ID；移除成员接口使用的是 `user_id`，不要将二者混用。
+
+---
+
+### 修改成员角色或转移所有权
+
+**PATCH** `/api/v1/teams/{team_id}/members/{user_id}`
+
+该接口有两种互斥用法：
+
+- 通过 `role` 将成员设置为管理员或普通成员；
+- 通过 `transfer_ownership: true` 将团队所有权转移给目标成员。
+
+#### 修改成员角色
+
+团队所有者、团队管理员和超级管理员可以将非所有者成员的角色修改为 `admin` 或 `normal`。
+
+```bash
+curl --request PATCH \
+     --url 'http://{address}/api/v1/teams/{team_id}/members/{user_id}' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "role": "admin"
+     }'
+```
+
+#### 转移团队所有权
+
+只有当前团队所有者和超级管理员可以转移所有权。目标用户必须是团队的有效成员；转移完成后，原所有者变为 `admin`，目标成员变为 `owner`。
+
+```bash
+curl --request PATCH \
+     --url 'http://{address}/api/v1/teams/{team_id}/members/{user_id}' \
+     --header 'Content-Type: application/json' \
+     --header 'Authorization: Bearer <API_TOKEN>' \
+     --data '{
+       "transfer_ownership": true
+     }'
+```
+
+#### 参数
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+| `user_id` | 路径 | `string` | 是 | 目标成员的用户 ID，不是成员关系 ID |
+| `role` | 请求体 | `string` | 条件必填 | 目标角色，只能是 `admin` 或 `normal` |
+| `transfer_ownership` | 请求体 | `boolean` | 条件必填 | 设置为 `true` 时执行所有权转移，并忽略 `role` |
+
+请求体必须选择一种操作。不要同时依赖 `role` 和 `transfer_ownership` 的值。
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": true
+}
+```
+
+不能通过 `role` 直接设置或取消 `owner`。修改所有者必须使用 `transfer_ownership: true`。
+
+---
+
+### 移除团队成员
+
+**DELETE** `/api/v1/teams/{team_id}/members/{user_id}`
+
+团队所有者可以移除管理员或普通成员；团队管理员只能移除普通成员；超级管理员可以移除所有者之外的成员。普通成员可以使用自己的 `user_id` 主动退出团队。
+
+团队所有者不能直接被移除，必须先转移团队所有权。
+
+#### 请求示例
+
+```bash
+curl --request DELETE \
+     --url 'http://{address}/api/v1/teams/{team_id}/members/{user_id}' \
+     --header 'Authorization: Bearer <API_TOKEN>'
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- | --- |
+| `team_id` | 路径 | `string` | 是 | 团队 ID |
+| `user_id` | 路径 | `string` | 是 | 待移除用户的用户 ID，不是成员关系 ID |
+
+#### 成功响应
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": true
+}
+```
+
+移除操作会将成员关系标记为无效。成员不存在、尝试移除所有者或当前调用用户权限不足时，接口返回非零业务状态码。
+
+---
 ## OpenAI 兼容 API
 
 本章介绍如何使用 OpenAI Chat Completions 兼容格式调用聊天应用和智能体。请求仍由 RAGFlow 处理，并受 API Token 所属工作空间及资源权限约束。

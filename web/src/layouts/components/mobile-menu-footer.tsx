@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { useFetchUserInfo } from '@/hooks/use-user-setting-request';
 import { Routes } from '@/routes';
 
 function FooterLink({
@@ -29,6 +30,7 @@ type MobileMenuFooterProps = {
 
 export function MobileMenuFooter({ onClose }: MobileMenuFooterProps) {
   const { t } = useTranslation();
+  const { data: userInfo } = useFetchUserInfo();
 
   return (
     <div className="shrink-0 border-t border-border-button px-4 py-4">
@@ -36,6 +38,11 @@ export function MobileMenuFooter({ onClose }: MobileMenuFooterProps) {
         <FooterLink to={Routes.Help} onClick={onClose}>
           {t('header.help')}
         </FooterLink>
+        {userInfo.is_superuser && (
+          <FooterLink to={Routes.AdminServices} onClick={onClose}>
+            {t('header.adminConsole')}
+          </FooterLink>
+        )}
       </div>
     </div>
   );
