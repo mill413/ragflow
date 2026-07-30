@@ -26,7 +26,6 @@ import numpy as np
 import requests
 from ollama import Client
 from openai import OpenAI
-from zhipuai import ZhipuAI
 
 from common import settings
 from common.exceptions import ModelException
@@ -430,37 +429,6 @@ class QWenEmbed(Base):
         except Exception as _e:
             logger.exception("QWenEmbed: failed to parse query embedding response")
             raise EmbeddingError(f"Embedding request failed for QWenEmbed. Error: {_e}; response={resp}") from _e
-
-
-class ZhipuEmbed(Base):
-    _FACTORY_NAME = "ZHIPU-AI"
-
-    def __init__(self, key, model_name="embedding-2", **kwargs):
-        self.client = ZhipuAI(api_key=key)
-        self.model_name = model_name
-
-    def _max_len(self):
-        # Per-model input ceilings; fall back to the standard 8K limit for any
-        # other model rather than leaving oversized inputs untruncated.
-        if self.model_name.lower() == "embedding-2":
-            return 512
-        if self.model_name.lower() == "embedding-3":
-            return 3072
-        return DEFAULT_MAX_TOKENS
-
-    def _call(self, batch):
-        # Batch like the other OpenAI-style providers: one request per batch
-        # instead of one request per text. Sort by index so the batched results
-        # stay aligned with input order.
-        res = self.client.embeddings.create(input=batch, model=self.model_name)
-        return [d.embedding for d in _sorted_by_index(res.data)], total_token_count_from_response(res)
-
-    def encode(self, texts: list):
-        return self._batched_encode(texts, self._call, batch_size=16, truncate_to=self._max_len())
-
-    def encode_queries(self, text):
-        vectors, token_count = self._batched_encode([text], self._call, batch_size=16, truncate_to=self._max_len())
-        return vectors[0], token_count
 
 
 class OllamaEmbed(Base):
