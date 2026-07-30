@@ -7,6 +7,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel';
 import { IReferenceChunk } from '@/interfaces/database/chat';
+import { formatCitationLabel } from '@/utils/citation-utils';
 import { isPlainObject } from 'lodash';
 import { RotateCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { useMemo } from 'react';
@@ -42,7 +43,7 @@ function ImagePhotoView({ id, index }: ImageItem) {
       <Image
         id={id}
         className="h-40 w-full"
-        label={`Fig. ${(index + 1).toString()}`}
+        label={formatCitationLabel(index)}
       />
     </PhotoView>
   );

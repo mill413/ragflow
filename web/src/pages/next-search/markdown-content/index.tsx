@@ -23,7 +23,7 @@ import {
   replaceTextByOldReg,
   replaceThinkToSection,
 } from '@/utils/chat';
-import { citationMarkerReg } from '@/utils/citation-utils';
+import { citationMarkerReg, formatCitationLabel } from '@/utils/citation-utils';
 import { getDirAttribute } from '@/utils/text-direction';
 
 import { Button } from '@/components/ui/button';
@@ -229,7 +229,7 @@ const MarkdownContent = ({
           <Popover>
             <PopoverTrigger>
               <span className="text-text-secondary bg-bg-card rounded-2xl px-1 mx-1 text-nowrap">
-                Fig. {chunkIndex + 1}
+                {formatCitationLabel(chunkIndex)}
               </span>
             </PopoverTrigger>
             <PopoverContent className="!w-fit">
