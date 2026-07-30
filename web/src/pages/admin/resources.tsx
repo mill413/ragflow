@@ -32,6 +32,8 @@ import {
   Import,
   Layers3,
   Library,
+  ListChevronsDownUp,
+  ListChevronsUpDown,
   Languages,
   MessageSquare,
   Eye,
@@ -121,6 +123,7 @@ import {
   AdminFileTreeName,
   type AdminFileTreeRow,
   buildAdminFileTreeRows,
+  getExpandableAdminFileIds,
 } from './components/file-tree';
 import {
   ResourceQuotaCards,
@@ -966,6 +969,14 @@ export default function AdminResources() {
       return next;
     });
   };
+  const expandAllFiles = () => {
+    setExpandedFileIds(
+      getExpandableAdminFileIds(resourceData?.resources ?? []),
+    );
+  };
+  const collapseAllFiles = () => {
+    setExpandedFileIds(new Set());
+  };
   const sortButton = (
     label: string,
     state: SortState,
@@ -1399,6 +1410,30 @@ export default function AdminResources() {
                   )}
                 />
               </div>
+              {resourceType === 'file' && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10"
+                    disabled={!resourceData?.resources.length}
+                    onClick={expandAllFiles}
+                  >
+                    <ListChevronsUpDown className="size-4" />
+                    {t('admin.resourceManagementPage.expandAllFolders')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10"
+                    disabled={!resourceData?.resources.length}
+                    onClick={collapseAllFiles}
+                  >
+                    <ListChevronsDownUp className="size-4" />
+                    {t('admin.resourceManagementPage.collapseAllFolders')}
+                  </Button>
+                </>
+              )}
             </div>
           </CardHeader>
 

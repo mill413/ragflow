@@ -3708,6 +3708,8 @@ Important structured information may include: names, dates, locations, events, k
         creator: 'Creator',
         expandFolder: 'Expand folder {{name}}',
         collapseFolder: 'Collapse folder {{name}}',
+        expandAllFolders: 'Expand all',
+        collapseAllFolders: 'Collapse all',
         resourceInformation: 'Resource information',
         resourceId: 'Resource ID',
         resourceType: 'Resource type',
