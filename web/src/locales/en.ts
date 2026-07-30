@@ -164,6 +164,7 @@ export default {
       dataset: 'Dataset',
       memories: 'Memory',
       help: 'Help',
+      adminConsole: 'Admin console',
       onboarding: {
         ariaLabel: 'Getting started',
         progress: 'Step {{current}} of {{total}}',

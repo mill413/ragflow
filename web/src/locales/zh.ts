@@ -154,6 +154,7 @@ export default {
       dataset: '知识库',
       memories: '记忆',
       help: '帮助',
+      adminConsole: '管理后台',
       onboarding: {
         ariaLabel: '新手引导',
         progress: '第 {{current}} 步，共 {{total}} 步',

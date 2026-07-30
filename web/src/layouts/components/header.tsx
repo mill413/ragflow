@@ -26,6 +26,7 @@ import {
   LucideChevronDown,
   LucideCircleHelp,
   LucideLanguages,
+  LucideShieldCheck,
   LucideUsersRound,
 } from 'lucide-react';
 import React, { useMemo } from 'react';
@@ -76,7 +77,9 @@ export function Header({
     expandedRightMeasureRef,
     navMeasureRef,
     isCompact,
-  } = useHeaderNavLayout(`${hasNotification}-${language}`);
+  } = useHeaderNavLayout(
+    `${hasNotification}-${language}-${userInfo.is_superuser}`,
+  );
 
   return (
     <>
@@ -191,6 +194,20 @@ export function Header({
                 <LucideCircleHelp className="size-[1em]" />
               </Button>
 
+              {userInfo.is_superuser && (
+                <Button
+                  asLink
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  to={Routes.AdminServices}
+                  aria-label={t('header.adminConsole')}
+                  title={t('header.adminConsole')}
+                >
+                  <LucideShieldCheck className="size-[1em]" />
+                </Button>
+              )}
+
               {hasNotification && <BellButton className="!size-8" />}
             </>
           )}
@@ -234,6 +251,11 @@ export function Header({
           <Button variant="ghost" size="icon" className="size-8">
             <LucideCircleHelp className="size-[1em]" />
           </Button>
+          {userInfo.is_superuser && (
+            <Button variant="ghost" size="icon" className="size-8">
+              <LucideShieldCheck className="size-[1em]" />
+            </Button>
+          )}
           <ThemeButton className="!size-8" />
           {hasNotification && <BellButton className="!size-8" />}
           <div className="relative ms-3 flex size-10 shrink-0 items-center justify-center">
