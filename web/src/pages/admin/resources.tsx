@@ -117,6 +117,7 @@ import { getSortIcon, openMainAppAsAdmin } from './utils';
 import { AdminTableMultiFilters } from './components/table-multi-filters';
 import { DetailInformationCard } from './components/detail-information-card';
 import { AdminDetailTabsTrigger } from './components/detail-tabs-trigger';
+import { ParseFailureDetail } from './components/parse-failure-detail';
 import { StandardResourceDetail } from './components/resource-detail';
 import { StorageSize } from './components/storage-size';
 import {
@@ -355,6 +356,7 @@ type DatasetDocumentTableProps = {
   onPageChange: (page: number, pageSize: number) => void;
   onPreview: (resource: AdminService.ManagedResourceItem) => void;
   onDownload: (resource: AdminService.ManagedResourceItem) => void;
+  onViewFailure: (document: AdminService.DatasetDocumentDetail) => void;
 };
 
 function DatasetDocumentTable({
@@ -369,6 +371,7 @@ function DatasetDocumentTable({
   onPageChange,
   onPreview,
   onDownload,
+  onViewFailure,
 }: DatasetDocumentTableProps) {
   const { t } = useTranslation();
   const toggleSort = (key: string) =>
@@ -494,9 +497,14 @@ function DatasetDocumentTable({
                           </Badge>
                         </span>
                       </TooltipTrigger>
-                      {document.progress_msg && (
+                      {(document.progress_msg ||
+                        document.parse_status === 'failed') && (
                         <TooltipContent className="max-w-sm">
-                          {document.progress_msg}
+                          {document.parse_status === 'failed'
+                            ? t(
+                                'admin.resourceManagementPage.viewFailureDetail',
+                              )
+                            : document.progress_msg}
                         </TooltipContent>
                       )}
                     </Tooltip>
@@ -519,6 +527,27 @@ function DatasetDocumentTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-1">
+                      {document.parse_status === 'failed' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={t(
+                                'admin.resourceManagementPage.viewFailureDetail',
+                              )}
+                              onClick={() => onViewFailure(document)}
+                            >
+                              <AlertTriangle className="size-4 text-state-error" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {t(
+                              'admin.resourceManagementPage.viewFailureDetail',
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-flex">
@@ -1163,6 +1192,12 @@ export default function AdminResources() {
     selectedDetail?.kind === 'resource'
       ? selectedDetail.resource.id
       : selectedDetail?.document.id;
+  const detailTitle =
+    selectedDetail?.kind === 'failure'
+      ? detailName
+      : datasetDetail?.dataset.name ||
+        standardResourceDetail?.resource.name ||
+        detailName;
   const selectedResource =
     selectedDetail?.kind === 'resource' ? selectedDetail.resource : undefined;
   const detailItems: ResourceDetailItem[] = (() => {
@@ -1199,6 +1234,25 @@ export default function AdminResources() {
           label: t('admin.knowledgeMonitoring.fileSize'),
           value: <StorageSize bytes={document.size ?? 0} />,
           icon: HardDrive,
+        },
+        {
+          label: t('admin.resourceManagementPage.datasetDetail.parseMethod'),
+          value: document.parser_id || '-',
+          icon: Settings2,
+        },
+        {
+          label: t('admin.resourceManagementPage.parseStartedAt'),
+          value: formatDate(document.process_begin_at) || '-',
+          icon: Clock3,
+        },
+        {
+          label: t('admin.resourceManagementPage.parseDuration'),
+          value:
+            document.process_duration === undefined ||
+            document.process_duration === null
+              ? '-'
+              : `${document.process_duration.toFixed(2)} ${t('common.s')}`,
+          icon: Activity,
         },
         {
           label: t('admin.createTime'),
@@ -1687,6 +1741,9 @@ export default function AdminResources() {
                             'create_date',
                           )}
                         </TableHead>
+                        <TableHead className="text-center">
+                          {t('admin.actions')}
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody
@@ -1741,12 +1798,39 @@ export default function AdminResources() {
                             <TableCell>
                               {formatDate(document.create_date) || '-'}
                             </TableCell>
+                            <TableCell className="text-center">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    aria-label={t(
+                                      'admin.resourceManagementPage.viewFailureDetail',
+                                    )}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setSelectedDetail({
+                                        kind: 'failure',
+                                        document,
+                                      });
+                                    }}
+                                  >
+                                    <Eye className="size-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {t(
+                                    'admin.resourceManagementPage.viewFailureDetail',
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={7}
                             className="h-32 text-center text-text-secondary"
                           >
                             {t('common.noData')}
@@ -1814,10 +1898,7 @@ export default function AdminResources() {
               <div className="flex items-start justify-between gap-4 pr-8">
                 <div className="min-w-0">
                   <SheetTitle>
-                    {datasetDetail?.dataset.name ||
-                      standardResourceDetail?.resource.name ||
-                      detailName ||
-                      t('admin.unnamedResource')}
+                    {detailTitle || t('admin.unnamedResource')}
                   </SheetTitle>
                   <SheetDescription className="mt-1 truncate font-mono text-xs">
                     {t('admin.resourceManagementPage.resourceId')}：
@@ -1990,6 +2071,30 @@ export default function AdminResources() {
                           onDownload={(resource) =>
                             downloadMutation.mutate(resource)
                           }
+                          onViewFailure={(document) =>
+                            setSelectedDetail({
+                              kind: 'failure',
+                              document: {
+                                id: document.id,
+                                name: document.name,
+                                dataset_id: datasetDetail.dataset.id,
+                                dataset_name: datasetDetail.dataset.name,
+                                workspace_id:
+                                  datasetDetail.dataset.workspace_id,
+                                workspace_name:
+                                  datasetDetail.dataset.workspace_name,
+                                workspace_type:
+                                  datasetDetail.dataset.workspace_type,
+                                failure_reason: document.progress_msg || '',
+                                parser_id: document.parser_id,
+                                process_begin_at: document.process_begin_at,
+                                process_duration: document.process_duration,
+                                size: document.size,
+                                create_date: document.create_date,
+                                update_date: document.update_date,
+                              },
+                            })
+                          }
                         />
                       </>
                     ) : (
@@ -2033,13 +2138,9 @@ export default function AdminResources() {
                   </div>
                   {selectedDetail?.kind === 'failure' && (
                     <div className="mt-5 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <AlertTriangle className="size-4 text-state-error" />
-                        {t('admin.knowledgeMonitoring.failureReason')}
-                      </div>
-                      <div className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border-0.5 border-state-error/30 bg-state-error/5 p-4 font-mono text-xs leading-6 text-text-primary select-text">
-                        {selectedDetail.document.failure_reason || '-'}
-                      </div>
+                      <ParseFailureDetail
+                        reason={selectedDetail.document.failure_reason}
+                      />
                     </div>
                   )}
                 </section>

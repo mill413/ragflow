@@ -3692,7 +3692,15 @@ Important structured information may include: names, dates, locations, events, k
         failures: 'Parse failures',
         failureDescription:
           'View files that failed to parse in datasets and their failure reasons.',
-        viewFullFailureReason: 'Click the row to view the full reason',
+        viewFullFailureReason:
+          'Select the row or View details for the full log',
+        viewFailureDetail: 'View parse failure details',
+        importantFailureMessages: 'Key error messages',
+        fullParseLog: 'Full parse log',
+        noFailureReason:
+          'No parse log was recorded. Check the parsing worker logs using the document ID.',
+        parseStartedAt: 'Parsing started at',
+        parseDuration: 'Parsing duration',
         sessions: 'Sessions',
         referencedDatasets: 'Datasets',
         referencedDocuments: 'Selected files',

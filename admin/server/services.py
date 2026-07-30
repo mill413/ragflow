@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 from peewee import Case, fn
 
-from common.constants import ActiveEnum, ActiveStatusEnum, StatusEnum
+from common.constants import ActiveEnum, ActiveStatusEnum, StatusEnum, TaskStatus
 from api.db import (
     KNOWLEDGEBASE_FOLDER_NAME,
     SKILLS_FOLDER_NAME,
@@ -1126,9 +1126,40 @@ class ResourceMgr:
                 Document.select(
                     Document.kb_id.alias("dataset_id"),
                     fn.COALESCE(fn.SUM(Document.size), 0).alias("storage_bytes"),
-                    fn.COALESCE(fn.SUM(Case(None, [(Document.progress < 0, 1)], 0)), 0).alias("failed_documents"),
                     fn.COALESCE(
-                        fn.SUM(Case(None, [((Document.progress >= 0) & (Document.progress < 1), 1)], 0)),
+                        fn.SUM(
+                            Case(
+                                None,
+                                [
+                                    (
+                                        (Document.progress < 0)
+                                        | (Document.run == TaskStatus.FAIL.value),
+                                        1,
+                                    )
+                                ],
+                                0,
+                            )
+                        ),
+                        0,
+                    ).alias("failed_documents"),
+                    fn.COALESCE(
+                        fn.SUM(
+                            Case(
+                                None,
+                                [
+                                    (
+                                        (Document.progress >= 0)
+                                        & (Document.progress < 1)
+                                        & (
+                                            Document.run.is_null(True)
+                                            | (Document.run != TaskStatus.FAIL.value)
+                                        ),
+                                        1,
+                                    )
+                                ],
+                                0,
+                            )
+                        ),
                         0,
                     ).alias("processing_documents"),
                 )
@@ -1294,7 +1325,7 @@ class ResourceMgr:
             document["file_id"] = file_ids_by_document.get(document["id"], "")
             document["creator_name"] = creators.get(document.get("creator_id"), "")
             progress = float(document.get("progress") or 0)
-            if progress < 0:
+            if progress < 0 or document.get("run") == TaskStatus.FAIL.value:
                 document["parse_status"] = "failed"
             elif progress >= 1:
                 document["parse_status"] = "completed"
@@ -1795,11 +1826,22 @@ class ResourceMgr:
                 Knowledgebase.name.alias("dataset_name"),
                 Knowledgebase.tenant_id.alias("workspace_id"),
                 Document.progress_msg.alias("failure_reason"),
+                Document.parser_id,
+                Document.process_begin_at,
+                Document.process_duration,
                 Document.size,
                 Document.create_date,
+                Document.update_date,
             )
             .join(Knowledgebase, on=(Document.kb_id == Knowledgebase.id))
-            .where((Document.status == valid) & (Knowledgebase.status == valid) & (Document.progress < 0))
+            .where(
+                (Document.status == valid)
+                & (Knowledgebase.status == valid)
+                & (
+                    (Document.progress < 0)
+                    | (Document.run == TaskStatus.FAIL.value)
+                )
+            )
         )
         if workspace_ids:
             query = query.where(Knowledgebase.tenant_id.in_(workspace_ids))
@@ -2452,8 +2494,17 @@ class MonitoringMgr:
         )
         files_total = files.count()
         files_storage_bytes = files.select(fn.COALESCE(fn.SUM(File.size), 0)).scalar() or 0
-        failed_documents = documents.where(Document.progress < 0).count()
-        processing_documents = documents.where((Document.progress >= 0) & (Document.progress < 1)).count()
+        failed_documents = documents.where(
+            (Document.progress < 0) | (Document.run == TaskStatus.FAIL.value)
+        ).count()
+        processing_documents = documents.where(
+            (Document.progress >= 0)
+            & (Document.progress < 1)
+            & (
+                Document.run.is_null(True)
+                | (Document.run != TaskStatus.FAIL.value)
+            )
+        ).count()
         pending_tasks = Task.select().where((Task.progress >= 0) & (Task.progress < 1)).count()
         chats_total = Dialog.select().where(Dialog.status == valid).count()
         searches_total = Search.select().where(Search.status == valid).count()
