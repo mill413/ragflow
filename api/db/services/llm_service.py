@@ -38,6 +38,13 @@ class LLMBundle(LLM4Tenant):
     def __init__(self, tenant_id: str, model_config: dict, lang="Chinese", **kwargs):
         super().__init__(tenant_id, model_config, lang, **kwargs)
 
+    def clone(self):
+        """Create an independent bundle without copying live client state."""
+        kwargs = dict(self._model_kwargs)
+        kwargs["trace_context"] = dict(self.trace_context)
+        kwargs["langfuse_session_id"] = self.langfuse_session_id
+        return type(self)(self.tenant_id, dict(self.model_config), lang=self.lang, **kwargs)
+
     def _start_langfuse_observation(self, **kwargs):
         # Correlating attributes (session_id/user_id) let Langfuse group all of a
         # turn's generations. They may come from this bundle (chat/dialog path) or,

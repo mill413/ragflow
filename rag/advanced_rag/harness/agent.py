@@ -1,6 +1,6 @@
 """Research Agent — inner tool-calling loop for high/ultra modes.
 
-Native tool-calling: a chat model deep-copied from ``tools.chat_mdl`` is bound
+Native tool-calling: a separate chat model cloned from ``tools.chat_mdl`` is bound
 (via ``bind_tools``) to the phase-gated tool schemas plus ``think_tool`` /
 ``generate_report``, and a lightweight session routes each tool call to the
 harness pipeline. Binding onto a *copy* keeps the shared ``tools.chat_mdl``
@@ -14,7 +14,6 @@ that the loop parses.
 import json
 import logging
 import re
-from copy import deepcopy
 
 from rag.advanced_rag.harness.types import ClaimTarget, ExecutionStrategy, ToolResult
 from rag.advanced_rag.harness.pipeline import Pipeline
@@ -125,8 +124,9 @@ async def research_agent_loop(
         context=context,
     )
 
-    # Deep-copy so binding tools never leaks onto the shared chat model.
-    agent_mdl = deepcopy(tools.chat_mdl)
+    # Use a separate runtime model so binding tools never leaks onto the shared
+    # model. Live provider clients contain thread locks and cannot be deep-copied.
+    agent_mdl = tools.chat_mdl.clone()
     if getattr(agent_mdl, "is_tools", False):
         return await _research_native(claim, agent_mdl, pipeline, phase, phase_config, gated_defs, mode)
 
