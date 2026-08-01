@@ -24,7 +24,7 @@ Both deployments use Elasticsearch as their only document engine. Kibana and the
 Use `docker/manage.sh` as the single entry point for image and container operations:
 
 ```bash
-# Build ragflow-build-base:<version>
+# Build ragflow-build-base:<version>.<base-revision>
 docker/manage.sh build-base
 
 # Build ragflow-local:<version>.<7-character-git-hash>
@@ -57,10 +57,10 @@ English model as wheels. `Dockerfile.final` resolves those dependencies from the
 base image, so an internal build does not contact their original Gitee or GitHub
 URLs.
 
-The release workflow gives the build base a fixed RAGFlow version tag and checks
-GHCR before building it. If the tag already exists, the workflow reuses it. Bump
-the RAGFlow version or remove that GHCR tag when the base dependencies need to
-be rebuilt.
+The release workflow tags the build base as `<RAGFlow version>.<base revision>`
+and checks GHCR before building it. If the tag already exists, the workflow
+reuses it. Increment `docker/BUILD_BASE_REVISION` when base dependencies change
+so a new base image is built once and reused by later releases.
 
 ## 🐬 Docker environment variables
 

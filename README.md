@@ -118,11 +118,11 @@ docker/manage.sh build
 默认镜像标签格式为：
 
 ```text
-ragflow-build-base:<RAGFlow版本>
+ragflow-build-base:<RAGFlow版本>.<基础镜像修订号>
 ragflow-local:<RAGFlow版本>.<7位Git提交哈希>
 ```
 
-可以通过 `RAGFLOW_BUILD_BASE_IMAGE` 和 `RAGFLOW_IMAGE` 指定其他镜像名称。联网环境可以将构建基础镜像发布到 GHCR；内部环境只需拉取该基础镜像，并通过 `UBUNTU_MIRROR`、`PYPI_INDEX_URL` 和 `NPM_REGISTRY` 配置内部软件源后构建最终镜像。
+基础镜像修订号由 `docker/BUILD_BASE_REVISION` 管理，从 `1` 开始；基础依赖发生变化时依次递增为 `2`、`3`。可以通过 `RAGFLOW_BUILD_BASE_IMAGE` 和 `RAGFLOW_IMAGE` 指定其他镜像名称。联网环境可以将构建基础镜像发布到 GHCR；内部环境只需拉取该基础镜像，并通过 `UBUNTU_MIRROR`、`PYPI_INDEX_URL` 和 `NPM_REGISTRY` 配置内部软件源后构建最终镜像。
 
 ### 部署测试环境
 

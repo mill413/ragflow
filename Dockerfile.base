@@ -121,7 +121,7 @@ RUN --mount=type=cache,id=ragflow_base_uv,target=/root/.cache/uv,sharing=locked 
 
 # Node.js is part of the build base so final builds only need access to npm.
 RUN --mount=type=cache,id=ragflow_base_apt,target=/var/cache/apt,sharing=locked \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get purge -y nodejs npm && \
     apt-get autoremove -y && \
     apt-get update && \
