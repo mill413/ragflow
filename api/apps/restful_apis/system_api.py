@@ -19,7 +19,7 @@ import logging
 from datetime import datetime
 from timeit import default_timer as timer
 
-from quart import jsonify, request
+from quart import current_app, jsonify, request
 
 from api.apps import login_required, current_user
 from api.utils.api_utils import get_json_result, get_data_error_result, server_error_response, generate_confirmation_token
@@ -39,6 +39,12 @@ from rag.utils.redis_conn import REDIS_CONN
 @manager.route("/system/ping", methods=["GET"])  # noqa: F821
 async def ping():
     return "pong", 200
+
+
+@manager.route("/system/openapi.json", methods=["GET"])  # noqa: F821
+async def openapi_spec():
+    schema = current_app.extensions["QUART_SCHEMA"].openapi_provider.schema()
+    return current_app.json.response(schema)
 
 
 @manager.route("/system/version", methods=["GET"])  # noqa: F821
@@ -264,9 +270,6 @@ def token_list():
                   token:
                     type: string
                     description: The API token.
-                  name:
-                    type: string
-                    description: Name of the token.
                   create_time:
                     type: string
                     description: Token creation time.
@@ -297,12 +300,6 @@ async def new_token():
       - API Tokens
     security:
       - ApiKeyAuth: []
-    parameters:
-      - in: query
-        name: name
-        type: string
-        required: false
-        description: Name of the token.
     responses:
       200:
         description: Token generated successfully.

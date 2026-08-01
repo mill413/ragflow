@@ -407,6 +407,7 @@ export default {
   adminLogout: `${restAPIv1}/admin/logout`,
   adminListUsers: `${restAPIv1}/admin/users`,
   adminCreateUser: `${restAPIv1}/admin/users`,
+  adminImportUsers: `${restAPIv1}/admin/users/batch`,
   adminSetSuperuser: (username: string) =>
     `${restAPIv1}/admin/users/${username}/admin`,
   adminGetUserDetails: (username: string) =>
@@ -457,6 +458,10 @@ export default {
   adminManagedModel: (modelId: string) =>
     `${restAPIv1}/admin/models/${modelId}`,
   adminModelWorkspaces: `${restAPIv1}/admin/models/workspaces`,
+  adminApiTokens: `${restAPIv1}/admin/api-tokens`,
+  adminApiToken: (tokenId: string) =>
+    `${restAPIv1}/admin/api-tokens/${tokenId}`,
+  adminApiTokenWorkspaces: `${restAPIv1}/admin/api-tokens/workspaces`,
 
   adminListServices: `${restAPIv1}/admin/services`,
   adminShowServiceDetails: (serviceId: string) =>
@@ -492,6 +497,7 @@ export default {
 
   adminGetSystemVersion: `${restAPIv1}/admin/version`,
   adminGetMonitoringSummary: `${restAPIv1}/admin/monitoring/summary`,
+  adminOpenApi: `${restAPIv1}/admin/openapi.json`,
 
   // Sandbox settings
   adminListSandboxProviders: `${restAPIv1}/admin/sandbox/providers`,

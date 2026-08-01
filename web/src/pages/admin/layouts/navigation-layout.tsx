@@ -15,7 +15,9 @@ import {
   LucideFileSearch,
   LucideLogOut,
   LucideBrainCircuit,
+  LucideBookOpenCheck,
   LucideLibrary,
+  LucideKeyRound,
   LucideMessageSquare,
   LucidePanelLeftClose,
   LucidePanelLeftOpen,
@@ -140,6 +142,16 @@ const AdminNavigationLayout = () => {
         path: Routes.AdminModelManagement,
         name: t('admin.modelManagement'),
         icon: <LucideBrainCircuit className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminApiTokenManagement,
+        name: t('admin.apiTokenManagement'),
+        icon: <LucideKeyRound className="size-[1em]" />,
+      },
+      {
+        path: Routes.AdminApiDocs,
+        name: t('admin.apiDocs'),
+        icon: <LucideBookOpenCheck className="size-[1em]" />,
       },
       {
         path: Routes.AdminSandboxSettings,

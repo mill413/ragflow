@@ -20,12 +20,13 @@ from typing import Any
 
 from common.time_utils import current_timestamp, datetime_format
 from datetime import datetime
-from flask import Blueprint, Response, request
+from flask import Blueprint, Response, current_app, request
 from flask_login import current_user, login_required, logout_user
 
 from auth import login_verify, login_admin, check_admin_auth
 from responses import success_response, error_response
 from services import (
+    APITokenMgr,
     AdminModelMgr,
     ConfigMgr,
     EnvironmentsMgr,
@@ -47,6 +48,7 @@ from common.versions import get_ragflow_version
 from api.utils.api_utils import generate_confirmation_token
 from api.db.services.workspace_parser_service import WorkspaceParserService
 from common.log_utils import get_log_levels, set_log_level
+from openapi import build_admin_openapi_spec
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
 
@@ -54,6 +56,13 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
 @admin_bp.route("/ping", methods=["GET"])
 def ping():
     return success_response(message="pong")
+
+
+@admin_bp.route("/openapi.json", methods=["GET"])
+@login_required
+@check_admin_auth
+def admin_openapi():
+    return build_admin_openapi_spec(current_app)
 
 
 @admin_bp.route("/login", methods=["POST"])
@@ -128,6 +137,23 @@ def create_user():
         return error_response(e.message, e.code)
     except Exception as e:
         return error_response(str(e))
+
+
+@admin_bp.route("/users/batch", methods=["POST"])
+@login_required
+@check_admin_auth
+def import_users():
+    try:
+        data = request.get_json() or {}
+        return success_response(
+            UserMgr.import_users(data.get("users")),
+            "Users imported",
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        logging.exception("Failed to import users")
+        return error_response(str(e), 500)
 
 
 @admin_bp.route("/users/<username>/department", methods=["PUT"])
@@ -1061,6 +1087,71 @@ def get_environments():
         return success_response(res)
     except AdminException as e:
         return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/api-tokens", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_api_tokens():
+    try:
+        return success_response(APITokenMgr.list_tokens(), "Get all API Tokens")
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/api-tokens", methods=["POST"])
+@login_required
+@check_admin_auth
+def create_api_token():
+    try:
+        return success_response(
+            APITokenMgr.create_token(request.get_json() or {}),
+            "API Token created",
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/api-tokens/workspaces", methods=["GET"])
+@login_required
+@check_admin_auth
+def list_api_token_workspaces():
+    try:
+        return success_response(
+            APITokenMgr.list_workspaces(),
+            "Get API Token workspaces",
+        )
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/api-tokens/<token_id>", methods=["GET"])
+@login_required
+@check_admin_auth
+def get_api_token(token_id: str):
+    try:
+        return success_response(APITokenMgr.get_token(token_id), "Get API Token")
+    except AdminException as e:
+        return error_response(e.message, e.code)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@admin_bp.route("/api-tokens/<token_id>", methods=["DELETE"])
+@login_required
+@check_admin_auth
+def delete_api_token(token_id: str):
+    try:
+        return success_response(
+            APITokenMgr.delete_token(token_id),
+            "API Token deleted",
+        )
+    except AdminException as e:
+        return error_response(e.message, e.code)
     except Exception as e:
         return error_response(str(e), 500)
 

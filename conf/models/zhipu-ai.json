@@ -299,20 +299,6 @@
       }
     },
     {
-      "name": "embedding-2",
-      "max_tokens": 512,
-      "model_types": [
-        "embedding"
-      ]
-    },
-    {
-      "name": "embedding-3",
-      "max_tokens": 512,
-      "model_types": [
-        "embedding"
-      ]
-    },
-    {
       "name": "glm-asr-2512",
       "max_tokens": 4096,
       "model_types": [

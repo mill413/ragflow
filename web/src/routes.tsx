@@ -85,6 +85,8 @@ export enum Routes {
   AdminFileManagement = `${AdminResourceManagement}/files`,
   AdminQuotaManagement = `${Admin}/quotas`,
   AdminModelManagement = `${Admin}/models`,
+  AdminApiTokenManagement = `${Admin}/api-tokens`,
+  AdminApiDocs = `${Admin}/api-docs`,
   AdminSandboxSettings = `${Admin}/sandbox-settings`,
   AdminWhitelist = `${Admin}/whitelist`,
   AdminRoles = `${Admin}/roles`,
@@ -440,6 +442,14 @@ const routeConfigOptions = [
               {
                 path: Routes.AdminModelManagement,
                 Component: () => import('@/pages/admin/models'),
+              },
+              {
+                path: Routes.AdminApiTokenManagement,
+                Component: () => import('@/pages/admin/api-tokens'),
+              },
+              {
+                path: Routes.AdminApiDocs,
+                Component: () => import('@/pages/admin/api-docs'),
               },
               {
                 path: Routes.AdminSandboxSettings,

@@ -508,8 +508,10 @@ class LLM4Tenant:
         self.trace_context = kwargs.pop("trace_context", None) or {}
         self.langfuse_session_id = kwargs.pop("langfuse_session_id", None)
         self.tenant_id = tenant_id
+        self.lang = lang
         self.llm_name = model_config["llm_name"]
         self.model_config = model_config
+        self._model_kwargs = dict(kwargs)
         self.mdl = TenantLLMService.model_instance(model_config, lang=lang, **kwargs)
         assert self.mdl, "Can't find model for {}/{}/{}".format(tenant_id, model_config["model_type"], model_config["llm_name"])
         self.max_length = model_config.get("max_tokens") or 8192

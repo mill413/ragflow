@@ -15,6 +15,7 @@
 #
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -66,6 +67,7 @@ from api.db.db_models import (
     UserCanvas,
     UserTenant,
 )
+from api.utils.api_utils import generate_confirmation_token
 from api.utils.crypt import check_password_hash, decrypt, get_plain_password, validate_password
 from api.utils.model_utils import calculate_model_type, get_model_type_human
 from api.utils import health_utils
@@ -148,6 +150,52 @@ class OrganizationMgr:
     def ensure_department_exists(cls, department_id):
         if department_id not in cls._department_map(cls._load()):
             raise AdminException("Department not found", 404)
+
+    @classmethod
+    def ensure_department_path(cls, department_path):
+        department_path = str(department_path or "").strip()
+        if not department_path:
+            return None
+
+        parts = [part.strip() for part in department_path.strip("/").split("/")]
+        if any(not part for part in parts):
+            raise AdminException(f"Invalid department path: {department_path}", 400)
+
+        data = cls._load()
+        parent_id = None
+        changed = False
+        for name in parts:
+            matches = [
+                department
+                for department in data["departments"]
+                if department.get("parent_id") == parent_id
+                and department.get("name") == name
+            ]
+            if len(matches) > 1:
+                raise AdminException(
+                    f"Duplicate departments found in path: {department_path}",
+                    409,
+                )
+            if matches:
+                parent_id = matches[0]["id"]
+                continue
+
+            now = datetime.now(timezone.utc).isoformat()
+            department = {
+                "id": uuid.uuid4().hex,
+                "name": name,
+                "parent_id": parent_id,
+                "path": cls._build_path(data, name, parent_id),
+                "created_at": now,
+                "updated_at": now,
+            }
+            data["departments"].append(department)
+            parent_id = department["id"]
+            changed = True
+
+        if changed:
+            cls._save(data)
+        return parent_id
 
     @classmethod
     def create_department(cls, name, parent_id=None):
@@ -446,6 +494,12 @@ class UserMgr:
 
     @staticmethod
     def create_user(username, nickname, password, role="user") -> dict:
+        return create_new_user(
+            UserMgr._build_new_user_info(username, nickname, password, role)
+        )
+
+    @staticmethod
+    def _build_new_user_info(username, nickname, password, role="user"):
         # Validate the email address
         if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", username):
             raise AdminException(f"Invalid email address: {username}!")
@@ -467,7 +521,68 @@ class UserMgr:
             "login_channel": "password",
             "is_superuser": role == "admin",
         }
-        return create_new_user(user_info_dict)
+        return user_info_dict
+
+    @staticmethod
+    def import_users(rows):
+        if not isinstance(rows, list) or not rows:
+            raise AdminException("At least one user is required", 400)
+        if len(rows) > 1000:
+            raise AdminException("A maximum of 1000 users can be imported at once", 400)
+
+        errors = []
+        created = 0
+        for row_number, row in enumerate(rows, start=2):
+            email = ""
+            try:
+                if not isinstance(row, dict):
+                    raise AdminException("Invalid row", 400)
+                email = str(row.get("email") or "").strip()
+                password = row.get("password")
+                if not email:
+                    raise AdminException("Email is required", 400)
+                if not password:
+                    raise AdminException("Password is required", 400)
+
+                user_info = UserMgr._build_new_user_info(
+                    email,
+                    row.get("nickname", ""),
+                    password,
+                )
+                department_id = OrganizationMgr.ensure_department_path(
+                    row.get("department_path")
+                )
+                result = create_new_user(user_info)
+                if not result.get("success"):
+                    raise AdminException("Create user failed")
+                OrganizationMgr.set_user_department(
+                    result["user_info"]["id"], department_id
+                )
+                created += 1
+            except AdminException as exc:
+                errors.append(
+                    {
+                        "row": row_number,
+                        "email": email,
+                        "message": exc.message,
+                    }
+                )
+            except Exception as exc:
+                logging.exception("Failed to import user from row %s", row_number)
+                errors.append(
+                    {
+                        "row": row_number,
+                        "email": email,
+                        "message": str(exc),
+                    }
+                )
+
+        return {
+            "total": len(rows),
+            "created": created,
+            "failed": len(errors),
+            "errors": errors,
+        }
 
     @staticmethod
     def delete_user(username):
@@ -603,6 +718,139 @@ class UserMgr:
         # update is_active
         UserService.update_user(usr.id, {"is_superuser": False})
         return "Revoke successfully!"
+
+
+class APITokenMgr:
+    @staticmethod
+    def _token_id(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _find(cls, token_id: str):
+        token_id = str(token_id or "").strip().lower()
+        if len(token_id) != 64:
+            raise AdminException("API Token not found", 404)
+        for token in APITokenService.get_all():
+            if cls._token_id(token.token) == token_id:
+                return token
+        raise AdminException("API Token not found", 404)
+
+    @staticmethod
+    def _workspace_map() -> dict[str, dict[str, str]]:
+        valid = StatusEnum.VALID.value
+        users = {
+            user.id: user
+            for user in User.select(User.id, User.email, User.nickname).where(
+                User.status == valid
+            )
+        }
+        workspaces: dict[str, dict[str, str]] = {}
+        for tenant in Tenant.select(Tenant.id, Tenant.name).where(
+            Tenant.status == valid
+        ):
+            user = users.get(tenant.id)
+            if user:
+                workspaces[tenant.id] = {
+                    "id": tenant.id,
+                    "name": user.nickname or user.email or tenant.name or tenant.id,
+                    "type": WorkspaceType.PERSONAL.value,
+                }
+                continue
+            if (
+                WorkspaceAccessService.get_workspace_type(tenant.id)
+                == WorkspaceType.TEAM
+            ):
+                workspaces[tenant.id] = {
+                    "id": tenant.id,
+                    "name": tenant.name or tenant.id,
+                    "type": WorkspaceType.TEAM.value,
+                }
+        return workspaces
+
+    @classmethod
+    def list_workspaces(cls) -> list[dict[str, str]]:
+        return sorted(
+            cls._workspace_map().values(),
+            key=lambda workspace: (
+                workspace["type"] != WorkspaceType.PERSONAL.value,
+                workspace["name"].casefold(),
+            ),
+        )
+
+    @classmethod
+    def _serialize(
+        cls,
+        token: APIToken,
+        workspaces: dict[str, dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        workspaces = workspaces if workspaces is not None else cls._workspace_map()
+        workspace = workspaces.get(token.tenant_id)
+        raw_token = token.token or ""
+        source = token.source if token.source in {"agent", "dialog"} else "workspace"
+        return {
+            "id": cls._token_id(raw_token),
+            "token": raw_token,
+            "workspace_id": token.tenant_id,
+            "workspace_name": workspace["name"] if workspace else token.tenant_id,
+            "workspace_type": workspace["type"] if workspace else "unknown",
+            "source": source,
+            "resource_id": token.dialog_id,
+            "create_date": token.create_date,
+            "update_date": token.update_date,
+        }
+
+    @classmethod
+    def list_tokens(cls) -> list[dict[str, Any]]:
+        workspaces = cls._workspace_map()
+        tokens = [
+            cls._serialize(token, workspaces) for token in APITokenService.get_all()
+        ]
+        return sorted(
+            tokens,
+            key=lambda token: (
+                token.get("create_date") is not None,
+                token.get("create_date"),
+            ),
+            reverse=True,
+        )
+
+    @classmethod
+    def get_token(cls, token_id: str) -> dict[str, Any]:
+        return cls._serialize(cls._find(token_id))
+
+    @classmethod
+    def create_token(cls, data: dict[str, Any]) -> dict[str, Any]:
+        workspace_id = str(data.get("workspace_id") or "").strip()
+        if workspace_id not in cls._workspace_map():
+            raise AdminException("Workspace not found", 404)
+
+        secret = generate_confirmation_token()
+        now = datetime.now()
+        token = APIToken(
+            tenant_id=workspace_id,
+            token=secret,
+            beta=generate_confirmation_token().replace("ragflow-", "")[:32],
+            create_time=int(now.timestamp() * 1000),
+            create_date=now,
+            update_time=None,
+            update_date=None,
+        )
+        if not APITokenService.save(**token.to_dict()):
+            raise AdminException("Failed to create API Token", 500)
+        return {"token": cls._serialize(token), "secret": secret}
+
+    @classmethod
+    def delete_token(cls, token_id: str) -> bool:
+        token = cls._find(token_id)
+        deleted = APITokenService.filter_delete(
+            [
+                APIToken.tenant_id == token.tenant_id,
+                APIToken.token == token.token,
+            ]
+        )
+        if not deleted:
+            raise AdminException("API Token not found", 404)
+        return True
 
 
 def _get_workspace_model_configuration(workspace_id: str) -> dict[str, Any]:

@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import * as XLSX from 'xlsx';
 
 import {
   createColumnHelper,
@@ -30,8 +31,11 @@ import {
   HardDrive,
   Library,
   LucideClipboardList,
+  LucideDownload,
   LucideExternalLink,
+  LucideFileDown,
   LucideTrash2,
+  LucideUpload,
   LucideUserLock,
   LucideUserPlus,
   UserCheck,
@@ -42,6 +46,7 @@ import { rsaPsw } from '@/utils';
 import { cn } from '@/lib/utils';
 
 import { AdminRefreshButton } from './components/admin-refresh-button';
+import message from '@/components/ui/message';
 import Spotlight from '@/components/spotlight';
 import { TableEmpty } from '@/components/table-skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +95,7 @@ import {
   deleteUser,
   grantSuperuser,
   getUserLoginUrl,
+  importUsers,
   listDepartments,
   listRoles,
   listUsers,
@@ -169,6 +175,10 @@ function AdminUserManagement() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [createUserModalOpen, setCreateUserModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File>();
+  const [importResult, setImportResult] =
+    useState<AdminService.ImportUsersResult>();
   const [selectedUserEmail, setSelectedUserEmail] = useState<string>();
   const [userToMakeAction, setUserToMakeAction] =
     useState<AdminService.ListUsersItem | null>(null);
@@ -264,6 +274,97 @@ function AdminUserManagement() {
     },
     retry: false,
   });
+
+  const importUsersMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!firstSheet) {
+        throw new Error(t('admin.userImportEmptyFile'));
+      }
+
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        firstSheet,
+        { defval: '', raw: false },
+      );
+      const getValue = (
+        row: Record<string, unknown>,
+        aliases: string[],
+      ): string => {
+        const key = Object.keys(row).find((item) =>
+          aliases.includes(item.trim().toLowerCase()),
+        );
+        return key ? String(row[key] ?? '').trim() : '';
+      };
+      const users = rows
+        .map((row) => {
+          const password = getValue(row, ['password', '密码']);
+          return {
+            email: getValue(row, ['email', '邮箱']),
+            nickname: getValue(row, ['nickname', '昵称']),
+            password: password ? (rsaPsw(password) as string) : '',
+            departmentPath: getValue(row, [
+              'department',
+              'department_path',
+              '部门',
+              '部门路径',
+            ]),
+          };
+        })
+        .filter((user) => Object.values(user).some((value) => Boolean(value)));
+      if (!users.length) {
+        throw new Error(t('admin.userImportEmptyFile'));
+      }
+      return (await importUsers(users)).data.data;
+    },
+    onSuccess: (result) => {
+      setImportResult(result);
+      queryClient.invalidateQueries({ queryKey: ['admin/listUsers'] });
+      if (!result.failed) {
+        message.success(t('admin.userImportSucceeded'));
+      }
+    },
+    onError: (error) => {
+      message.error(
+        error instanceof Error
+          ? error.message
+          : t('admin.userImportReadFailed'),
+      );
+    },
+    retry: false,
+  });
+
+  const exportUsers = useCallback(() => {
+    const rows = (usersList ?? []).map((user) => ({
+      email: user.email,
+      nickname: user.nickname,
+      password: user.password_plain,
+      department: user.department_path,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: ['email', 'nickname', 'password', 'department'],
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'users');
+    XLSX.writeFile(
+      workbook,
+      `users_${new Date().toISOString().slice(0, 10).replaceAll('-', '')}.xlsx`,
+    );
+  }, [usersList]);
+
+  const downloadImportTemplate = useCallback(() => {
+    const worksheet = XLSX.utils.json_to_sheet([
+      {
+        email: 'user@example.com',
+        nickname: '示例用户',
+        password: 'password',
+        department: '总部/研发部',
+      },
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'users');
+    XLSX.writeFile(workbook, 'user_import_template.xlsx');
+  }, []);
 
   const setSuperuserMutation = useMutation({
     mutationFn: ({
@@ -694,7 +795,7 @@ function AdminUserManagement() {
                   {t('admin.userMonitoring.description')}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-3">
                 <AdminRefreshButton
                   queryKeys={[
                     ['admin/listUsers'],
@@ -703,6 +804,22 @@ function AdminUserManagement() {
                     ['admin/userDetail'],
                   ]}
                 />
+                <Button
+                  variant="outline"
+                  className="h-10 px-4"
+                  onClick={exportUsers}
+                >
+                  <LucideDownload />
+                  {t('admin.exportUsers')}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-10 px-4"
+                  onClick={() => setImportModalOpen(true)}
+                >
+                  <LucideUpload />
+                  {t('admin.importUsers')}
+                </Button>
                 <Button
                   className="h-10 px-4"
                   onClick={() => setCreateUserModalOpen(true)}
@@ -902,6 +1019,98 @@ function AdminUserManagement() {
               loading={deleteUserMutation.isPending}
             >
               {t('admin.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={importModalOpen}
+        onOpenChange={(open) => {
+          setImportModalOpen(open);
+          if (!open) {
+            setImportFile(undefined);
+            setImportResult(undefined);
+            importUsersMutation.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('admin.importUsers')}</DialogTitle>
+            <DialogDescription>
+              {t('admin.userImportDescription')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <section className="space-y-4 px-6">
+            <Input
+              type="file"
+              accept=".csv,.xls,.xlsx"
+              onChange={(event) => {
+                setImportFile(event.target.files?.[0]);
+                setImportResult(undefined);
+              }}
+            />
+            <div className="flex items-center justify-between gap-4 text-sm text-text-secondary">
+              <span>{t('admin.userImportColumns')}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={downloadImportTemplate}
+              >
+                <LucideFileDown />
+                {t('admin.downloadImportTemplate')}
+              </Button>
+            </div>
+
+            {importResult && (
+              <div className="space-y-3 rounded-lg border-0.5 border-border-button p-4">
+                <div className="font-medium">
+                  {t('admin.userImportSummary', {
+                    total: importResult.total,
+                    created: importResult.created,
+                    failed: importResult.failed,
+                  })}
+                </div>
+                {importResult.errors.length > 0 && (
+                  <ScrollArea className="max-h-48">
+                    <div className="space-y-2 pr-3 text-sm text-text-secondary">
+                      {importResult.errors.map((error) => (
+                        <div key={`${error.row}-${error.email}`}>
+                          {t('admin.userImportRowError', {
+                            row: error.row,
+                            email: error.email || '-',
+                            message: error.message,
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
+          </section>
+
+          <DialogFooter className="gap-4 px-6 py-4">
+            <Button
+              variant="outline"
+              className="h-10 px-4"
+              onClick={() => setImportModalOpen(false)}
+            >
+              {t('admin.close')}
+            </Button>
+            <Button
+              className="h-10 px-4"
+              disabled={!importFile || importUsersMutation.isPending}
+              loading={importUsersMutation.isPending}
+              onClick={() =>
+                importFile && importUsersMutation.mutate(importFile)
+              }
+            >
+              <LucideUpload />
+              {t('admin.startImport')}
             </Button>
           </DialogFooter>
         </DialogContent>

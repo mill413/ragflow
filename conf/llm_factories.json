@@ -1742,18 +1742,6 @@
                     "is_tools": true
                 },
                 {
-                    "llm_name": "embedding-2",
-                    "tags": "TEXT EMBEDDING",
-                    "max_tokens": 512,
-                    "model_type": "embedding"
-                },
-                {
-                    "llm_name": "embedding-3",
-                    "tags": "TEXT EMBEDDING",
-                    "max_tokens": 512,
-                    "model_type": "embedding"
-                },
-                {
                     "llm_name": "glm-asr",
                     "tags": "SPEECH2TEXT",
                     "max_tokens": 4096,
