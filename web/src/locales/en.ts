@@ -3564,6 +3564,26 @@ Important structured information may include: names, dates, locations, events, k
       resourceManagement: 'Resource management',
       quotaManagement: 'Quota management',
       modelManagement: 'Model management',
+      apiTokenManagement: 'API Token management',
+      apiDocs: 'API docs',
+      apiDocsPage: {
+        title: 'API documentation',
+        description:
+          'Browse administrator and main-site resource endpoints, then send test requests with the current administrator identity.',
+        adminTab: 'Administrator API',
+        mainTab: 'Main-site API',
+        mainTitle: 'Main-site resource API',
+        mainDescription:
+          'This first batch covers teams, datasets, chats, and searches. More main-site resources will be added later.',
+        loadFailed: 'Failed to load the administrator API documentation',
+        mainLoadFailed: 'Failed to load the main-site API documentation',
+        groups: {
+          team: 'Teams',
+          dataset: 'Datasets',
+          chat: 'Chats',
+          search: 'Searches',
+        },
+      },
       userModelConfiguration: 'Model configuration',
       defaultModelConfiguration: 'Default model configuration',
       personalModels: 'Personal models',
@@ -3610,6 +3630,46 @@ Important structured information may include: names, dates, locations, events, k
           unlimited: 'Unlimited',
           configured: 'Configured',
           overLimit: 'Over limit',
+        },
+      },
+
+      apiTokenManagementPage: {
+        title: 'API Token management',
+        description:
+          'Manage API Tokens for personal and team workspaces. Administrators can view and copy full tokens from the list.',
+        create: 'Create token',
+        delete: 'Delete token',
+        token: 'Token',
+        workspace: 'Workspace',
+        workspacePlaceholder: 'Select a personal or team workspace',
+        workspaceType: 'Workspace type',
+        source: 'Usage scope',
+        createdAt: 'Created at',
+        updatedAt: 'Last updated',
+        search: 'Search token, workspace, or ID',
+        total: 'Total tokens',
+        personalTotal: 'Personal workspace tokens',
+        teamTotal: 'Team workspace tokens',
+        resourceTotal: 'Application-bound tokens',
+        createDescription:
+          'The token is bound to the selected workspace and cannot be moved later.',
+        deleteDescription:
+          'Delete this token? All API calls using it will stop working immediately.',
+        created: 'API Token created',
+        deleted: 'API Token deleted',
+        secretTitle: 'Save API Token',
+        secretDescription:
+          'The token has been created. You can copy it now or view it later in the management list.',
+        savedSecret: 'I have saved it',
+        workspaceTypes: {
+          personal: 'Personal',
+          team: 'Team',
+          unknown: 'Unknown',
+        },
+        sources: {
+          workspace: 'Workspace',
+          agent: 'Agent',
+          dialog: 'Chat',
         },
       },
 
@@ -4089,6 +4149,20 @@ Important structured information may include: names, dates, locations, events, k
       deleteUserConfirmation: 'Are you sure you want to delete this user?',
 
       createNewUser: 'Create new user',
+      importUsers: 'Import users',
+      exportUsers: 'Export users',
+      startImport: 'Start import',
+      downloadImportTemplate: 'Download template',
+      userImportDescription:
+        'CSV and Excel files are supported. Each row creates a regular user; existing emails are not overwritten.',
+      userImportColumns:
+        'Required columns: email, password. Optional columns: nickname, department. Use Parent/Child paths; missing levels are created automatically.',
+      userImportEmptyFile: 'The file contains no user data to import',
+      userImportReadFailed: 'Unable to read the import file',
+      userImportSucceeded: 'User import completed',
+      userImportSummary:
+        '{{total}} total, {{created}} created, {{failed}} failed',
+      userImportRowError: 'Row {{row}} ({{email}}): {{message}}',
       changePassword: 'Change password',
       newPassword: 'New password',
       confirmNewPassword: 'Confirm new password',

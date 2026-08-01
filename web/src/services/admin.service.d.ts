@@ -132,6 +132,17 @@ declare namespace AdminService {
     uploaded_storage_bytes: number;
   };
 
+  export type ImportUsersResult = {
+    total: number;
+    created: number;
+    failed: number;
+    errors: Array<{
+      row: number;
+      email: string;
+      message: string;
+    }>;
+  };
+
   export type UserDetail = {
     id: string;
     avatar?: string;
@@ -454,6 +465,29 @@ declare namespace AdminService {
     valid: boolean;
     message: string;
     results: Record<string, number>;
+  };
+
+  export type ApiTokenWorkspace = {
+    id: string;
+    name: string;
+    type: 'personal' | 'team';
+  };
+
+  export type ManagedApiToken = {
+    id: string;
+    token: string;
+    workspace_id: string;
+    workspace_name: string;
+    workspace_type: 'personal' | 'team' | 'unknown';
+    source: 'workspace' | 'agent' | 'dialog';
+    resource_id?: string;
+    create_date?: string;
+    update_date?: string;
+  };
+
+  export type CreatedApiToken = {
+    token: ManagedApiToken;
+    secret: string;
   };
 
   export type TaskExecutorHeartbeatItem = {

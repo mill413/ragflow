@@ -104,6 +104,7 @@ const {
   adminLogout,
   adminListUsers,
   adminCreateUser,
+  adminImportUsers,
   adminGetUserDetails,
   adminUpdateUserStatus,
   adminUpdateUserPassword,
@@ -126,6 +127,9 @@ const {
   adminVerifyManagedModel,
   adminManagedModel,
   adminModelWorkspaces,
+  adminApiTokens,
+  adminApiToken,
+  adminApiTokenWorkspaces,
 
   adminListServices,
   adminShowServiceDetails,
@@ -152,6 +156,7 @@ const {
 
   adminGetSystemVersion,
   adminGetMonitoringSummary,
+  adminOpenApi,
 
   adminListSandboxProviders,
   adminGetSandboxProviderSchema,
@@ -183,6 +188,18 @@ export const createUser = (
     nickname,
     password,
     department_id: departmentId || null,
+  });
+
+export const importUsers = (
+  users: Array<{
+    email: string;
+    nickname: string;
+    password: string;
+    departmentPath: string;
+  }>,
+) =>
+  request.post<ResponseData<AdminService.ImportUsersResult>>(adminImportUsers, {
+    users,
   });
 
 export const grantSuperuser = (email: string) =>
@@ -326,10 +343,7 @@ export const updateWorkspaceChunkMethod = (
       chunk_method: string;
       enabled: boolean;
     }>
-  >(
-    api.adminWorkspaceChunkMethod(workspaceId, parserId),
-    { enabled },
-  );
+  >(api.adminWorkspaceChunkMethod(workspaceId, parserId), { enabled });
 export const listManagedResources = ({
   workspaceIds,
   ...params
@@ -471,6 +485,23 @@ export const updateManagedModel = (
   );
 export const deleteManagedModel = (modelId: string) =>
   request.delete<ResponseData<boolean>>(adminManagedModel(modelId));
+export const listManagedApiTokens = () =>
+  request.get<ResponseData<AdminService.ManagedApiToken[]>>(adminApiTokens);
+export const listApiTokenWorkspaces = () =>
+  request.get<ResponseData<AdminService.ApiTokenWorkspace[]>>(
+    adminApiTokenWorkspaces,
+  );
+export const createManagedApiToken = (data: { workspaceId: string }) =>
+  request.post<ResponseData<AdminService.CreatedApiToken>>(
+    adminApiTokens,
+    data,
+  );
+export const getManagedApiToken = (tokenId: string) =>
+  request.get<ResponseData<AdminService.ManagedApiToken>>(
+    adminApiToken(tokenId),
+  );
+export const deleteManagedApiToken = (tokenId: string) =>
+  request.delete<ResponseData<boolean>>(adminApiToken(tokenId));
 export const updateUserStatus = (email: string, status: 'on' | 'off') =>
   request.put(adminUpdateUserStatus(email), { activate_status: status });
 export const updateUserPassword = (email: string, password: string) =>
@@ -569,6 +600,9 @@ export const importWhitelistFromExcel = (file: File) => {
 
 export const getSystemVersion = () =>
   request.get<ResponseData<{ version: string }>>(adminGetSystemVersion);
+
+export const getAdminOpenApi = () =>
+  request.get<Record<string, unknown>>(adminOpenApi);
 
 // Sandbox settings APIs
 export const listSandboxProviders = () =>
