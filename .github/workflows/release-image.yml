@@ -26,15 +26,20 @@ jobs:
         shell: bash
         run: |
           RAGFLOW_VERSION="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1)"
+          BUILD_BASE_REVISION="$(tr -d '[:space:]' < docker/BUILD_BASE_REVISION)"
           GIT_COMMIT="${GITHUB_SHA::7}"
           if [[ -z "${RAGFLOW_VERSION}" ]]; then
             echo "Unable to read the RAGFlow version from pyproject.toml" >&2
             exit 1
           fi
+          if [[ ! "${BUILD_BASE_REVISION}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid build base revision: ${BUILD_BASE_REVISION}" >&2
+            exit 1
+          fi
           {
             echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}"
             echo "BUILD_BASE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ragflow-build-base"
-            echo "BUILD_BASE_TAG=${RAGFLOW_VERSION}"
+            echo "BUILD_BASE_TAG=${RAGFLOW_VERSION}.${BUILD_BASE_REVISION}"
             echo "GIT_COMMIT=${GIT_COMMIT}"
             echo "RELEASE_VERSION=${RAGFLOW_VERSION}.${GIT_COMMIT}"
           } >> "${GITHUB_ENV}"

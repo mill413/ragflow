@@ -84,19 +84,22 @@ read_env_value() {
 initialize_image_names() {
   local configured_base_image
   local configured_image
+  local build_base_revision
   local git_commit
   local ragflow_version
   local versioned_image
 
   configured_base_image="$(read_env_value RAGFLOW_BUILD_BASE_IMAGE)"
   configured_image="$(read_env_value RAGFLOW_IMAGE)"
+  build_base_revision="$(tr -d '[:space:]' < "${PROJECT_ROOT}/docker/BUILD_BASE_REVISION")"
   ragflow_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${PROJECT_ROOT}/pyproject.toml" | head -n 1)"
   git_commit="$(git -C "${PROJECT_ROOT}" rev-parse --short=7 HEAD)"
   [[ -n "${ragflow_version}" ]] || die "unable to read the RAGFlow version from pyproject.toml"
+  [[ "${build_base_revision}" =~ ^[1-9][0-9]*$ ]] || die "invalid build base revision: ${build_base_revision}"
   [[ -n "${git_commit}" ]] || die "unable to resolve the current Git commit"
 
   versioned_image="ragflow-local:${ragflow_version}.${git_commit}"
-  export RAGFLOW_BUILD_BASE_IMAGE="${RAGFLOW_BUILD_BASE_IMAGE:-${configured_base_image:-ragflow-build-base:${ragflow_version}}}"
+  export RAGFLOW_BUILD_BASE_IMAGE="${RAGFLOW_BUILD_BASE_IMAGE:-${configured_base_image:-ragflow-build-base:${ragflow_version}.${build_base_revision}}}"
   export RAGFLOW_IMAGE="${RAGFLOW_IMAGE:-${configured_image:-${versioned_image}}}"
   export RAGFLOW_LOCAL_IMAGE="${RAGFLOW_LOCAL_IMAGE:-${RAGFLOW_IMAGE}}"
 }
