@@ -19,7 +19,11 @@ import os
 import re
 
 from api.db.db_models import Connector2Kb, Document, File, SyncLogs
-from api.db.joint_services.tenant_model_service import resolve_model_config, resolve_model_id
+from api.db.joint_services.tenant_model_service import (
+    get_composite_model_name_by_ids,
+    resolve_model_config,
+    resolve_model_id,
+)
 from api.db.services.connector_service import Connector2KbService, SyncLogsService
 from api.db.services.document_service import DocumentService, queue_raptor_o_graphrag_tasks
 from api.db.services.file2document_service import File2DocumentService
@@ -557,6 +561,15 @@ def list_datasets(tenant_id: str, args: dict):
             }
         )
         response_data_list.append(remap_dictionary_keys(kb))
+
+    embed_model_names = get_composite_model_name_by_ids(
+        [dataset["embedding_model"] for dataset in response_data_list],
+    )
+    for dataset in response_data_list:
+        dataset["embedding_model_name"] = embed_model_names.get(
+            dataset["embedding_model"],
+            "",
+        )
     return True, {"data": response_data_list, "total": total}
 
 
