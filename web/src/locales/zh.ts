@@ -1277,6 +1277,16 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       reasoning: '推理',
       reasoningTip:
         '在问答过程中是否启用推理工作流，例如Deepseek-R1或OpenAI o1等模型所采用的方式。启用后，该功能允许模型访问外部知识，并借助思维链推理等技术逐步解决复杂问题。通过将问题分解为可处理的步骤，这种方法增强了模型提供准确回答的能力，从而在需要逻辑推理和多步思考的任务上表现更优。',
+      tavilyApiKeyTip:
+        '如果 API 密钥设置正确，它将利用 Tavily 进行网络搜索作为知识库的补充。',
+      tavilyApiKeyMessage: '请输入你的 Tavily API Key',
+      webSearchProvider: '网络搜索服务',
+      webSearchProviderTip: '选择启用联网搜索时使用的搜索服务。',
+      webSearchProviderPlaceholder: '请选择网络搜索服务',
+      queritApiKeyTip:
+        '选择 Querit 后，将使用 Querit 的网络搜索结果补充知识库检索。',
+      queritApiKeyMessage: '请输入你的 Querit API Key',
+      tavilyApiKeyHelp: '如何获取？',
       crossLanguage: '跨语言搜索',
       crossLanguagePlaceholder: '请选择',
       crossLanguageTip: `选择一种或多种语言进行跨语言搜索。如果未选择任何语言，系统将使用原始查询进行搜索。`,

@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { UseKnowledgeGraphFormField } from '@/components/use-knowledge-graph-item';
+import { WebSearchFormField } from '@/components/web-search-form-field';
 import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
 import { prefixName } from '@/utils/form';
 import { getDirAttribute } from '@/utils/text-direction';
@@ -179,6 +180,7 @@ export function ChatPromptEngine({
         <TOCEnhanceFormField
           name={prefixName(prefix, 'prompt_config.toc_enhance')}
         ></TOCEnhanceFormField>
+        <WebSearchFormField prefix={prefix} />
         <MetadataFilter></MetadataFilter>
         <FormField
           control={form.control}
