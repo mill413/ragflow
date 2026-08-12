@@ -280,6 +280,35 @@ def resolve_model_config(tenant_id, model_type: str | enum.Enum, model_ref: str)
     return get_model_config_from_provider_instance(tenant_id, model_type, model_ref)
 
 
+def resolve_model_config_with_fallback(
+    tenant_id,
+    model_type: str | enum.Enum,
+    model_ref: str,
+    fallback_model_ref: str | None,
+):
+    """Resolve a configured model reference, falling back after stale lookups.
+
+    Parser configurations created before tenant model IDs were introduced can
+    retain a ``model@instance@provider`` reference after that instance is
+    renamed or removed.  Task records also contain the tenant's current stable
+    model ID, so use it when the legacy lookup is no longer valid.  Only lookup
+    failures trigger the fallback; configuration and runtime errors still
+    propagate unchanged.
+    """
+    try:
+        return resolve_model_config(tenant_id, model_type, model_ref)
+    except LookupError:
+        if not fallback_model_ref or fallback_model_ref == model_ref:
+            raise
+        logger.warning(
+            "Model reference %s is no longer valid for tenant %s; falling back to model id %s",
+            model_ref,
+            tenant_id,
+            fallback_model_ref,
+        )
+        return resolve_model_config(tenant_id, model_type, fallback_model_ref)
+
+
 def get_model_config_from_provider_instance(tenant_id, model_type: str | enum.Enum, model_name: str):
     pure_model_name, instance_name, provider_name = split_model_name(model_name)
     model_type_val = model_type if isinstance(model_type, str) else model_type.value
