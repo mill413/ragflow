@@ -6,7 +6,6 @@ import { MetadataFilter } from '@/components/metadata-filter';
 import { RerankFormFields } from '@/components/rerank';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import { SwitchFormField } from '@/components/switch-fom-field';
-import { TavilyFormField } from '@/components/tavily-form-field';
 import { TOCEnhanceFormField } from '@/components/toc-enhance-form-field';
 import { TopNFormField } from '@/components/top-n-item';
 import { Button } from '@/components/ui/button';
@@ -180,9 +179,6 @@ export function ChatPromptEngine({
         <TOCEnhanceFormField
           name={prefixName(prefix, 'prompt_config.toc_enhance')}
         ></TOCEnhanceFormField>
-        <TavilyFormField
-          name={prefixName(prefix, 'prompt_config.tavily_api_key')}
-        ></TavilyFormField>
         <MetadataFilter></MetadataFilter>
         <FormField
           control={form.control}
