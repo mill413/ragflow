@@ -36,12 +36,21 @@ const formatDuration = (seconds: number) => {
   const remainingSeconds = safeSeconds % 60;
 
   if (hours > 0) {
-    return `${hours}h ${minutes}m ${remainingSeconds}s`;
+    return t('setting.dataSourceDurationHours', {
+      hours,
+      minutes,
+      seconds: remainingSeconds,
+    });
   }
   if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s`;
+    return t('setting.dataSourceDurationMinutes', {
+      minutes,
+      seconds: remainingSeconds,
+    });
   }
-  return `${remainingSeconds}s`;
+  return t('setting.dataSourceDurationSeconds', {
+    seconds: remainingSeconds,
+  });
 };
 
 const getTaskCountdownSeconds = (row: IDataSourceLog, now: number) => {
@@ -68,7 +77,13 @@ const TaskCountdown = ({ row, now }: { row: IDataSourceLog; now: number }) => {
     return '';
   }
 
-  return <span>Task starts in {formatDuration(remainingSeconds)}</span>;
+  return (
+    <span>
+      {t('setting.dataSourceTaskStartsIn', {
+        duration: formatDuration(remainingSeconds),
+      })}
+    </span>
+  );
 };
 
 const getSummary = (row: IDataSourceLog, now: number) => {
@@ -77,11 +92,13 @@ const getSummary = (row: IDataSourceLog, now: number) => {
   }
 
   if (row.status === RunningStatus.RUNNING || row.status === '1') {
-    return row.task_type === 'prune' ? 'Prune in progress' : 'Sync in progress';
+    return row.task_type === 'prune'
+      ? t('setting.dataSourcePruneInProgress')
+      : t('setting.dataSourceSyncInProgress');
   }
 
   if (row.status === RunningStatus.FAIL || row.status === '4') {
-    return row.error_msg || 'Task failed';
+    return row.error_msg || t('setting.dataSourceTaskFailed');
   }
 
   if (row.status === RunningStatus.CANCEL || row.status === '2') {
@@ -89,13 +106,27 @@ const getSummary = (row: IDataSourceLog, now: number) => {
   }
 
   if (row.task_type === 'prune') {
-    return `deleted=${row.docs_removed_from_index || 0}, error=${row.error_count || 0}`;
+    return t('setting.dataSourcePruneSummary', {
+      deleted: row.docs_removed_from_index || 0,
+      error: row.error_count || 0,
+    });
   }
 
-  return `total=${row.total_docs_indexed || 0}, added=${row.new_docs_indexed || 0}, updated=${Math.max(
-    0,
-    (row.total_docs_indexed || 0) - (row.new_docs_indexed || 0),
-  )}, error=${row.error_count || 0}`;
+  return t('setting.dataSourceSyncSummary', {
+    total: row.total_docs_indexed || 0,
+    added: row.new_docs_indexed || 0,
+    updated: Math.max(
+      0,
+      (row.total_docs_indexed || 0) - (row.new_docs_indexed || 0),
+    ),
+    error: row.error_count || 0,
+  });
+};
+
+const getTaskTypeLabel = (taskType?: string) => {
+  if (taskType === 'prune') return t('setting.dataSourcePrune');
+  if (!taskType || taskType === 'sync') return t('setting.dataSourceSync');
+  return taskType;
 };
 
 const columns = ({
@@ -151,12 +182,12 @@ const columns = ({
     },
     {
       accessorKey: 'task_type',
-      header: 'Task Type',
-      cell: ({ row }) => row.original.task_type || 'sync',
+      header: t('setting.dataSourceTaskType'),
+      cell: ({ row }) => getTaskTypeLabel(row.original.task_type),
     },
     {
       id: 'summary',
-      header: 'Summary',
+      header: t('setting.dataSourceSummary'),
       cell: ({ row }) => (
         <div className="max-w-[32rem] whitespace-normal break-words text-text-primary">
           {getSummary(row.original as IDataSourceLog, now)}
