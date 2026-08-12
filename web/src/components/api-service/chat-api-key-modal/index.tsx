@@ -63,11 +63,11 @@ const ChatApiKeyModal = ({
   return (
     <>
       <Dialog open onOpenChange={hideModal}>
-        <DialogContent className="max-w-[50vw]">
+        <DialogContent className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-3xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{t('apiKey')}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-col gap-4">
             <div className="space-y-2">
               <div className="text-sm font-medium">{t('workspace')}</div>
               <Select value={workspaceId} onValueChange={setWorkspaceId}>
@@ -86,7 +86,7 @@ const ChatApiKeyModal = ({
             {listLoading ? (
               <div className="flex justify-center py-8">Loading...</div>
             ) : (
-              <Table>
+              <Table rootClassName="max-h-[45vh]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Token</TableHead>
@@ -97,7 +97,7 @@ const ChatApiKeyModal = ({
                 <TableBody>
                   {tokenList?.map((tokenItem) => (
                     <TableRow key={tokenItem.token}>
-                      <TableCell className="font-medium break-all">
+                      <TableCell className="min-w-64 break-all font-mono text-xs">
                         {tokenItem.token}
                       </TableCell>
                       <TableCell>{formatDate(tokenItem.create_date)}</TableCell>
