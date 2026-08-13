@@ -25,16 +25,15 @@ from pydantic import BaseModel, Field, validator
 from quart import request
 
 from api.apps import login_required
-from api.db.joint_services.tenant_model_service import (
-    split_model_name,
-    resolve_model_config,
-    get_tenant_default_model_by_type,
-)
 from api.db.db_models import Document, Task
+from api.db.joint_services.tenant_model_service import (
+    get_tenant_default_model_by_type,
+    resolve_model_config,
+)
 from api.db.services.doc_metadata_service import DocMetadataService
 from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
-from api.db.services.knowledgebase_service import KnowledgebaseService
+from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
 from api.db.services.llm_service import LLMBundle
 from api.db.services.task_service import TaskService, cancel_all_task_of, queue_tasks
 from api.db.services.tenant_llm_service import TenantLLMService
@@ -47,8 +46,8 @@ from api.utils.api_utils import (
     get_result,
     server_error_response,
 )
-from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.image_utils import store_chunk_image
+from api.utils.pagination_utils import validate_rest_api_page_size
 from api.utils.reference_metadata_utils import (
     enrich_chunks_with_document_metadata,
     resolve_reference_metadata_preferences,
@@ -63,7 +62,6 @@ from common.tag_feature_utils import validate_tag_features
 from rag.app.tag import label_question
 from rag.nlp import search
 from rag.prompts.generator import cross_languages, keyword_extraction
-
 
 DOC_STOP_PARSING_INVALID_STATE_MESSAGE = "Can't stop parsing document that has not started or already completed"
 DOC_STOP_PARSING_INVALID_STATE_ERROR_CODE = "DOC_STOP_PARSING_INVALID_STATE"
@@ -322,9 +320,9 @@ async def retrieval_test(tenant_id):
         if not KnowledgebaseService.accessible(kb_id=id, user_id=tenant_id):
             return get_error_data_result(f"You don't own the dataset {id}.")
     kbs = KnowledgebaseService.get_by_ids(kb_ids)
-    embd_nms = list(set([split_model_name(kb.embd_id)[0] for kb in kbs]))
-    if len(embd_nms) != 1:
-        return get_result(message="Datasets use different embedding models.", code=RetCode.DATA_ERROR)
+    embd_err = validate_dataset_embedding_models(kbs)
+    if embd_err:
+        return get_result(message=embd_err, code=RetCode.DATA_ERROR)
     if "question" not in req:
         return get_error_data_result("`question` is required.")
     page = int(req.get("page", 1))
@@ -609,7 +607,6 @@ async def get_document_structure_graph(tenant_id, dataset_id, document_id):
     migration doesn't drop their data on the floor. Empty templates
     (zero entities AND zero relations) are filtered out.
     """
-    from rag.nlp import search
     from api.db.services.compilation_template_group_service import CompilationTemplateGroupService
 
     if not KnowledgebaseService.accessible(kb_id=dataset_id, user_id=tenant_id):
@@ -805,7 +802,7 @@ async def get_document_structure_graph(tenant_id, dataset_id, document_id):
     for tid in configured_ids:
         if tid in grouped and tid not in ordered_ids:
             ordered_ids.append(tid)
-    for bucket_id in grouped.keys():
+    for bucket_id in grouped:
         if bucket_id not in ordered_ids:
             ordered_ids.append(bucket_id)
 
