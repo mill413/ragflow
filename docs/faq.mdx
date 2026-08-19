@@ -610,6 +610,7 @@ From v0.22.0 onwards, RAGFlow includes MinerU (&ge; 2.6.3) as an optional PDF pa
    - `MINERU_DELETE_OUTPUT`: Whether to delete temporary output when a temporary directory is used:
      - `1`: Delete.
      - `0`: Retain.
+   - `MINERU_HEALTHCHECK_TIMEOUT`: (optional) Timeout in seconds for checking the MinerU API's `openapi.json` endpoint. Defaults to `30`.
 3. In the web UI, navigate to your dataset's **Configuration** page and find the **Ingestion pipeline** section:
    - If you decide to use a chunking method from the **Built-in** dropdown, ensure it supports PDF parsing, then select **MinerU** from the **PDF parser** dropdown.
    - If you use a custom ingestion pipeline instead, select **MinerU** in the **PDF parser** section of the **Parser** component.
@@ -634,6 +635,7 @@ The table below summarizes the most frequently used MinerU environment variables
 | `MINERU_SERVER_URL`    | URL of remote vLLM server (for `vlm-http-client`) | _unset_ | `MINERU_SERVER_URL=http://your-vllm-server-ip:30000`                                           |
 | `MINERU_OUTPUT_DIR`    | Directory for MinerU output files  | System-defined temporary directory  | `MINERU_OUTPUT_DIR=/home/ragflow/mineru/output`                                                |
 | `MINERU_DELETE_OUTPUT` | Whether to delete MinerU output directory when a temp dir is used | `1` (delete temp output) | `MINERU_DELETE_OUTPUT=0`                                                                       |
+| `MINERU_HEALTHCHECK_TIMEOUT` | Timeout for the MinerU OpenAPI availability check, in seconds | `30` | `MINERU_HEALTHCHECK_TIMEOUT=60` |
 
 1. Set `MINERU_APISERVER` to point RAGFlow to your MinerU API server.
 2. Set `MINERU_BACKEND` to specify a parsing backend.

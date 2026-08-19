@@ -107,6 +107,9 @@ env:
   MAX_CONCURRENT_CHUNK_BUILDERS: "1"
   MAX_CONCURRENT_MINIO: "8"
 
+  # MinerU OpenAPI 可用性检查超时，单位为秒。
+  MINERU_HEALTHCHECK_TIMEOUT: "30"
+
   # Elasticsearch 容器的内存上限在下方设置为 10 GiB。JVM 堆保持为 4 GiB，
   # 以便将其余内存留给 Lucene 和操作系统缓存。
   ES_JAVA_OPTS: "-Xms4g -Xmx4g"

@@ -8,13 +8,13 @@ const awsRegionOptions = BedrockRegionList.map((r) => ({
 }));
 export const S3Constant = (t: TFunction) => [
   {
-    label: 'Bucket Name',
+    label: t('setting.dataSourceBucketName'),
     name: 'config.bucket_name',
     type: FormFieldType.Text,
     required: true,
   },
   {
-    label: 'Region',
+    label: t('setting.dataSourceRegion'),
     name: 'config.credentials.region',
     type: FormFieldType.Select,
     required: false,
@@ -27,13 +27,13 @@ export const S3Constant = (t: TFunction) => [
         credentials.aws_access_key_id || credentials.aws_secret_access_key,
       );
       if (bucketType === 's3' && hasAccessKey) {
-        return Boolean(val) || 'Region is required when using access key';
+        return Boolean(val) || t('setting.dataSourceRegionRequired');
       }
       return true;
     },
   },
   {
-    label: 'Prefix',
+    label: t('setting.dataSourcePrefix'),
     name: 'config.prefix',
     type: FormFieldType.Text,
     required: false,
@@ -41,22 +41,25 @@ export const S3Constant = (t: TFunction) => [
   },
 
   {
-    label: 'Mode',
+    label: t('setting.dataSourceMode'),
     name: 'config.bucket_type',
     type: FormFieldType.Segmented,
     options: [
       { label: 'S3', value: 's3' },
-      { label: 'S3 Compatible', value: 's3_compatible' },
+      {
+        label: t('setting.dataSourceS3Compatible'),
+        value: 's3_compatible',
+      },
     ],
   },
   {
-    label: 'Authentication',
+    label: t('setting.dataSourceAuthentication'),
     name: 'config.credentials.authentication_method',
     type: FormFieldType.Segmented,
     options: [
-      { label: 'Access Key', value: 'access_key' },
-      { label: 'IAM Role', value: 'iam_role' },
-      { label: 'Assume Role', value: 'assume_role' },
+      { label: t('setting.dataSourceAccessKey'), value: 'access_key' },
+      { label: t('setting.dataSourceIamRole'), value: 'iam_role' },
+      { label: t('setting.dataSourceAssumeRole'), value: 'assume_role' },
     ],
     shouldRender: (formValues: any) => {
       const bucketType = formValues?.config?.bucket_type;
@@ -65,17 +68,16 @@ export const S3Constant = (t: TFunction) => [
   },
   {
     name: 'config.credentials.aws_access_key_id',
-    label: 'AWS Access Key ID',
+    label: t('setting.dataSourceAccessKeyId'),
     type: FormFieldType.Text,
     customValidate: (val: string, formValues: any) => {
       const authMode = formValues?.config?.credentials?.authentication_method;
       const bucketType = formValues?.config?.bucket_type;
-      console.log('authMode', authMode, val);
       if (
         !val &&
         (authMode === 'access_key' || bucketType === 's3_compatible')
       ) {
-        return 'AWS Access Key ID is required';
+        return t('setting.dataSourceAccessKeyIdRequired');
       }
       return true;
     },
@@ -87,13 +89,13 @@ export const S3Constant = (t: TFunction) => [
   },
   {
     name: 'config.credentials.aws_secret_access_key',
-    label: 'AWS Secret Access Key',
+    label: t('setting.dataSourceSecretAccessKey'),
     type: FormFieldType.Password,
     customValidate: (val: string, formValues: any) => {
       const authMode = formValues?.config?.credentials?.authentication_method;
       const bucketType = formValues?.config?.bucket_type;
       if (authMode === 'access_key' || bucketType === 's3_compatible') {
-        return Boolean(val) || '"AWS Secret Access Key" is required';
+        return Boolean(val) || t('setting.dataSourceSecretAccessKeyRequired');
       }
       return true;
     },
@@ -105,15 +107,15 @@ export const S3Constant = (t: TFunction) => [
   },
   {
     name: 'config.credentials.aws_role_arn',
-    label: 'Role ARN',
-    tooltip: 'The role will be assumed by the runtime environment.',
+    label: t('setting.dataSourceRoleArn'),
+    tooltip: t('setting.dataSourceRoleArnTip'),
     type: FormFieldType.Text,
     placeholder: 'arn:aws:iam::123456789012:role/YourRole',
     customValidate: (val: string, formValues: any) => {
       const authMode = formValues?.config?.credentials?.authentication_method;
       const bucketType = formValues?.config?.bucket_type;
       if (authMode === 'iam_role' || bucketType === 's3') {
-        return Boolean(val) || '"AWS Secret Access Key" is required';
+        return Boolean(val) || t('setting.dataSourceRoleArnRequired');
       }
       return true;
     },
@@ -134,20 +136,23 @@ export const S3Constant = (t: TFunction) => [
     },
     render: () => (
       <div className="text-sm text-text-secondary bg-bg-card border border-border-button rounded-md px-3 py-2">
-        {'No credentials required. Uses the default environment role.'}
+        {t('setting.dataSourceNoCredentialsRequired')}
       </div>
     ),
   },
   {
     name: 'config.credentials.addressing_style',
-    label: 'Addressing Style',
+    label: t('setting.dataSourceAddressingStyle'),
     tooltip: t('setting.S3CompatibleAddressingStyleTip'),
     required: false,
     type: FormFieldType.Select,
     defaultValue: 'virtual',
     options: [
-      { label: 'Virtual Hosted Style', value: 'virtual' },
-      { label: 'Path Style', value: 'path' },
+      {
+        label: t('setting.dataSourceVirtualHostedStyle'),
+        value: 'virtual',
+      },
+      { label: t('setting.dataSourcePathStyle'), value: 'path' },
     ],
     shouldRender: (formValues: any) => {
       // const authMode = formValues?.config?.authMode;
@@ -157,7 +162,7 @@ export const S3Constant = (t: TFunction) => [
   },
   {
     name: 'config.credentials.endpoint_url',
-    label: 'Endpoint URL',
+    label: t('setting.dataSourceEndpointUrl'),
     tooltip: t('setting.S3CompatibleEndpointUrlTip'),
     placeholder: 'https://fsn1.your-objectstorage.com',
     required: false,

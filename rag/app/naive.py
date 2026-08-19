@@ -179,11 +179,10 @@ def by_mineru(
                 )
                 return sections, tables, pdf_parser
             except Exception as e:
-                logging.error(f"Failed to parse pdf via LLMBundle MinerU ({mineru_llm_name}): {e}")
+                logging.exception(f"Failed to parse pdf via LLMBundle MinerU ({mineru_llm_name}): {e}")
+                raise
 
-    if callback:
-        callback(-1, "MinerU not found.")
-    return None, None, None
+    raise RuntimeError("MinerU model not configured. Please add MinerU in Model Providers or set MINERU_* environment variables.")
 
 
 def by_docling(filename, binary=None, from_page=0, to_page=MAXIMUM_PAGE_NUMBER, lang="Chinese", callback=None, pdf_cls=None, **kwargs):

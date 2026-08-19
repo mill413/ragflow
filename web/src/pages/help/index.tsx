@@ -29,22 +29,7 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import { Link } from 'react-router';
 import englishGuide from './content/en.md?raw';
 import chineseGuide from './content/zh.md?raw';
-
-type GuideHeading = {
-  id: string;
-  title: string;
-};
-
-const headingPattern = /^##\s+(.+?)\s+\{#([a-z0-9-]+)\}\s*$/gm;
-
-const parseGuide = (source: string) => {
-  const headings: GuideHeading[] = [];
-  const content = source.replace(headingPattern, (_, title, id) => {
-    headings.push({ id, title });
-    return `## ${title}`;
-  });
-  return { content, headings };
-};
+import { parseGuide } from './guide';
 
 const getNodeText = (children: ReactNode): string =>
   Children.toArray(children)
@@ -196,7 +181,10 @@ function Help() {
   };
 
   const headingIds = useMemo(
-    () => new Map(guide.headings.map(({ id, title }) => [title, id])),
+    () =>
+      new Map(
+        guide.headings.map(({ id, level, title }) => [`${level}:${title}`, id]),
+      ),
     [guide.headings],
   );
 
@@ -210,18 +198,24 @@ function Help() {
       const title = getNodeText(children);
       return (
         <h2
-          id={headingIds.get(title)}
+          id={headingIds.get(`2:${title}`)}
           className="mb-4 mt-14 scroll-mt-6 border-b border-border-button pb-3 text-2xl font-semibold text-text-primary first:mt-0"
         >
           {children}
         </h2>
       );
     },
-    h3: ({ children }) => (
-      <h3 className="mb-2 mt-7 text-lg font-semibold text-text-primary">
-        {children}
-      </h3>
-    ),
+    h3: ({ children }) => {
+      const title = getNodeText(children);
+      return (
+        <h3
+          id={headingIds.get(`3:${title}`)}
+          className="mb-2 mt-7 scroll-mt-6 text-lg font-semibold text-text-primary"
+        >
+          {children}
+        </h3>
+      );
+    },
     p: ({ children }) => (
       <p className="my-3 text-sm leading-7 text-text-secondary md:text-base">
         {children}
@@ -310,9 +304,10 @@ function Help() {
                 href={`#${heading.id}`}
                 onClick={() => setActiveHeading(heading.id)}
                 className={cn(
-                  'rounded-lg px-3 py-2 text-sm transition-colors',
+                  'rounded-lg px-3 py-2 transition-colors',
+                  heading.level === 3 ? 'text-xs' : 'text-sm font-medium',
                   activeHeading === heading.id
-                    ? 'bg-accent-primary/10 font-medium text-accent-primary'
+                    ? 'bg-accent-primary/10 text-accent-primary'
                     : 'text-text-secondary hover:bg-bg-card hover:text-text-primary',
                 )}
               >
@@ -340,7 +335,10 @@ function Help() {
                     activeHeading === heading.id ? 'location' : undefined
                   }
                   className={cn(
-                    'my-0.5 block rounded-r-lg border-s-2 px-3 py-2 text-sm transition-colors',
+                    'my-0.5 block rounded-r-lg border-s-2 px-3 transition-colors',
+                    heading.level === 3
+                      ? 'ms-3 py-1.5 text-xs'
+                      : 'py-2 text-sm',
                     activeHeading === heading.id
                       ? 'border-accent-primary bg-accent-primary/10 font-medium text-accent-primary'
                       : 'border-transparent text-text-secondary hover:bg-bg-card hover:text-text-primary',

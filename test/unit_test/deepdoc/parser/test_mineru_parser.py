@@ -295,6 +295,7 @@ def test_mineru_availability_probe_uses_bearer_token(monkeypatch):
     parser = module.MinerUParser(
         mineru_api="http://mineru.local",
         api_key="secret-token",
+        healthcheck_timeout=45,
     )
     captured = {}
 
@@ -311,7 +312,38 @@ def test_mineru_availability_probe_uses_bearer_token(monkeypatch):
 
     assert parser.check_installation() == (True, "")
     assert captured["url"] == "http://mineru.local/openapi.json"
+    assert captured["timeout"] == 45
     assert captured["headers"]["Authorization"] == "Bearer secret-token"
+
+
+def test_mineru_availability_probe_reports_http_error(monkeypatch):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser(mineru_api="http://mineru.local")
+
+    def fake_head(url, timeout, allow_redirects, headers):
+        return type("Response", (), {"status_code": 504, "reason": "Gateway Timeout"})()
+
+    monkeypatch.setattr(module.requests, "head", fake_head)
+
+    ok, reason = parser.check_installation()
+
+    assert ok is False
+    assert "HTTP 504 Gateway Timeout" in reason
+
+
+def test_mineru_availability_probe_reports_network_exception(monkeypatch):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser(mineru_api="http://mineru.local")
+
+    def fake_head(url, timeout, allow_redirects, headers):
+        raise module.requests.Timeout("probe timed out")
+
+    monkeypatch.setattr(module.requests, "head", fake_head)
+
+    ok, reason = parser.check_installation()
+
+    assert ok is False
+    assert "Timeout: probe timed out" in reason
 
 
 def test_end_page_minus_one_normalizes_for_mineru_api(monkeypatch, tmp_path):

@@ -60,6 +60,12 @@ class MinerUOcrModel(Base, MinerUParser):
         self.mineru_backend = _resolve_config("mineru_backend", "MINERU_BACKEND", "pipeline")
         self.mineru_server_url = _resolve_config("mineru_server_url", "MINERU_SERVER_URL", "")
         self.mineru_delete_output = bool(int(_resolve_config("mineru_delete_output", "MINERU_DELETE_OUTPUT", 1)))
+        healthcheck_timeout = _resolve_config("mineru_healthcheck_timeout", "MINERU_HEALTHCHECK_TIMEOUT", 30)
+        try:
+            self.mineru_healthcheck_timeout = max(1, int(healthcheck_timeout))
+        except (TypeError, ValueError):
+            logging.warning("Invalid MinerU healthcheck timeout %r; falling back to 30 seconds", healthcheck_timeout)
+            self.mineru_healthcheck_timeout = 30
 
         # Redact sensitive config keys before logging
         redacted_config = {}
@@ -75,6 +81,7 @@ class MinerUOcrModel(Base, MinerUParser):
             mineru_api=self.mineru_api,
             mineru_server_url=self.mineru_server_url,
             api_key=self.mineru_api_key,
+            healthcheck_timeout=self.mineru_healthcheck_timeout,
         )
 
     def check_available(self, backend: Optional[str] = None, server_url: Optional[str] = None) -> tuple[bool, str]:

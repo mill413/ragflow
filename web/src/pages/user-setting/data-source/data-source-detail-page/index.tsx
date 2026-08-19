@@ -52,7 +52,7 @@ const SourceDetailPage = () => {
   const customFields = useMemo(() => {
     return [
       {
-        label: 'Prune Freq',
+        label: t('setting.dataSourcePruneFrequency'),
         name: 'prune_freq',
         type: FormFieldType.Number,
         required: false,
@@ -72,7 +72,7 @@ const SourceDetailPage = () => {
         },
       },
       {
-        label: 'Refresh Freq',
+        label: t('setting.dataSourceRefreshFrequency'),
         name: 'refresh_freq',
         type: FormFieldType.Number,
         required: false,
@@ -89,7 +89,7 @@ const SourceDetailPage = () => {
         ),
       },
       {
-        label: 'Timeout Secs',
+        label: t('setting.dataSourceTimeoutSeconds'),
         name: 'timeout_secs',
         type: FormFieldType.Number,
         required: false,
@@ -161,9 +161,9 @@ const SourceDetailPage = () => {
   }, [actionMode, onSubmit, updateStatus]);
 
   const primaryActionLabel = useMemo(() => {
-    if (actionMode === 'stop') return 'Stop';
-    if (actionMode === 'resume') return 'Resume';
-    return 'Save';
+    if (actionMode === 'stop') return t('setting.dataSourceStop');
+    if (actionMode === 'resume') return t('setting.dataSourceResume');
+    return t('setting.dataSourceSave');
   }, [actionMode]);
 
   useEffect(() => {

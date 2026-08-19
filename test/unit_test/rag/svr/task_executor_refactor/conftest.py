@@ -711,7 +711,7 @@ class patch_pipeline_mocks:
     Usage::
 
         with patch_pipeline_mocks() as m:
-            m.resolve_model_config.return_value = MagicMock()
+            m.resolve_model_config_with_fallback.return_value = MagicMock()
             handler = TaskHandler(ctx)
             await handler.handle()
     """
@@ -724,6 +724,7 @@ class patch_pipeline_mocks:
     # (module_key, attr_name, use_AsyncMock)
     _COMMON = [
         ("task_handler", "resolve_model_config", False),
+        ("task_handler", "resolve_model_config_with_fallback", False),
         ("task_handler", "LLMBundle", False),
         ("task_handler", "get_tenant_default_model_by_type", False),
         ("task_handler", "search.index_name", False),

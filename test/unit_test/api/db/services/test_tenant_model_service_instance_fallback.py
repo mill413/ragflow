@@ -16,6 +16,8 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from common.constants import ActiveStatusEnum
 from api.db.joint_services import tenant_model_service as module
 
@@ -46,3 +48,40 @@ def test_resolve_instance_for_model_falls_back_from_default_to_single_active_ins
     )
 
     assert got is resolved
+
+
+def test_resolve_model_config_with_fallback_uses_stable_model_id_for_stale_reference(monkeypatch):
+    calls = []
+
+    def resolve(_tenant_id, _model_type, model_ref):
+        calls.append(model_ref)
+        if model_ref == "chat@removed-instance@OpenAI":
+            raise LookupError("Instance removed-instance not found")
+        return {"model_id": model_ref}
+
+    monkeypatch.setattr(module, "resolve_model_config", resolve)
+
+    config = module.resolve_model_config_with_fallback(
+        "tenant-1",
+        "chat",
+        "chat@removed-instance@OpenAI",
+        "tenant-model-id",
+    )
+
+    assert config == {"model_id": "tenant-model-id"}
+    assert calls == ["chat@removed-instance@OpenAI", "tenant-model-id"]
+
+
+def test_resolve_model_config_with_fallback_does_not_mask_non_lookup_errors(monkeypatch):
+    def resolve(_tenant_id, _model_type, _model_ref):
+        raise ValueError("invalid model configuration")
+
+    monkeypatch.setattr(module, "resolve_model_config", resolve)
+
+    with pytest.raises(ValueError, match="invalid model configuration"):
+        module.resolve_model_config_with_fallback(
+            "tenant-1",
+            "chat",
+            "chat@instance@OpenAI",
+            "tenant-model-id",
+        )

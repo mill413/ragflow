@@ -148,10 +148,12 @@ class MinerUParser(RAGFlowPdfParser):
         mineru_api: str = "",
         mineru_server_url: str = "",
         api_key: str = "",
+        healthcheck_timeout: int = 30,
     ):
         self.mineru_api = mineru_api.rstrip("/")
         self.mineru_server_url = mineru_server_url.rstrip("/")
         self.api_key = api_key.strip()
+        self.healthcheck_timeout = healthcheck_timeout
         self.outlines = []
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -217,14 +219,19 @@ class MinerUParser(RAGFlowPdfParser):
     @staticmethod
     def _is_http_endpoint_valid(
         url,
-        timeout=5,
+        timeout=30,
         headers: Optional[dict[str, str]] = None,
-    ):
+    ) -> tuple[bool, str]:
         try:
             response = requests.head(url, timeout=timeout, allow_redirects=True, headers=headers)
-            return response.status_code in [200, 301, 302, 307, 308]
-        except Exception:
-            return False
+        except Exception as exc:
+            return False, f"{type(exc).__name__}: {exc}"
+
+        if response.status_code in [200, 301, 302, 307, 308]:
+            return True, ""
+
+        status_reason = getattr(response, "reason", "")
+        return False, f"HTTP {response.status_code}{f' {status_reason}' if status_reason else ''}"
 
     @staticmethod
     def _sanitize_section_text(section: str) -> str:
@@ -262,10 +269,10 @@ class MinerUParser(RAGFlowPdfParser):
 
         api_openapi = f"{self.mineru_api}/openapi.json"
         try:
-            api_ok = self._is_http_endpoint_valid(api_openapi, headers=self._request_headers())
+            api_ok, probe_error = self._is_http_endpoint_valid(api_openapi, timeout=self.healthcheck_timeout, headers=self._request_headers())
             self.logger.info(f"[MinerU] API openapi.json reachable={api_ok} url={api_openapi}")
             if not api_ok:
-                reason = f"[MinerU] MinerU API not accessible: {api_openapi}"
+                reason = f"[MinerU] MinerU API not accessible: {api_openapi}: {probe_error}"
                 return False, reason
         except Exception as exc:
             reason = f"[MinerU] MinerU API check failed: {exc}"
@@ -279,8 +286,10 @@ class MinerUParser(RAGFlowPdfParser):
                 self.logger.warning(reason)
                 return False, reason
             try:
-                server_ok = self._is_http_endpoint_valid(resolved_server)
+                server_ok, server_error = self._is_http_endpoint_valid(resolved_server, timeout=self.healthcheck_timeout)
                 self.logger.info(f"[MinerU] vlm-http-client server check reachable={server_ok} url={resolved_server}")
+                if not server_ok:
+                    self.logger.warning(f"[MinerU] vlm-http-client server probe failed: {resolved_server}: {server_error}")
             except Exception as exc:
                 self.logger.warning(f"[MinerU] vlm-http-client server probe failed: {resolved_server}: {exc}")
 

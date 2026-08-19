@@ -1318,10 +1318,6 @@ async def recommendation():
 
     chat_id = search_config.get("chat_id", "")
     if chat_id:
-        accessible_chat = await _get_accessible_chat(chat_id)
-        if not accessible_chat:
-            return get_json_result(data=False, message="No authorization.", code=RetCode.AUTHENTICATION_ERROR)
-        workspace_id = accessible_chat.tenant_id
         chat_model_config = resolve_model_config(workspace_id, LLMType.CHAT, chat_id)
     else:
         chat_model_config = get_tenant_default_model_by_type(workspace_id, LLMType.CHAT)

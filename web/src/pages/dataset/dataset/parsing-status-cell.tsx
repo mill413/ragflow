@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { DocumentType, RunningStatus } from './constant';
 import { ParsingCard } from './parsing-card';
 import { ReparseDialog } from './reparse-dialog';
+import { shouldSkipReparseOptions } from './reparse-options';
 import { UseChangeDocumentParserShowType } from './use-change-document-parser';
 import { useHandleRunDocumentByIds } from './use-run-document';
 import { isParserRunning } from './utils';
@@ -80,11 +81,7 @@ export function ParseDropdownButton({
         <div>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="static"
-                size="auto"
-                disabled={readOnly}
-              >
+              <Button variant="static" size="auto" disabled={readOnly}>
                 {displayName}
               </Button>
             </TooltipTrigger>
@@ -122,7 +119,6 @@ export function ParsingStatusCell({
     hideModal: hideReparseDialogModal,
   } = useHandleRunDocumentByIds(id);
   const isRunning = isParserRunning(run);
-  const isZeroChunk = chunk_count === 0;
 
   const handleOperationIconClick = (option?: RunDocumentOptions) => {
     handleRunDocumentByIds(record.id, isRunning, option);
@@ -190,11 +186,10 @@ export function ParsingStatusCell({
       )}
       {reparseDialogVisible && (
         <ReparseDialog
-          hidden={
-            (isZeroChunk && !record?.parser_config?.enable_metadata) ||
-            isRunning
-          }
-          // hidden={false}
+          hidden={shouldSkipReparseOptions({
+            chunkCount: chunk_count,
+            isRunning,
+          })}
           enable_metadata={record?.parser_config?.enable_metadata}
           handleOperationIconClick={handleOperationIconClick}
           chunk_num={chunk_count}
