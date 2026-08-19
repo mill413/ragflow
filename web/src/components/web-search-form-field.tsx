@@ -1,4 +1,5 @@
 import queritLogo from '@/assets/querit.png';
+import serplyLogo from '@/assets/serply.png';
 import tavilyLogo from '@/assets/svg/tavily.svg';
 import { RAGFlowSelect } from '@/components/ui/select';
 import { WebSearchProvider } from '@/constants/chat';
@@ -29,6 +30,11 @@ const providerOptions = [
     name: 'Querit',
     logo: queritLogo,
     value: WebSearchProvider.Querit,
+  },
+  {
+    name: 'Serply',
+    logo: serplyLogo,
+    value: WebSearchProvider.Serply,
   },
 ]
   .sort((left, right) => left.name.localeCompare(right.name))
@@ -61,6 +67,13 @@ const providerKeyConfig = {
     tip: 'queritApiKeyTip',
     placeholder: 'queritApiKeyMessage',
     helpUrl: 'https://querit.ai',
+  },
+  [WebSearchProvider.Serply]: {
+    name: 'prompt_config.serply_api_key',
+    label: 'Serply API Key',
+    tip: 'serplyApiKeyTip',
+    placeholder: 'serplyApiKeyMessage',
+    helpUrl: 'https://serply.io',
   },
 } as const;
 

@@ -2672,9 +2672,10 @@ curl --request POST \
 - `use_kg`：是否使用知识图谱。
 - `reasoning`：是否启用推理相关行为。
 - `cross_languages`：跨语言检索语言列表。
-- `web_search_provider`：联网搜索服务，支持 `tavily`、`querit`。
+- `web_search_provider`：联网搜索服务，支持 `tavily`、`querit`、`serply`。
 - `tavily_api_key`：Tavily API Key。
 - `querit_api_key`：Querit API Key。
+- `serply_api_key`：Serply API Key。
 - `toc_enhance`：是否启用目录增强。
 
 未提供 `prompt_config` 时，服务端会补全默认系统提示词、开场白、引用等配置。如果设置了知识库，并且系统提示词包含 `{knowledge}`，服务端会补充对应参数定义。
