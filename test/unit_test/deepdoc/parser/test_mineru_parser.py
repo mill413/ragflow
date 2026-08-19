@@ -371,3 +371,70 @@ def test_end_page_minus_one_normalizes_for_mineru_api(monkeypatch, tmp_path):
     )
 
     assert captured["data"]["end_page_id"] == 12
+
+
+class _FakePdfPage:
+    def __init__(self, image):
+        self.image = image
+
+    def to_image(self, **_kwargs):
+        return type("RenderedPage", (), {"original": self.image})()
+
+
+class _FakePdf:
+    def __init__(self, pages):
+        self.pages = pages
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+def test_pdf_open_and_render_use_shared_pdfplumber_lock(monkeypatch):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser()
+    lock = module.sys.modules[module.LOCK_KEY_pdfplumber]
+
+    class _LockCheckingPage(_FakePdfPage):
+        def to_image(self, **kwargs):
+            assert lock.locked()
+            return super().to_image(**kwargs)
+
+    pages = [_LockCheckingPage(object())]
+
+    def open_pdf(*_args, **_kwargs):
+        assert lock.locked()
+        return _FakePdf(pages)
+
+    monkeypatch.setattr(module.pdfplumber, "open", open_pdf)
+
+    parser.__images__("sample.pdf")
+
+    assert parser.page_images == [pages[0].image]
+    assert not lock.locked()
+
+
+def test_parse_pdf_passes_page_range_to_renderer(monkeypatch, tmp_path):
+    module = _load_mineru_parser(monkeypatch)
+    parser = module.MinerUParser()
+    captured = {}
+
+    def capture_images(_pdf, zoomin=1, page_from=0, page_to=module.MAXIMUM_PAGE_NUMBER, callback=None):
+        captured.update(zoomin=zoomin, page_from=page_from, page_to=page_to, callback=callback)
+
+    monkeypatch.setattr(parser, "__images__", capture_images)
+    monkeypatch.setattr(parser, "_run_mineru", lambda *_args, **_kwargs: tmp_path)
+    monkeypatch.setattr(parser, "_read_output", lambda *_args, **_kwargs: [])
+
+    parser.parse_pdf(
+        filepath=tmp_path / "sample.pdf",
+        binary=b"%PDF-1.4 fake",
+        output_dir=str(tmp_path / "output"),
+        delete_output=False,
+        page_from=13,
+        page_to=25,
+    )
+
+    assert captured == {"zoomin": 1, "page_from": 13, "page_to": 25, "callback": None}
