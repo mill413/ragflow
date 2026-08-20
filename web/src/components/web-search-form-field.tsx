@@ -1,6 +1,7 @@
 import queritLogo from '@/assets/querit.png';
 import serplyLogo from '@/assets/serply.png';
 import tavilyLogo from '@/assets/svg/tavily.svg';
+import youcomLogo from '@/assets/svg/youcom.svg';
 import { RAGFlowSelect } from '@/components/ui/select';
 import { WebSearchProvider } from '@/constants/chat';
 import { useTranslate } from '@/hooks/common-hooks';
@@ -35,6 +36,11 @@ const providerOptions = [
     name: 'Serply',
     logo: serplyLogo,
     value: WebSearchProvider.Serply,
+  },
+  {
+    name: 'You.com',
+    logo: youcomLogo,
+    value: WebSearchProvider.YouCom,
   },
 ]
   .sort((left, right) => left.name.localeCompare(right.name))
@@ -74,6 +80,14 @@ const providerKeyConfig = {
     tip: 'serplyApiKeyTip',
     placeholder: 'serplyApiKeyMessage',
     helpUrl: 'https://serply.io',
+  },
+  [WebSearchProvider.YouCom]: {
+    name: 'prompt_config.youcom_api_key',
+    label: 'You.com API Key',
+    tip: 'youcomApiKeyTip',
+    placeholder: 'youcomApiKeyMessage',
+    helpUrl:
+      'https://you.com/platform?utm_source=infiniflow-ragflow&utm_medium=oss_integration&utm_campaign=2026-08-oss-integrations&utm_content=app',
   },
 } as const;
 
