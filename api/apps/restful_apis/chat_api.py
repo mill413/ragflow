@@ -39,7 +39,7 @@ from api.db.services.chunk_feedback_service import ChunkFeedbackService
 from api.db.services.conversation_service import ConversationService, structure_answer
 from api.db.services.dialog_service import DialogService, gen_mindmap, rag_agent
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
-from api.db.services.llm_service import LLMBundle
+from api.db.services.llm_service import LLMBundle, resolve_llm_setting
 from api.db.services.resource_quota_service import (
     ResourceQuotaExceededError,
     ResourceQuotaService,
@@ -1325,7 +1325,8 @@ async def recommendation():
         chat_model_config = get_tenant_default_model_by_type(workspace_id, LLMType.CHAT)
     chat_mdl = LLMBundle(workspace_id, chat_model_config)
 
-    gen_conf = search_config.get("llm_setting", {"temperature": 0.9})
+    gen_conf = resolve_llm_setting(search_config.get("llm_setting"))
+    gen_conf.pop("parameter", None)
     if "parameter" in gen_conf:
         del gen_conf["parameter"]
     prompt = load_prompt("related_question")
