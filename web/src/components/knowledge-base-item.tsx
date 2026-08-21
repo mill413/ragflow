@@ -1,10 +1,13 @@
 import { DocumentParserType } from '@/constants/knowledge';
-import { useFetchKnowledgeList } from '@/hooks/use-knowledge-request';
+import {
+  useFetchDatasetsByIds,
+  useFetchKnowledgeList,
+} from '@/hooks/use-knowledge-request';
 import { IDataset } from '@/interfaces/database/dataset';
 import { useBuildQueryVariableOptions } from '@/pages/agent/hooks/use-get-begin-query';
 import { useDebounce } from 'ahooks';
 import { toLower } from 'lodash';
-import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { RAGFlowAvatar } from './ragflow-avatar';
@@ -36,27 +39,22 @@ export function useDisableDifferenceEmbeddingDataset(
     debouncedSearchString,
     workspaceId,
   );
-  const datasetCacheRef = useRef(new Map<string, IDataset>());
+  const selectedDatasetIds = useMemo(
+    () => (Array.isArray(datasetId) ? datasetId : []),
+    [datasetId],
+  );
+  const { data: selectedDatasets } = useFetchDatasetsByIds(selectedDatasetIds);
 
   const datasetList = useMemo(() => {
-    datasetListOrigin.forEach((dataset) => {
-      datasetCacheRef.current.set(dataset.id, dataset);
-    });
-
-    const selectedDatasetIds = Array.isArray(datasetId) ? datasetId : [];
-    const selectedDatasets = selectedDatasetIds
-      .map((id) => datasetCacheRef.current.get(id))
-      .filter(Boolean) as IDataset[];
-
     return Array.from(
       new Map(
-        [...datasetListOrigin, ...selectedDatasets].map((dataset) => [
+        [...datasetListOrigin, ...(selectedDatasets ?? [])].map((dataset) => [
           dataset.id,
           dataset,
         ]),
       ).values(),
     );
-  }, [datasetId, datasetListOrigin]);
+  }, [datasetListOrigin, selectedDatasets]);
 
   const selectedEmbedId = useMemo(() => {
     const data = datasetList?.find((item) => item.id === datasetId?.[0]);
@@ -65,7 +63,11 @@ export function useDisableDifferenceEmbeddingDataset(
 
   const nextOptions = useMemo(() => {
     const datasetListMap = datasetList
-      .filter((x) => x.chunk_method !== DocumentParserType.Tag)
+      .filter(
+        (dataset) =>
+          dataset.chunk_count > 0 &&
+          dataset.chunk_method !== DocumentParserType.Tag,
+      )
       .map((item: IDataset) => {
         return {
           label: item.name,

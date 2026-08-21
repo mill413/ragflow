@@ -5,6 +5,10 @@ import { DatasetMetadata } from '@/constants/chat';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useFetchChat, useUpdateChat } from '@/hooks/use-chat-request';
 import { useFindLlmByUuid } from '@/hooks/use-llm-request';
+import {
+  useRevalidateStaleDatasetIds,
+  useStaleDatasetFormSchema,
+} from '@/hooks/use-stale-dataset-validation';
 import { cn } from '@/lib/utils';
 import {
   removeUselessFieldsFromValues,
@@ -27,8 +31,12 @@ import { getWebSearchProvider } from '../web-search-api-key';
 type ChatSettingsProps = { hasSingleChatBox: boolean };
 
 export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
-  const formSchema = useChatSettingSchema();
   const { data } = useFetchChat();
+  const chatSettingSchema = useChatSettingSchema();
+  const { formSchema, datasetsFetched } = useStaleDatasetFormSchema(
+    chatSettingSchema,
+    data?.dataset_ids,
+  );
   const { updateChat, loading } = useUpdateChat();
   const findLlmByUuid = useFindLlmByUuid();
   const { id } = useParams();
@@ -147,6 +155,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
     }
   }, [data, form]);
 
+  useRevalidateStaleDatasetIds(form, datasetsFetched);
   return (
     <>
       {settingVisible || (

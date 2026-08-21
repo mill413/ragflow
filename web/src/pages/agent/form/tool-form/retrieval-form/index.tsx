@@ -9,6 +9,10 @@ import { TOCEnhanceFormField } from '@/components/toc-enhance-form-field';
 import { TopNFormField } from '@/components/top-n-item';
 import { Form } from '@/components/ui/form';
 import { UseKnowledgeGraphFormField } from '@/components/use-knowledge-graph-item';
+import {
+  useRevalidateStaleDatasetIds,
+  useStaleDatasetFormSchema,
+} from '@/hooks/use-stale-dataset-validation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from 'i18next';
 import { omit } from 'lodash';
@@ -34,14 +38,22 @@ export const FormSchema = z.object({
 const RetrievalForm = () => {
   const defaultValues = omit(useValues(), 'top_k');
 
+  const { formSchema, datasetsFetched } = useStaleDatasetFormSchema(
+    FormSchema,
+    defaultValues?.dataset_ids,
+  );
+
   const form = useForm({
     defaultValues: defaultValues,
-    resolver: zodResolver(FormSchema),
+    resolver: zodResolver(formSchema),
+    mode: 'onChange',
   });
 
   const hideKnowledgeGraphField = useHideKnowledgeGraphField(form);
 
   useWatchFormChange(form);
+
+  useRevalidateStaleDatasetIds(form, datasetsFetched);
 
   const ownerTenantId = useOwnerTenantId();
 

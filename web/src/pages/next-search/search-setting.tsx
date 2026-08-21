@@ -29,6 +29,10 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { Spin } from '@/components/ui/spin';
 import { Switch } from '@/components/ui/switch';
 import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
+import {
+  useRevalidateStaleDatasetIds,
+  useStaleDatasetFormSchema,
+} from '@/hooks/use-stale-dataset-validation';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X } from 'lucide-react';
@@ -112,11 +116,22 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
   const { search_config } = data || {};
   const readOnly = data?.capabilities?.update !== true;
   const { llm_setting } = search_config || {};
+  const { t } = useTranslation();
+  const { formSchema, datasetsFetched } = useStaleDatasetFormSchema(
+    SearchSettingFormSchema,
+    search_config?.kb_ids,
+    'search_config.kb_ids',
+  );
   const formMethods = useForm<SearchSettingFormData>({
-    resolver: zodResolver(SearchSettingFormSchema),
+    resolver: zodResolver(formSchema),
+    mode: 'onChange',
   });
 
-  const { t } = useTranslation();
+  useRevalidateStaleDatasetIds(
+    formMethods,
+    datasetsFetched,
+    'search_config.kb_ids',
+  );
   const descriptionDefaultValue = t('search.descriptionValue');
   const resetForm = useCallback(() => {
     formMethods.reset({

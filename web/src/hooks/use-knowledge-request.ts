@@ -838,6 +838,41 @@ export const useSelectKnowledgeOptions = () => {
   return options;
 };
 
+/** Resolve selected datasets directly by ID, including off-page selections. */
+export const useFetchDatasetsByIds = (ids: string[]) => {
+  const sortedIds = useMemo(() => [...ids].sort(), [ids]);
+  const { data, isFetching: loading } = useQuery<IDataset[]>({
+    queryKey: [KnowledgeApiAction.FetchKnowledgeList, 'byIds', sortedIds],
+    initialData: [],
+    enabled: sortedIds.length > 0,
+    gcTime: 0,
+    queryFn: async () => {
+      const responses = await Promise.all(
+        sortedIds.map((id) => listDataset({ id, page_size: 1 })),
+      );
+      return responses.flatMap((response) => response.data?.data ?? []);
+    },
+  });
+
+  return { data, loading };
+};
+
+/** Return persisted dataset IDs that were deleted or no longer have chunks. */
+export const useStaleDatasetIds = (datasetIds?: string[]) => {
+  const persistedIds = useMemo(() => datasetIds ?? [], [datasetIds]);
+  const { data: datasets, loading } = useFetchDatasetsByIds(persistedIds);
+
+  const staleDatasetIds = useMemo(() => {
+    if (loading) return new Set<string>();
+    const usableIds = new Set(
+      datasets.filter((dataset) => dataset.chunk_count > 0).map((dataset) => dataset.id),
+    );
+    return new Set(persistedIds.filter((id) => !usableIds.has(id)));
+  }, [datasets, loading, persistedIds]);
+
+  return { staleDatasetIds, settled: !loading };
+};
+
 //#region tags
 export const useRenameTag = () => {
   const knowledgeBaseId = useKnowledgeBaseId();

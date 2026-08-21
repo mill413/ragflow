@@ -1127,6 +1127,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       setAnOpenerInitial: `你好！ 我是你的助理，有什么可以帮到你的吗？`,
       setAnOpenerTip: '您想如何欢迎您的客户？',
       knowledgeBases: '知识库',
+      datasetUnavailable: '所选知识库已被删除或已不再包含分块。',
       knowledgeBasesPlaceholder: '请选择',
       knowledgeBasesMessage: '请选择',
       knowledgeBasesTip:
