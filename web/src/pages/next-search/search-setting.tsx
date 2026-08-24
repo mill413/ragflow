@@ -13,6 +13,7 @@ import {
   MetadataFilterSchema,
 } from '@/components/metadata-filter';
 import { ModelTreeSelect } from '@/components/model-tree-select';
+import { PrefetchSizeFormField } from '@/components/prefetch-size-item';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,7 @@ const SearchSettingFormSchema = z
       rerank_id: z.string(),
       use_rerank: z.boolean(),
       top_k: z.number(),
+      prefetch_size: z.number().int().min(64).max(256),
       summary: z.boolean(),
       llm_setting: z.object({ ...LlmSettingFieldSchema, ...LLMIdFormField }),
       related_search: z.boolean(),
@@ -136,6 +138,7 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
         rerank_id: search_config?.rerank_id || '',
         use_rerank: search_config?.rerank_id ? true : false,
         top_k: search_config?.top_k || 1024,
+        prefetch_size: search_config?.prefetch_size ?? 100,
         summary: search_config?.summary || false,
         chat_id: search_config?.chat_id || '',
         llm_setting: {
@@ -416,6 +419,10 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
               similarityWeightName="search_config.vector_similarity_weight"
               numberInputClassName="rounded-sm"
             ></SimilaritySliderFormField>
+            <PrefetchSizeFormField
+              name="search_config.prefetch_size"
+              defaultValue={100}
+            ></PrefetchSizeFormField>
             {/* Rerank Model */}
             <FormField
               control={formMethods.control}

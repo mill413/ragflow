@@ -1,22 +1,26 @@
+import { FormLayout } from '@/constants/form';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SelectWithSearch } from './originui/select-with-search';
-import { RAGFlowFormItem } from './ragflow-form';
+import { SliderInputFormField } from './slider-input-form-field';
 
 type TopSelectProps = {
+  max?: number;
   value?: number;
   onChange?(value: number): void;
 };
 
-export function TopSelect({ value = 10, onChange }: TopSelectProps) {
+export function TopSelect({ max = 100, value = 10, onChange }: TopSelectProps) {
   const { t } = useTranslation();
 
   const sizeChangerOptions = useMemo(() => {
-    return [10, 20, 50, 100].map((x) => ({
-      label: <span>{t('common.top', { top: x })}</span>,
-      value: x.toString(),
-    }));
-  }, [t]);
+    return [10, 20, 50, 100]
+      .filter((x) => x <= max)
+      .map((x) => ({
+        label: <span>{t('common.top', { top: x })}</span>,
+        value: x.toString(),
+      }));
+  }, [max, t]);
 
   return (
     <SelectWithSearch
@@ -31,8 +35,12 @@ export function TopSelectFormItem() {
   const { t } = useTranslation();
 
   return (
-    <RAGFlowFormItem label={t('knowledgeConfiguration.top')} name="size">
-      <TopSelect></TopSelect>
-    </RAGFlowFormItem>
+    <SliderInputFormField
+      name="size"
+      label={t('chat.topN')}
+      min={1}
+      max={100}
+      layout={FormLayout.Vertical}
+    ></SliderInputFormField>
   );
 }

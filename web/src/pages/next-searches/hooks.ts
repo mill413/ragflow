@@ -193,6 +193,7 @@ export interface ISearchAppDetailProps extends IWorkspaceResource {
     summary: boolean;
     llm_setting: IllmSettingProps & IllmSettingEnableProps;
     top_k: number;
+    prefetch_size: number;
     use_kg: boolean;
     vector_similarity_weight: number;
     web_search: boolean;

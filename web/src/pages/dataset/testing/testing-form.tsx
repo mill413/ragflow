@@ -7,6 +7,10 @@ import { z } from 'zod';
 import { CrossLanguageFormField } from '@/components/cross-language-form-field';
 import { FormContainer } from '@/components/form-container';
 import {
+  PrefetchSizeFormField,
+  prefetchSizeSchema,
+} from '@/components/prefetch-size-item';
+import {
   MetadataFilter,
   MetadataFilterSchema,
 } from '@/components/metadata-filter';
@@ -56,18 +60,24 @@ export default function TestingForm({
   const { id } = useParams();
   const knowledgeBaseId = id;
 
-  const formSchema = z.object({
-    question: z.string().min(1, {
-      message: t('knowledgeDetails.testTextPlaceholder'),
-    }),
-    ...similarityThresholdSchema,
-    ...vectorSimilarityWeightSchema,
-    ...topKSchema,
-    use_kg: z.boolean().optional(),
-    dataset_ids: z.array(z.string()).optional(),
-    ...MetadataFilterSchema,
-    size: z.number().optional(),
-  });
+  const formSchema = z
+    .object({
+      question: z.string().min(1, {
+        message: t('knowledgeDetails.testTextPlaceholder'),
+      }),
+      ...similarityThresholdSchema,
+      ...vectorSimilarityWeightSchema,
+      ...topKSchema,
+      use_kg: z.boolean().optional(),
+      dataset_ids: z.array(z.string()).optional(),
+      ...MetadataFilterSchema,
+      size: z.number().int().min(1).max(100),
+      ...prefetchSizeSchema,
+    })
+    .refine((values) => values.prefetch_size >= values.size, {
+      message: t('chat.prefetchSizeValidation'),
+      path: ['prefetch_size'],
+    });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -78,6 +88,7 @@ export default function TestingForm({
       use_kg: false,
       dataset_ids: [knowledgeBaseId],
       size: 10,
+      prefetch_size: 64,
     },
   });
 
@@ -112,6 +123,7 @@ export default function TestingForm({
               name={'cross_languages'}
             ></CrossLanguageFormField>
             <MetadataFilter prefix=""></MetadataFilter>
+            <PrefetchSizeFormField></PrefetchSizeFormField>
             <TopSelectFormItem></TopSelectFormItem>
           </FormContainer>
         </div>

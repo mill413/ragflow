@@ -2,6 +2,7 @@ import { Collapse } from '@/components/collapse';
 import { CrossLanguageFormField } from '@/components/cross-language-form-field';
 import { FormContainer } from '@/components/form-container';
 import { MetadataFilter } from '@/components/metadata-filter';
+import { PrefetchSizeFormField } from '@/components/prefetch-size-item';
 import { RerankFormFields } from '@/components/rerank';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import { TOCEnhanceFormField } from '@/components/toc-enhance-form-field';
@@ -55,6 +56,7 @@ const RetrievalForm = () => {
               similarityWeightType="keyword"
               isTooltipShown
             ></SimilaritySliderFormField>
+            <PrefetchSizeFormField></PrefetchSizeFormField>
             <TopNFormField></TopNFormField>
             {hideKnowledgeGraphField || (
               <>

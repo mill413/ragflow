@@ -1162,6 +1162,9 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       optimizePromptUnsavedTip: '请先保存聊天应用',
       topN: 'Top N',
       topNTip: `并非所有相似度得分高于“相似度阈值”的块都会被提供给大语言模型。 LLM 只能看到这些“Top N”块。`,
+      prefetchSize: '预取数量',
+      prefetchSizeTip: '在进行下一步计算之前检索的预取候选分块数量。',
+      prefetchSizeValidation: '预取数量必须大于或等于 Top N。',
       variable: '变量',
       variableTip: `你可以通过对话 API，并配合变量设置来动态调整大模型的系统提示词。
       {knowledge}为系统预留变量，代表从指定知识库召回的文本块。

@@ -1195,6 +1195,11 @@ This auto-tagging feature enhances retrieval by adding another layer of domain-s
       optimizePromptUnsavedTip: 'Save the chat app first',
       topN: 'Top N',
       topNTip: `Not all chunks with similarity score above the 'similarity threshold' will be sent to the LLM. This selects 'Top N' chunks from the retrieved ones.`,
+      prefetchSize: 'Prefetch size',
+      prefetchSizeTip:
+        'The number of candidate chunks retrieved before the next processing step.',
+      prefetchSizeValidation:
+        'Prefetch size must be greater than or equal to Top N.',
       variable: 'Variable',
       variableTip: `Used together with RAGFlow's chat assistant management APIs, variables can help develop more flexible system prompt strategies. The defined variables will be used by 'System prompt' as part of the prompts for the LLM. {knowledge} is a reserved special variable representing chunks retrieved from specified dataset(s), and all variables should be enclosed in curly braces {} in the 'System prompt'. See https://ragflow.io/docs/dev/set_chat_variables for details.`,
       add: 'Add',
