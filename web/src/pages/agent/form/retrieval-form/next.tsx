@@ -10,9 +10,9 @@ import { RAGFlowFormItem } from '@/components/ragflow-form';
 import { RerankFormFields } from '@/components/rerank';
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import {
-  PrefetchSizeFormField,
-  prefetchSizeSchema,
-} from '@/components/prefetch-size-item';
+  RerankCandidatesCountFormField,
+  rerankCandidatesCountSchema,
+} from '@/components/rerank-candidates-count-item';
 import { TOCEnhanceFormField } from '@/components/toc-enhance-form-field';
 import { TopNFormField } from '@/components/top-n-item';
 import {
@@ -50,7 +50,7 @@ export const RetrievalPartialSchema = {
   similarity_threshold: z.coerce.number(),
   keywords_similarity_weight: z.coerce.number(),
   top_n: z.coerce.number(),
-  ...prefetchSizeSchema,
+  ...rerankCandidatesCountSchema,
   top_k: z.coerce.number(),
   dataset_ids: z.array(z.string()),
   rerank_id: z.string(),
@@ -187,7 +187,7 @@ function RetrievalForm({ node }: INextOperatorForm) {
               similarityWeightType="keyword"
               isTooltipShown
             ></SimilaritySliderFormField>
-            <PrefetchSizeFormField></PrefetchSizeFormField>
+            <RerankCandidatesCountFormField></RerankCandidatesCountFormField>
             <TopNFormField></TopNFormField>
             {hideKnowledgeGraphField || (
               <>
