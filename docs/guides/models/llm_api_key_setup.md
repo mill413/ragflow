@@ -43,6 +43,16 @@ After logging into RAGFlow, configuring your model API key through the **service
 
 After logging into RAGFlow, you can *only* configure API Key on the **Model providers** page:
 
+#### Amazon Bedrock API keys
+
+For **Bedrock**, select **API Key**, enter the Bedrock API key and AWS Region, then list and select the models available to that key. RAGFlow keeps the key scoped to that provider instance and sends it as a Bearer token only for that instance's requests.
+
+Bedrock API key authentication does not support rerank models.
+
+Use short-term Bedrock API keys for production whenever possible. Long-term keys remain valid until they expire or are deleted, so store them as secrets, restrict access to the RAGFlow instance, and rotate them regularly.
+
+### Verify the Connection
+
 1. Click on your logo on the top right of the page **>** **Model providers**.
 2. Find your model card under **Models to be added** and click **Add the model**.
 3. Paste your model API key.

@@ -650,6 +650,8 @@ async def update_provider_instance(tenant_id: str = None, provider_id_or_name: s
     base_url = data["base_url"]
     region = data.get("region", "default")
     model_info = data.get("model_info")
+    if model_info is not None and not isinstance(model_info, list):
+        return get_error_argument_result(message="model_info must be an array")
     verify = data.get("verify", True)
 
     try:

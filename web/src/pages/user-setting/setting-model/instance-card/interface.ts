@@ -62,16 +62,23 @@ export interface ProviderInstanceCardProps {
 /**
  * Provider-specific credential fields that the backend expects bundled
  * *inside* `api_key` as an object rather than as top-level keys:
- *   api_key: { api_key, group_id?, api_version?, provider_order? }
+ *   api_key: { api_key?, ...providerCredentials }
  * - MiniMax        → group_id
  * - Azure OpenAI   → api_version
  * - OpenRouter     → provider_order
+ * - Bedrock        → auth_mode / AWS credentials / region
  * When none of these are present the api_key stays a bare string.
  */
 export const API_KEY_NESTED_FIELDS = [
   'group_id',
   'api_version',
   'provider_order',
+  'auth_mode',
+  'bedrock_ak',
+  'bedrock_sk',
+  'aws_role_arn',
+  'bedrock_api_key',
+  'bedrock_region',
 ] as const;
 
 export type ApiKeyNestedField = (typeof API_KEY_NESTED_FIELDS)[number];

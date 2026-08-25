@@ -108,6 +108,7 @@ export interface IInstanceModel {
    * without relying solely on the (possibly unfetched) catalog.
    */
   is_tools?: boolean;
+  extra?: Record<string, any>;
 }
 
 export interface IDefaultModel {

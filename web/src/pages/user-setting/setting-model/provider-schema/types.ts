@@ -134,6 +134,11 @@ export interface ProviderConfig {
    */
   submitTransform?: (values: Record<string, any>) => Record<string, any>;
   /**
+   * Inverse of `submitTransform`: maps the merged backend instance back
+   * into provider-specific form values when editing a saved instance.
+   */
+  echoTransform?: (instance: Record<string, any>) => Record<string, any>;
+  /**
    * Optional link at the bottom of the modal
    * e.g. the official documentation link for Ollama-family providers
    */

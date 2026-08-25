@@ -141,6 +141,7 @@ const SettingModelV2: FC = () => {
         instance_name: values.instance_name,
         api_key: values.api_key,
         base_url: values.base_url ?? values.api_base,
+        region: values.region,
         model_info: values.model_info,
       } as any);
       if (ret?.code === 0) {

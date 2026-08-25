@@ -199,7 +199,11 @@ export const useFetchInstanceModels = (
   instanceName: string,
 ) => {
   const { workspaceId } = useWorkspace();
-  const { data, isFetching: loading } = useQuery<IInstanceModel[]>({
+  const {
+    data,
+    isFetching: loading,
+    isSuccess,
+  } = useQuery<IInstanceModel[]>({
     queryKey: [
       ...LlmKeys.instanceModels(providerName, instanceName),
       workspaceId,
@@ -212,11 +216,14 @@ export const useFetchInstanceModels = (
         { provider_name: providerName, instance_name: instanceName },
         true,
       );
+      if (data?.code !== 0) {
+        throw new Error(data?.message || 'Failed to fetch instance models');
+      }
       return data?.data ?? [];
     },
   });
 
-  return { data, loading };
+  return { data, loading, isSuccess };
 };
 
 export type LlmItem = { name: string; logo: string } & IMyLlmValue;
@@ -308,6 +315,9 @@ export const useAddProviderInstance = () => {
         queryClient.invalidateQueries({
           queryKey: LlmKeys.providerInstances(params.llm_factory),
         });
+        queryClient.invalidateQueries({
+          queryKey: LlmKeys.allModels(),
+        });
       }
       return data;
     },
@@ -325,7 +335,7 @@ export const useVerifyProviderConnection = () => {
     mutationKey: [LLMApiAction.VerifyProviderConnection],
     mutationFn: async (params: {
       provider_name: string;
-      api_key: string;
+      api_key: string | object;
       base_url?: string;
       region?: string;
       model_info?: IModelInfo[];

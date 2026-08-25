@@ -2232,6 +2232,8 @@ Example: Virtual Hosted Style`,
       listModelsLoading: 'Loading models…',
       selectModelBeforeVerify:
         'Please select at least one model before verification.',
+      selectModelBeforeSave:
+        'Please discover and select at least one model before saving.',
       addCustomModel: 'Add custom model',
       addCustomModelTitle: 'Add custom model',
       batchAddModels: 'Add all visible models',

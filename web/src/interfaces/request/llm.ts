@@ -37,14 +37,8 @@ export interface IAddProviderRequestBody {
 
 export type IAddProviderInstanceRequestBody = IAddLlmRequestBody & {
   instance_name: string;
-  region?: string;
-  /**
-   * Optional id of an existing instance. When present the backend
-   * treats the call as an update of that row (rather than a create),
-   * which is what the inline "blur-save" flow on saved instance cards
-   * needs.
-   */
   id?: string;
+  region?: string;
 };
 
 export interface IDeleteProviderInstanceRequestBody {
@@ -132,6 +126,7 @@ export interface IProviderModelItem {
   max_tokens: number;
   model_types: string[];
   features: string[] | null;
+  extra?: Record<string, any>;
 }
 
 /**
@@ -141,7 +136,7 @@ export interface IProviderModelItem {
  */
 export interface IListProviderModelsRequestBody {
   provider_name: string;
-  api_key?: string;
+  api_key?: string | object;
   base_url?: string;
   region?: string;
   model_info?: IModelInfo[];
