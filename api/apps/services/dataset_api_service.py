@@ -1075,7 +1075,8 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
     use_kg = req.get("use_kg", False)
     similarity_threshold = float(req.get("similarity_threshold", 0.0))
     vector_similarity_weight = float(req.get("vector_similarity_weight", 0.3))
-    top = max(1, min(int(req.get("top_k", 1024)), 2048))
+    knn_top_k = max(1, min(int(req.get("knn_top_k", req.get("top_k", 1024))), 2048))
+    knn_num_candidates = int(req.get("knn_num_candidates", 2048))
     langs = req.get("cross_languages", [])
 
     if not KnowledgebaseService.accessible(dataset_id, tenant_id):
@@ -1108,18 +1109,18 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
         vector_similarity_weight = float(search_config.get("vector_similarity_weight", vector_similarity_weight))
-        top = max(1, min(int(search_config.get("top_k", top)), 2048))
+        knn_top_k = max(1, min(int(search_config.get("top_k", knn_top_k)), 2048))
         rerank_candidates_count = int(search_config.get("rerank_candidates_count", 100))
         use_kg = search_config.get("use_kg", use_kg)
         langs = search_config.get("cross_languages", langs)
         logging.debug(
-            "Dataset search loaded Search config: search_id=%s dataset_id=%s vector_similarity_weight=%s full_text_weight=%s similarity_threshold=%s top_k=%s",
+            "Dataset search loaded Search config: search_id=%s dataset_id=%s vector_similarity_weight=%s full_text_weight=%s similarity_threshold=%s knn_top_k=%s",
             search_id,
             dataset_id,
             vector_similarity_weight,
             1 - vector_similarity_weight,
             similarity_threshold,
-            top,
+            knn_top_k,
         )
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
@@ -1178,7 +1179,8 @@ async def search(dataset_id: str, tenant_id: str, req: dict):
         similarity_threshold,
         vector_similarity_weight,
         doc_ids=local_doc_ids,
-        top=top,
+        knn_top_k=knn_top_k,
+        knn_num_candidates=knn_num_candidates,
         rerank_mdl=rerank_mdl,
         rank_feature=labels,
         trace_id=search_id,
@@ -1451,7 +1453,8 @@ async def search_datasets(tenant_id: str, req: dict):
     use_kg = req.get("use_kg", False)
     similarity_threshold = float(req.get("similarity_threshold", 0.0))
     vector_similarity_weight = float(req.get("vector_similarity_weight", 0.3))
-    top = max(1, min(int(req.get("top_k", 1024)), 2048))
+    knn_top_k = max(1, min(int(req.get("knn_top_k", req.get("top_k", 1024))), 2048))
+    knn_num_candidates = int(req.get("knn_num_candidates", 2048))
     langs = req.get("cross_languages", [])
 
     logging.debug(
@@ -1496,18 +1499,18 @@ async def search_datasets(tenant_id: str, req: dict):
         meta_data_filter = search_config.get("meta_data_filter", {})
         similarity_threshold = float(search_config.get("similarity_threshold", similarity_threshold))
         vector_similarity_weight = float(search_config.get("vector_similarity_weight", vector_similarity_weight))
-        top = max(1, min(int(search_config.get("top_k", top)), 2048))
+        knn_top_k = max(1, min(int(search_config.get("top_k", knn_top_k)), 2048))
         rerank_candidates_count = int(search_config.get("rerank_candidates_count", 100))
         use_kg = search_config.get("use_kg", use_kg)
         langs = search_config.get("cross_languages", langs)
         logging.debug(
-            "Dataset search loaded Search config: search_id=%s dataset_ids=%s vector_similarity_weight=%s full_text_weight=%s similarity_threshold=%s top_k=%s",
+            "Dataset search loaded Search config: search_id=%s dataset_ids=%s vector_similarity_weight=%s full_text_weight=%s similarity_threshold=%s knn_top_k=%s",
             search_id,
             kb_ids,
             vector_similarity_weight,
             1 - vector_similarity_weight,
             similarity_threshold,
-            top,
+            knn_top_k,
         )
         if meta_data_filter.get("method") in ["auto", "semi_auto"]:
             chat_id = search_config.get("chat_id", "")
@@ -1570,7 +1573,8 @@ async def search_datasets(tenant_id: str, req: dict):
         similarity_threshold,
         vector_similarity_weight,
         doc_ids=local_doc_ids,
-        top=top,
+        knn_top_k=knn_top_k,
+        knn_num_candidates=knn_num_candidates,
         rerank_mdl=rerank_mdl,
         rank_feature=labels,
         trace_id=search_id,

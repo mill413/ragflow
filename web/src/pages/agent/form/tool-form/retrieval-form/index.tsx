@@ -11,6 +11,7 @@ import { Form } from '@/components/ui/form';
 import { UseKnowledgeGraphFormField } from '@/components/use-knowledge-graph-item';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { t } from 'i18next';
+import { omit } from 'lodash';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useOwnerTenantId } from '../../../context';
@@ -31,7 +32,7 @@ export const FormSchema = z.object({
 });
 
 const RetrievalForm = () => {
-  const defaultValues = useValues();
+  const defaultValues = omit(useValues(), 'top_k');
 
   const form = useForm({
     defaultValues: defaultValues,

@@ -67,7 +67,6 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
       rerank_candidates_count: 64,
       similarity_threshold: 0.2,
       vector_similarity_weight: 0.2,
-      top_k: 1024,
       meta_data_filter: {
         method: DatasetMetadata.Disabled,
         manual: [],
@@ -109,6 +108,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
           'update_time',
           'update_date',
           'id',
+          'top_k',
         ]),
         ...nextValues,
       },
@@ -132,7 +132,7 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
         : referenceMetadata;
 
     const nextData = {
-      ...data,
+      ...omit(data, 'top_k'),
       prompt_config: {
         ...data.prompt_config,
         // reset() skips undefined values, so fall back to '' to clear the field

@@ -12,14 +12,6 @@ import {
   FormMessage,
 } from './ui/form';
 
-export const topKSchema = {
-  top_k: z.number().optional(),
-};
-
-export const initialTopKValue = {
-  top_k: 1024,
-};
-
 const DefaultRerankId = 'rerank_id';
 const DefaultTopK = 'top_k';
 
@@ -60,7 +52,6 @@ function RerankFormField({
 
 export const rerankFormSchema = {
   [DefaultRerankId]: z.string().optional(),
-  top_k: z.coerce.number().optional(),
 };
 
 interface RerankFormFieldsProps {

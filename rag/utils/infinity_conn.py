@@ -203,6 +203,7 @@ class InfinityConnection(InfinityConnectionBase):
                             matchExpr.extra_options[k] = str(v)
                     self.logger.debug(f"INFINITY search MatchTextExpr: {json.dumps(matchExpr.__dict__)}")
                 elif isinstance(matchExpr, MatchDenseExpr):
+                    matchExpr.extra_options.pop("num_candidates", None)
                     if filter_fulltext and "filter" not in matchExpr.extra_options:
                         matchExpr.extra_options.update({"filter": filter_fulltext})
                     for k, v in matchExpr.extra_options.items():

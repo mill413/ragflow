@@ -51,7 +51,6 @@ export const RetrievalPartialSchema = {
   keywords_similarity_weight: z.coerce.number(),
   top_n: z.coerce.number(),
   ...rerankCandidatesCountSchema,
-  top_k: z.coerce.number(),
   dataset_ids: z.array(z.string()),
   rerank_id: z.string(),
   empty_response: z.string(),

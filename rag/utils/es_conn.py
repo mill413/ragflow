@@ -212,10 +212,15 @@ class ESConnection(ESConnectionBase):
                 similarity = 0.0
                 if "similarity" in m.extra_options:
                     similarity = m.extra_options["similarity"]
+                k = min(m.topn, 10000)
+                if "num_candidates" in m.extra_options:
+                    num_candidates = max(k, min(m.extra_options["num_candidates"], 10000))
+                else:
+                    num_candidates = min(k * 2, 10000)
                 s = s.knn(
                     m.vector_column_name,
-                    m.topn,
-                    m.topn * 2,
+                    k,
+                    num_candidates,
                     query_vector=list(m.embedding_data),
                     filter=bool_query.to_dict(),
                     similarity=similarity,

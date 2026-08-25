@@ -17,7 +17,6 @@ import { RerankCandidatesCountFormField } from '@/components/rerank-candidates-c
 import { SimilaritySliderFormField } from '@/components/similarity-slider';
 import { ReadOnlySaveTooltip } from '@/components/read-only-save-tooltip';
 import { Button } from '@/components/ui/button';
-import { SingleFormSlider } from '@/components/ui/dual-range-slider';
 import {
   Form,
   FormControl,
@@ -26,7 +25,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { Spin } from '@/components/ui/spin';
 import { Switch } from '@/components/ui/switch';
@@ -34,7 +32,7 @@ import { useFetchKnowledgeMetadataKeys } from '@/hooks/use-knowledge-request';
 import { cn } from '@/lib/utils';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -66,7 +64,6 @@ const SearchSettingFormSchema = z
       use_kg: z.boolean(),
       rerank_id: z.string(),
       use_rerank: z.boolean(),
-      top_k: z.number(),
       rerank_candidates_count: z.number().int().min(64).max(256),
       summary: z.boolean(),
       llm_setting: z.object({ ...LlmSettingFieldSchema, ...LLMIdFormField }),
@@ -137,7 +134,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
         use_kg: false,
         rerank_id: search_config?.rerank_id || '',
         use_rerank: search_config?.rerank_id ? true : false,
-        top_k: search_config?.top_k || 1024,
         rerank_candidates_count: search_config?.rerank_candidates_count ?? 100,
         summary: search_config?.summary || false,
         chat_id: search_config?.chat_id || '',
@@ -243,15 +239,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
     referenceMetadataEnabled,
     formMethods,
   ]);
-
-  // Reset top_k to 1024 only when user actively disables rerank (from true to false)
-  const prevRerankEnabled = useRef<boolean | undefined>(undefined);
-  useEffect(() => {
-    if (prevRerankEnabled.current === true && rerankModelDisabled === false) {
-      formMethods.setValue('search_config.top_k', 1024);
-    }
-    prevRerankEnabled.current = rerankModelDisabled;
-  }, [rerankModelDisabled, formMethods]);
 
   const { updateSearch } = useUpdateSearch();
   const [formSubmitLoading, setFormSubmitLoading] = useState(false);
@@ -459,41 +446,6 @@ const SearchSetting: React.FC<SearchSettingProps> = ({
                           placeholder={t('chat.model')}
                         />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={formMethods.control}
-                  name="search_config.top_k"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Top K</FormLabel>
-                      <div
-                        className={cn(
-                          'flex items-center gap-4 justify-between',
-                          className,
-                        )}
-                      >
-                        <FormControl>
-                          <SingleFormSlider
-                            {...field}
-                            max={2048}
-                            min={0}
-                            step={1}
-                          ></SingleFormSlider>
-                        </FormControl>
-                        <FormControl>
-                          <Input
-                            type={'number'}
-                            className="h-7 w-20 bg-bg-card border border-border-button rounded-sm"
-                            max={2048}
-                            min={0}
-                            step={1}
-                            {...field}
-                          ></Input>
-                        </FormControl>
-                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

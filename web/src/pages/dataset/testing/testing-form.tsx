@@ -14,11 +14,7 @@ import {
   MetadataFilter,
   MetadataFilterSchema,
 } from '@/components/metadata-filter';
-import {
-  RerankFormFields,
-  initialTopKValue,
-  topKSchema,
-} from '@/components/rerank';
+import { RerankFormFields } from '@/components/rerank';
 import {
   SimilaritySliderFormField,
   initialSimilarityThresholdValue,
@@ -67,7 +63,6 @@ export default function TestingForm({
       }),
       ...similarityThresholdSchema,
       ...vectorSimilarityWeightSchema,
-      ...topKSchema,
       use_kg: z.boolean().optional(),
       dataset_ids: z.array(z.string()).optional(),
       ...MetadataFilterSchema,
@@ -84,7 +79,6 @@ export default function TestingForm({
     defaultValues: {
       ...initialSimilarityThresholdValue,
       ...initialVectorSimilarityWeightValue,
-      ...initialTopKValue,
       use_kg: false,
       dataset_ids: [knowledgeBaseId],
       size: 10,
