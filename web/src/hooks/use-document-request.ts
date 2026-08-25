@@ -111,7 +111,10 @@ export const useUploadDocument = () => {
         const code = get(ret, 'code');
 
         if (code === 0 || code === 500) {
-          queryClient.invalidateQueries({
+          // Wait for the uploaded documents to reach the cache before callers
+          // mark them RUNNING; otherwise a late refetch can overwrite the
+          // optimistic status and prevent polling from starting.
+          await queryClient.invalidateQueries({
             queryKey: [DocumentApiAction.FetchDocumentList],
           });
         }
@@ -144,11 +147,6 @@ export const useFetchDocumentList = (loop = true) => {
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
   const { filterValue, handleFilterSubmit, checkValue } =
     useHandleFilterSubmit();
-  const [docs, setDocs] = useState<IDocumentInfo[]>([]);
-
-  const isLoop = useMemo(() => {
-    return loop && docs.some((doc) => doc.run === RunningStatus.RUNNING);
-  }, [docs, loop]);
 
   const { data, isFetching: loading } = useQuery<{
     docs: IDocumentInfo[];
@@ -161,7 +159,11 @@ export const useFetchDocumentList = (loop = true) => {
       filterValue,
     ],
     initialData: { docs: [], total: 0 },
-    refetchInterval: isLoop ? 5000 : false,
+    refetchInterval: (query) =>
+      loop &&
+      query.state.data?.docs.some((doc) => doc.run === RunningStatus.RUNNING)
+        ? 5000
+        : false,
     enabled: !!knowledgeId || !!id,
     queryFn: async () => {
       let run = [] as any;
@@ -205,9 +207,6 @@ export const useFetchDocumentList = (loop = true) => {
       };
     },
   });
-  useMemo(() => {
-    setDocs(data.docs);
-  }, [data.docs]);
   const onInputChange: React.ChangeEventHandler<HTMLInputElement> = useCallback(
     (e) => {
       setPagination({ page: 1 });
