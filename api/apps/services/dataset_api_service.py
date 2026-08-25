@@ -18,25 +18,24 @@ import json
 import os
 import re
 
+from api.db.db_models import Connector2Kb, Document, File, SyncLogs
 from api.db.joint_services.tenant_model_service import resolve_model_config, resolve_model_id
-from common.constants import PAGERANK_FLD, LLMType
-from common import settings
-from api.db.db_models import File
+from api.db.services.connector_service import Connector2KbService, SyncLogsService
 from api.db.services.document_service import DocumentService, queue_raptor_o_graphrag_tasks
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.knowledgebase_service import KnowledgebaseService, validate_dataset_embedding_models
 from api.db.services.resource_quota_service import ResourceQuotaService
 from api.db.services.resource_reference_service import ResourceReferenceService
-from api.db.services.connector_service import Connector2KbService
 from api.db.services.task_service import GRAPH_RAPTOR_FAKE_DOC_ID, TaskService
 from api.db.services.tenant_model_service import TenantModelService
 from api.db.services.user_service import TenantService, UserService
 from api.db import TenantPermission, WorkspaceType
 from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.workspace_parser_service import WorkspaceParserService
-from common.constants import FileSource, StatusEnum
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
+from common import settings
+from common.constants import PAGERANK_FLD, FileSource, LLMType, RetCode, StatusEnum, TaskStatus
 from common.misc_utils import thread_pool_exec
 
 _VALID_INDEX_TYPES = {"graph", "raptor", "mindmap", "artifact", "skill"}
@@ -190,6 +189,15 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
     errors = []
     success_count = 0
     for kb_id, kb in kb_id_instance_pairs:
+        # Cancel this dataset's queued syncs before touching its documents.
+        # Tasks are only picked up while they are SCHEDULE, so cancelling stops
+        # every run that has not started yet; a sync already in flight is not
+        # interruptible, which is what the stranded-row sweep below covers.
+        SyncLogsService.filter_update(
+            [SyncLogs.kb_id == kb_id, SyncLogs.status.in_([TaskStatus.SCHEDULE, TaskStatus.RUNNING])],
+            {"status": TaskStatus.CANCEL},
+        )
+
         for doc in DocumentService.query(kb_id=kb_id):
             if not DocumentService.remove_document(doc, kb.tenant_id):
                 errors.append(f"Remove document '{doc.id}' error for dataset '{kb_id}'")
@@ -226,9 +234,22 @@ async def delete_datasets(user_id: str, ids: list = None, delete_all: bool = Fal
         if not KnowledgebaseService.delete_by_id(kb_id):
             errors.append(f"Delete dataset error for {kb_id}")
             continue
-        from api.db.services.resource_quota_service import ResourceQuotaService
-
         ResourceQuotaService.remove_dataset_quota(kb_id)
+
+        # Unwire the data sources only once the dataset is really gone, so a
+        # failed deletion above leaves a dataset that is still linked and still
+        # syncable. Left behind, these rows keep the connector scheduler queueing
+        # syncs against a kb_id that no longer resolves, and any document such a
+        # run writes outlives its dataset -- an invisible row that later reports
+        # a cross-KB id collision against whatever dataset is linked next.
+        Connector2KbService.filter_delete([Connector2Kb.kb_id == kb_id])
+        SyncLogsService.filter_delete([SyncLogs.kb_id == kb_id])
+
+        # Sweep anything the per-document loop could not see, including rows
+        # written by a sync that was already in flight when deletion started.
+        stranded = DocumentService.filter_delete([Document.kb_id == kb_id])
+        if stranded:
+            logging.warning("delete_datasets: removed %s stranded document rows for dataset %s", stranded, kb_id)
         success_count += 1
 
     if not errors:
