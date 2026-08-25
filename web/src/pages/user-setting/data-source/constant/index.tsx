@@ -5,10 +5,12 @@ import { Mail } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { IDataSourceInfoMap } from '../interface';
+import { azureDevOpsConstant } from './azure-devops-constant';
 import { S3Constant } from './s3-constant';
 
 export enum DataSourceKey {
   S3 = 's3',
+  AZURE_DEVOPS = 'azure_devops',
   IMAP = 'imap',
   MYSQL = 'mysql',
   POSTGRESQL = 'postgresql',
@@ -21,6 +23,11 @@ export const generateDataSourceInfo = (translate: TFunction) => ({
     name: 'S3',
     description: translate('setting.s3Description'),
     icon: <SvgIcon name="data-source/s3" width={38} />,
+  },
+  [DataSourceKey.AZURE_DEVOPS]: {
+    name: 'Azure DevOps',
+    description: translate('setting.azure_devopsDescription'),
+    icon: <SvgIcon name="data-source/azure-devops" width={38} />,
   },
   [DataSourceKey.IMAP]: {
     name: 'IMAP',
@@ -193,6 +200,7 @@ const relationalDatabaseFields = (
 
 export const DataSourceFormFields: Record<DataSourceKey, FormFieldConfig[]> = {
   [DataSourceKey.S3]: S3Constant(t),
+  [DataSourceKey.AZURE_DEVOPS]: azureDevOpsConstant(t),
   [DataSourceKey.IMAP]: [
     {
       label: t('setting.dataSourceUsername'),
@@ -252,6 +260,18 @@ export const DataSourceFormDefaultValues = {
         endpoint_url: '',
         addressing_style: 'virtual',
       },
+    },
+  },
+  [DataSourceKey.AZURE_DEVOPS]: {
+    name: '',
+    source: DataSourceKey.AZURE_DEVOPS,
+    config: {
+      organization: '',
+      index_mode: 'organization',
+      projects: '',
+      repositories: '',
+      content_types: 'both',
+      credentials: { azure_devops_pat: '' },
     },
   },
   [DataSourceKey.IMAP]: {

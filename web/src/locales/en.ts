@@ -1394,6 +1394,32 @@ This auto-tagging feature enhances retrieval by adding another layer of domain-s
       configureModelTitle: 'Configure model',
       connectorNameTip: 'A descriptive name for the connector',
       syncDeletedFiles: 'Sync deleted files',
+      azure_devopsDescription:
+        'Connect Azure DevOps to synchronize repository files and pull requests.',
+      azureDevOpsPatTip:
+        'A personal access token with the Code (Read) permission is required.',
+      azureDevOpsOrganizationTip:
+        'Organization name, or the collection URL of a self-hosted Azure DevOps Server.',
+      azureDevOpsProjectsTip: 'Comma-separated team project names.',
+      azureDevOpsRepositoriesTip:
+        'Comma-separated repositories; use project/repository to disambiguate names.',
+      azureDevOpsOrganizationScopeTip:
+        'All repositories visible to the token in this organization will be indexed.',
+      azureDevOpsContentTypesTip:
+        'Select source files, pull requests, or both.',
+      dataSourceFieldAzureDevOpsPat: 'Personal access token',
+      dataSourceFieldAzureDevOpsOrganization: 'Organization',
+      dataSourceFieldIndexMode: 'Index mode',
+      dataSourceFieldProjects: 'Projects',
+      dataSourceFieldAzureDevOpsRepositories: 'Repositories',
+      dataSourceFieldAzureDevOpsContentTypes: 'Content types',
+      dataSourceOptionOrganization: 'Organization',
+      dataSourceOptionProjects: 'Projects',
+      dataSourceOptionRepositories: 'Repositories',
+      dataSourceOptionCode: 'Code',
+      dataSourceOptionPullRequests: 'Pull requests',
+      dataSourceOptionBoth: 'Both',
+      dataSourceValidationFieldRequired: '{{label}} is required',
       dataSourceName: 'Name',
       dataSourceSource: 'Source',
       dataSourceHost: 'Host',

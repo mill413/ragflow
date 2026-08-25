@@ -37,6 +37,7 @@ from .onedrive_connector import OneDriveConnector
 from .outlook_connector import OutlookConnector
 from .salesforce_connector import SalesforceConnector
 from .azure_blob_connector import AzureBlobConnector
+from .azure_devops.connector import AzureDevOpsConnector
 from .teams_connector import TeamsConnector
 from .moodle_connector import MoodleConnector
 from .airtable_connector import AirtableConnector
@@ -69,6 +70,7 @@ __all__ = [
     "OutlookConnector",
     "SalesforceConnector",
     "AzureBlobConnector",
+    "AzureDevOpsConnector",
     "TeamsConnector",
     "MoodleConnector",
     "BlobType",
