@@ -2506,6 +2506,10 @@ curl --request POST \
        "document_ids": ["77df9ef4759a11ef8bdd0242ac120004"],
        "page": 1,
        "page_size": 30,
+       "knn_top_k": 1024,
+       "knn_num_candidates": 2048,
+       "rerank_candidates_count": 64,
+       "include_knowledge_compilation": true,
        "highlight": true,
        "reference_metadata": {
          "include": true,
@@ -2525,7 +2529,10 @@ curl --request POST \
 | `page_size` | `integer` | 否 | `30` | 每页数量，最大为 `100` |
 | `similarity_threshold` | `number` | 否 | `0.2` | 最低综合相似度 |
 | `vector_similarity_weight` | `number` | 否 | `0.3` | 向量相似度权重；词项相似度权重为 `1 - vector_similarity_weight` |
-| `top_k` | `integer` | 否 | `1024` | 参与向量相似度计算的候选分块数，必须大于 `0` |
+| `top_k` | `integer` | 否 | `1024` | 已弃用；作为 `knn_top_k` 的兼容别名，同时提供时以 `knn_top_k` 为准 |
+| `knn_top_k` | `integer` | 否 | `1024` | 参与向量相似度计算的候选分块数，范围为 `1` 到 `2048` |
+| `knn_num_candidates` | `integer` | 否 | `max(2048, knn_top_k)` | 近似最近邻检索的候选数量，必须不小于 `knn_top_k`；当前仅 Elasticsearch 使用 |
+| `rerank_candidates_count` | `integer` | 否 | `64` | 初始检索并参与重排的分块数，必须不小于 `page * page_size` |
 | `rerank_id` | `string` | 否 | — | 重排序模型 ID |
 | `keyword` | `boolean` | 否 | `false` | 是否使用默认聊天模型扩展检索关键词 |
 | `highlight` | `boolean` | 否 | `false` | 是否在结果中返回命中词高亮 |
@@ -2533,6 +2540,7 @@ curl --request POST \
 | `metadata_condition` | `object` | 否 | — | 按文档元数据过滤；未显式指定 `document_ids` 时生效 |
 | `use_kg` | `boolean` | 否 | `false` | 是否补充知识图谱多跳检索结果 |
 | `toc_enhance` | `boolean` | 否 | `false` | 是否使用目录增强检索 |
+| `include_knowledge_compilation` | `boolean` | 否 | `true` | 是否包含知识编译生成的分块 |
 | `reference_metadata` | `object` | 否 | — | 控制是否在分块结果中附带文档元数据 |
 
 `metadata_condition` 使用与“批量更新或删除文档元数据”相同的 `logic` 和 `conditions` 结构。
