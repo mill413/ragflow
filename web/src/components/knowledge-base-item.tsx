@@ -34,8 +34,12 @@ export function useDisableDifferenceEmbeddingDataset(
   const datasetId = useWatch({ name, control: form.control });
   const [searchString, setSearchString] = useState('');
   const debouncedSearchString = useDebounce(searchString, { wait: 500 });
-  const { list: datasetListOrigin, loading } = useFetchKnowledgeList(
-    true,
+  const {
+    list: datasetListOrigin,
+    loading,
+    handleScroll,
+  } = useFetchKnowledgeList(
+    false,
     debouncedSearchString,
     workspaceId,
   );
@@ -62,35 +66,29 @@ export function useDisableDifferenceEmbeddingDataset(
   }, [datasetId, datasetList]);
 
   const nextOptions = useMemo(() => {
-    const datasetListMap = datasetList
-      .filter(
-        (dataset) =>
-          dataset.chunk_count > 0 &&
-          dataset.chunk_method !== DocumentParserType.Tag,
-      )
-      .map((item: IDataset) => {
-        return {
-          label: item.name,
-          icon: () => (
-            <RAGFlowAvatar
-              className="size-4"
-              avatar={item.avatar}
-              name={item.name}
-            />
-          ),
-          suffix: (
-            <section className="flex gap-2">
-              <DatasetLabel text={item.nickname} />
-              <DatasetLabel text={item.embedding_model} />
-            </section>
-          ),
-          value: item.id,
-          disabled:
-            item.embedding_model !== selectedEmbedId && selectedEmbedId !== '',
-        };
-      });
-
-    return datasetListMap;
+    return datasetList.map((item: IDataset) => {
+      return {
+        label: item.name,
+        icon: () => (
+          <RAGFlowAvatar
+            className="size-4"
+            avatar={item.avatar}
+            name={item.name}
+          />
+        ),
+        suffix: (
+          <section className="flex gap-2">
+            <DatasetLabel text={item.nickname} />
+            <DatasetLabel text={item.embedding_model} />
+          </section>
+        ),
+        value: item.id,
+        disabled:
+          item.chunk_count === 0 ||
+          item.chunk_method === DocumentParserType.Tag ||
+          (selectedEmbedId !== '' && item.embedding_model !== selectedEmbedId),
+      };
+    });
   }, [datasetList, selectedEmbedId]);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -100,6 +98,7 @@ export function useDisableDifferenceEmbeddingDataset(
   return {
     datasetOptions: nextOptions,
     handleSearchChange,
+    handleScroll,
     loading,
     searchString,
   };
@@ -118,8 +117,13 @@ export function KnowledgeBaseFormField({
 }) {
   const { t } = useTranslation();
 
-  const { datasetOptions, handleSearchChange, loading, searchString } =
-    useDisableDifferenceEmbeddingDataset(name, workspaceId);
+  const {
+    datasetOptions,
+    handleSearchChange,
+    handleScroll,
+    loading,
+    searchString,
+  } = useDisableDifferenceEmbeddingDataset(name, workspaceId);
 
   const nextOptions = buildQueryVariableOptionsByShowVariable(showVariable)();
 
@@ -184,6 +188,7 @@ export function KnowledgeBaseFormField({
           optionTestIdPrefix="datasets"
           searchValue={searchString}
           onSearchChange={handleSearchChange}
+          onPopupScroll={handleScroll}
           isSearching={loading}
           shouldFilter={false}
           {...field}

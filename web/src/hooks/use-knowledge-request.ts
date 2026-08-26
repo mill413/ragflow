@@ -789,42 +789,88 @@ export const useClearWiki = () => {
   return { data, loading, clearWiki: mutateAsync };
 };
 
+const KNOWLEDGE_LIST_PAGE_SIZE = 30;
+
 export const useFetchKnowledgeList = (
   shouldFilterListWithoutDocument: boolean = false,
   keywords = '',
   workspaceId?: string,
+  pageSize: number = KNOWLEDGE_LIST_PAGE_SIZE,
 ): {
   list: IDataset[];
   loading: boolean;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  handleScroll: (event: React.UIEvent<HTMLDivElement>) => void;
 } => {
-  const { data, isFetching: loading } = useQuery({
-    queryKey: [
-      KnowledgeApiAction.FetchKnowledgeList,
-      shouldFilterListWithoutDocument,
-      keywords,
-      workspaceId,
-    ],
-    initialData: [],
-    gcTime: 0, // https://tanstack.com/query/latest/docs/framework/react/guides/caching?from=reactQueryV3
-    queryFn: async () => {
-      const { data } = await listDataset(
-        keywords || workspaceId
-          ? {
-              ext: {
-                keywords: keywords || undefined,
-                owner_ids: workspaceId ? [workspaceId] : undefined,
-              },
-            }
-          : undefined,
-      );
-      const list = data?.data ?? [];
-      return shouldFilterListWithoutDocument
-        ? list.filter((x: IDataset) => x.chunk_count > 0)
-        : list;
-    },
-  });
+  const { data, fetchNextPage, hasNextPage, isFetching, isFetchingNextPage } =
+    useInfiniteQuery<{ items: IDataset[]; total: number }>({
+      queryKey: [
+        KnowledgeApiAction.FetchKnowledgeList,
+        shouldFilterListWithoutDocument,
+        keywords,
+        workspaceId,
+        pageSize,
+      ],
+      gcTime: 0,
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        const { data } = await listDataset({
+          page: pageParam as number,
+          page_size: pageSize,
+          ...(keywords || workspaceId
+            ? {
+                ext: {
+                  keywords: keywords || undefined,
+                  owner_ids: workspaceId ? [workspaceId] : undefined,
+                },
+              }
+            : {}),
+        });
+        return {
+          items: (data?.data ?? []) as IDataset[],
+          total: data?.total_datasets ?? 0,
+        };
+      },
+      getNextPageParam: (lastPage, allPages) => {
+        const loaded = allPages.reduce(
+          (total, page) => total + page.items.length,
+          0,
+        );
+        return loaded < lastPage.total ? allPages.length + 1 : undefined;
+      },
+    });
 
-  return { list: data, loading };
+  const list = useMemo(() => {
+    const datasets = data?.pages.flatMap((page) => page.items) ?? [];
+    return shouldFilterListWithoutDocument
+      ? datasets.filter((dataset) => dataset.chunk_count > 0)
+      : datasets;
+  }, [data, shouldFilterListWithoutDocument]);
+
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+      if (
+        scrollHeight - scrollTop - clientHeight <= 50 &&
+        hasNextPage &&
+        !isFetchingNextPage
+      ) {
+        fetchNextPage();
+      }
+    },
+    [fetchNextPage, hasNextPage, isFetchingNextPage],
+  );
+
+  return {
+    list,
+    loading: isFetching,
+    fetchNextPage,
+    hasNextPage: Boolean(hasNextPage),
+    isFetchingNextPage,
+    handleScroll,
+  };
 };
 
 export const useSelectKnowledgeOptions = () => {
