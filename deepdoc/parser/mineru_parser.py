@@ -155,6 +155,8 @@ class MinerUParser(RAGFlowPdfParser):
         self.api_key = api_key.strip()
         self.healthcheck_timeout = healthcheck_timeout
         self.outlines = []
+        self.page_from = 0
+        self.page_to = MAXIMUM_PAGE_NUMBER
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def _request_headers(self) -> dict[str, str]:
@@ -380,6 +382,8 @@ class MinerUParser(RAGFlowPdfParser):
     def __images__(self, fnm, zoomin: int = 1, page_from=0, page_to=MAXIMUM_PAGE_NUMBER, callback=None):
         self.page_from = page_from
         self.page_to = page_to
+        if callback:
+            callback(0.16, "[MinerU] Rendering PDF pages...")
         try:
             with sys.modules[LOCK_KEY_pdfplumber]:
                 with pdfplumber.open(fnm) if isinstance(fnm, (str, PathLike)) else pdfplumber.open(BytesIO(fnm)) as pdf:
@@ -388,7 +392,14 @@ class MinerUParser(RAGFlowPdfParser):
         except Exception as e:
             self.page_images = None
             self.total_page = 0
-            self.logger.exception(e)
+            self.logger.exception("[MinerU] PDF page rendering failed for pages %s:%s: %s", page_from, page_to, e)
+            if callback:
+                callback(0.16, f"[MinerU] PDF page rendering failed for pages {page_from}:{page_to}: {e}")
+        else:
+            # Report success only after every selected page rendered successfully.
+            self.logger.info("[MinerU] Rendered %d PDF page images.", len(self.page_images))
+            if callback:
+                callback(0.19, f"[MinerU] Rendered {len(self.page_images)} PDF page images.")
 
     def _line_tag(self, bx):
         pn = [bx["page_idx"] + 1]
@@ -701,7 +712,17 @@ class MinerUParser(RAGFlowPdfParser):
                 case MinerUContentType.EQUATION:
                     section = output.get("text", "")
                 case MinerUContentType.CODE:
-                    section = output.get("code_body", "") + "\n".join(output.get("code_caption", []))
+                    code_body = output.get("code_body", "")
+                    code_caption = "\n".join(output.get("code_caption", []))
+                    if code_caption:
+                        # MinerU VLM returns a fenced body while the pipeline backend
+                        # may return plain code. Replace only one complete outer fence.
+                        outer_fence = re.fullmatch(r"```[^`\r\n]*\r?\n(?P<body>.*)\r?\n```", code_body, flags=re.DOTALL)
+                        if outer_fence:
+                            code_body = outer_fence.group("body")
+                        section = f"```{code_caption}\n{code_body}\n```"
+                    else:
+                        section = code_body
                 case MinerUContentType.LIST:
                     section = "\n".join(output.get("list_items", []))
                 case MinerUContentType.HEADER | MinerUContentType.FOOTER | MinerUContentType.PAGE_NUMBER | MinerUContentType.DISCARDED:
@@ -724,10 +745,56 @@ class MinerUParser(RAGFlowPdfParser):
                 sections.append((section, self._line_tag(output)))
         return sections
 
-    def _transfer_to_tables(self, outputs: list[dict[str, Any]]):
-        return []
+    def _transfer_to_tables(self, outputs: list[dict[str, Any]], table_enable: bool = True):
+        """Convert MinerU media blocks to RAGFlow table/image tuples.
 
-    def _enhance_images_with_vlm(self, outputs: list[dict[str, Any]], vision_model, callback: Optional[Callable] = None):
+        Args:
+            outputs: MinerU content-list blocks in source order.
+            table_enable: Whether table blocks should be emitted.
+        """
+        tables = []
+        for output in outputs:
+            output_type = output.get("type")
+            if output_type not in {MinerUContentType.TABLE, MinerUContentType.IMAGE}:
+                continue
+            if output_type == MinerUContentType.TABLE and not table_enable:
+                continue
+
+            position_tag = self._line_tag(output) if "page_idx" in output and "bbox" in output else ""
+            # MinerU numbers pages from zero within the selected PDF slice.
+            # Media positions leave the parser in the document-global domain.
+            positions = [(page + self.page_from, left, right, top, bottom) for pages, left, right, top, bottom in self.extract_positions(position_tag) for page in pages]
+
+            if output_type == MinerUContentType.TABLE:
+                text = output.get("table_body", "") + "\n".join(output.get("table_caption", [])) + "\n".join(output.get("table_footnote", []))
+                if not text.strip():
+                    self.logger.warning("[MinerU] Empty table content at page_idx=%s; using fallback text.", output.get("page_idx"))
+                    text = "FAILED TO PARSE TABLE"
+                tables.append(((None, text), positions))
+                continue
+
+            texts = [*output.get("image_caption", []), *output.get("image_footnote", [])]
+            vlm_description = (output.get("vlm_description") or "").strip()
+            if vlm_description:
+                texts.append(vlm_description)
+
+            image = None
+            image_path = output.get("img_path")
+            if image_path:
+                try:
+                    with Image.open(image_path) as source:
+                        source.load()
+                        image = source.copy()
+                except Exception as e:
+                    self.logger.warning(f"[MinerU] Failed to load image '{image_path}': {e}")
+            if image is None:
+                self.logger.warning("[MinerU] Skip image without a readable resource: %s", image_path)
+                continue
+
+            tables.append(((image, texts or [""]), positions))
+        return tables
+
+    def _enhance_images_with_vlm(self, outputs: list[dict[str, Any]], vision_model, callback: Optional[Callable] = None, language: str = "English"):
         """Generate semantic descriptions for image blocks via the tenant's
         VISION model, mirroring deepdoc's VisionFigureParser. Each
         IMAGE block with a readable img_path gets a ``vlm_description``
@@ -827,7 +894,7 @@ class MinerUParser(RAGFlowPdfParser):
         if callback:
             callback(0.15, f"[MinerU] Output directory: {out_dir}")
 
-        self.__images__(pdf, zoomin=1, page_from=page_from, page_to=page_to)
+        self.__images__(pdf, zoomin=1, page_from=page_from, page_to=page_to, callback=callback)
 
         try:
             options = MinerUParseOptions(
