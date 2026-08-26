@@ -134,7 +134,8 @@ export function ChatSettings({ hasSingleChatBox }: ChatSettingsProps) {
       ...data,
       prompt_config: {
         ...data.prompt_config,
-        web_search_provider: getWebSearchProvider(data.prompt_config),
+        // reset() skips undefined values, so fall back to '' to clear the field
+        web_search_provider: getWebSearchProvider(data.prompt_config) ?? '',
         reference_metadata: normalizedReferenceMetadata,
       },
       ...llmSettingEnabledValues,

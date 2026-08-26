@@ -15,6 +15,7 @@ export function AutoKeywordsFormField() {
       layout={FormLayout.Horizontal}
       sliderTestId="ds-settings-parser-auto-keyword-slider"
       numberInputTestId="ds-settings-parser-auto-keyword-input"
+      integer
     ></SliderInputFormField>
   );
 }
@@ -32,6 +33,7 @@ export function AutoQuestionsFormField() {
       layout={FormLayout.Horizontal}
       sliderTestId="ds-settings-parser-auto-question-slider"
       numberInputTestId="ds-settings-parser-auto-question-input"
+      integer
     ></SliderInputFormField>
   );
 }
