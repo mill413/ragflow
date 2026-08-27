@@ -75,6 +75,7 @@ export enum LLMFactory {
   Perplexity = 'Perplexity',
   NewAPI = 'New API',
   FunASR = 'FunASR',
+  Synthorai = 'Synthorai',
 }
 
 // Please lowercase the file name
@@ -148,6 +149,7 @@ export const IconMap = {
   [LLMFactory.Perplexity]: 'perplexity',
   [LLMFactory.SoMark]: 'somark',
   [LLMFactory.NewAPI]: 'new-api',
+  [LLMFactory.Synthorai]: 'synthorai',
 };
 
 export const ModelTypeToField: Record<string, string> = {
@@ -208,6 +210,7 @@ export const APIMapUrl = {
   [LLMFactory.BaiChuan]: 'https://platform.baichuan-ai.com/console/apikey',
   [LLMFactory.PPIO]: 'https://ppio.com/settings/key-management',
   [LLMFactory.VoyageAI]: 'https://dash.voyageai.com/api-keys',
+  [LLMFactory.Synthorai]: 'https://synthorai.io',
   [LLMFactory.TogetherAI]: 'https://api.together.xyz/settings/api-keys',
   [LLMFactory.NovitaAI]: 'https://novita.ai/dashboard/key',
   [LLMFactory.Upstage]: 'https://console.upstage.ai/api-keys',

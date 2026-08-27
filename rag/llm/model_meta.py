@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 import json
+import os
 import aiohttp
 from abc import ABC
 from urllib.parse import urlparse
@@ -508,3 +509,24 @@ class NewAPI(OpenAIAPICompatible):
 
 class RAGcon(OpenAIAPICompatible):
     _FACTORY_NAME = "RAGcon"
+
+
+class Synthorai(OpenAIAPICompatible):
+    """Expose only chat models declared in the local Synthorai catalog."""
+
+    _FACTORY_NAME = "Synthorai"
+
+    def _format_model_list(self, raw_model_list):
+        models = super()._format_model_list(raw_model_list)
+        allowed = self._allowed_model_names()
+        return [model for model in models if model.get("name") in allowed] if allowed else models
+
+    @staticmethod
+    def _allowed_model_names() -> set:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "conf", "models", "synthorai.json")
+        try:
+            with open(path, encoding="utf-8") as file:
+                config = json.load(file)
+        except (OSError, ValueError):
+            return set()
+        return {model["name"] for model in config.get("models", []) if isinstance(model, dict) and model.get("name") and "chat" in (model.get("model_types") or [])}

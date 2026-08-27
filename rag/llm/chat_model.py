@@ -1556,6 +1556,16 @@ class FuturMixChat(Base):
         logging.info("[FuturMix] Chat initialized with model %s", model_name)
 
 
+class SynthoraiChat(Base):
+    """Synthorai OpenAI-compatible chat adapter with a fixed trusted host."""
+
+    _FACTORY_NAME = "Synthorai"
+    _BASE_URL = "https://synthorai.io/v1"
+
+    def __init__(self, key, model_name, base_url=None, **kwargs):
+        super().__init__(key, model_name, self._BASE_URL, **kwargs)
+
+
 class LiteLLMBase(ABC):
     _FACTORY_NAME = [
         "Tongyi-Qianwen",
