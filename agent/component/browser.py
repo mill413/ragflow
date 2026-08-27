@@ -26,22 +26,22 @@ import tempfile
 from abc import ABC
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.parse import unquote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import unquote, urljoin, urlparse
 
 from agent.component.base import ComponentBase
 from agent.component.llm import LLMParam
 from api.db import FileType
 from api.db.joint_services.tenant_model_service import resolve_model_config, resolve_model_type
 from api.db.services import duplicate_name
-from api.db.services.file_service import FileService
 from api.db.services.agent_reference_service import AgentReferenceService
+from api.db.services.file_service import FileService
 from api.utils.file_utils import filename_type
 from common import settings
 from common.connection_utils import timeout
 from common.misc_utils import get_uuid
 from rag.llm import FACTORY_DEFAULT_BASE_URL
+
+MAX_UPLOAD_URL_REDIRECTS = 5
 
 
 class BrowserParam(LLMParam):
@@ -173,29 +173,42 @@ class Browser(ComponentBase, ABC):
         return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
     @staticmethod
+    def _safe_url_filename(candidate: Any) -> str:
+        """Return a sanitized single path segment or an empty string."""
+        token = str(candidate or "").strip()
+        if not token:
+            return ""
+        # Decode before taking the basename so encoded traversal separators
+        # cannot escape the upload directory.
+        token = os.path.basename(unquote(token).strip().replace("\\", "/")).strip()
+        if not token or token in {".", ".."}:
+            return ""
+        if "/" in token or "\\" in token or os.sep in token or (os.altsep and os.altsep in token):
+            return ""
+        return token
+
+    @staticmethod
     def _extract_url_filename(url: str, headers: Any) -> str:
         content_disposition = str(getattr(headers, "get", lambda *_args, **_kwargs: "")("Content-Disposition", "") or "")
         if content_disposition:
             # Prefer RFC 5987 encoded filename*=UTF-8''... when present.
             m = re.search(r"filename\*\s*=\s*(?:UTF-8''|utf-8'')?([^;]+)", content_disposition)
             if m:
-                name = unquote(m.group(1).strip().strip('"'))
+                name = Browser._safe_url_filename(m.group(1).strip().strip('"'))
                 if name:
-                    return os.path.basename(name)
+                    return name
             m = re.search(r'filename\s*=\s*"([^"]+)"', content_disposition)
             if m:
-                name = m.group(1).strip()
+                name = Browser._safe_url_filename(m.group(1).strip())
                 if name:
-                    return os.path.basename(name)
+                    return name
             m = re.search(r"filename\s*=\s*([^;]+)", content_disposition)
             if m:
-                name = m.group(1).strip().strip('"')
+                name = Browser._safe_url_filename(m.group(1).strip().strip('"'))
                 if name:
-                    return os.path.basename(name)
+                    return name
 
-        parsed = urlparse(url)
-        raw_name = os.path.basename(parsed.path or "")
-        name = unquote(raw_name).strip()
+        name = Browser._safe_url_filename(urlparse(url).path or "")
         if name:
             return name
         return f"url_file_{get_uuid()[:8]}.bin"
@@ -220,39 +233,71 @@ class Browser(ComponentBase, ABC):
         os.environ[key] = value
 
     def _prepare_upload_url_file(self, url: str, upload_dir: str) -> dict[str, Any] | None:
+        import requests
+
+        from common.ssrf_guard import assert_url_is_safe, pin_dns
+
         max_bytes = self._resolve_upload_url_max_bytes()
         local_path = ""
         local_name = ""
         total_size = 0
+        response = None
+        session = requests.Session()
+        # Do not inherit proxy or netrc credentials for an untrusted URL.
+        session.trust_env = False
         try:
-            req = Request(url, headers={"User-Agent": "RAGFlow-Browser-Node/1.0"})
-            with urlopen(req, timeout=30) as response:
-                local_name = self._extract_url_filename(url, response.headers)
+            current_hostname, current_ip = assert_url_is_safe(url)
+            current_url = url
+            for _ in range(MAX_UPLOAD_URL_REDIRECTS + 1):
+                if response is not None:
+                    response.close()
+                with pin_dns(current_hostname, current_ip):
+                    response = session.get(
+                        current_url,
+                        stream=True,
+                        timeout=30,
+                        allow_redirects=False,
+                        headers={"User-Agent": "RAGFlow-Browser-Node/1.0"},
+                    )
+                if response.status_code not in (301, 302, 303, 307, 308):
+                    break
+                location = response.headers.get("Location")
+                if not location:
+                    break
+                current_url = urljoin(current_url, location)
+                current_hostname, current_ip = assert_url_is_safe(current_url)
+            else:
+                raise ValueError(f"Exceeded {MAX_UPLOAD_URL_REDIRECTS} redirects fetching {url!r}")
 
-                local_path = os.path.join(upload_dir, local_name)
-                index = 1
-                while os.path.exists(local_path):
-                    stem, ext = os.path.splitext(local_name)
-                    local_path = os.path.join(upload_dir, f"{stem}_{index}{ext}")
-                    index += 1
+            response.raise_for_status()
+            local_name = self._extract_url_filename(current_url, response.headers)
+            local_path = os.path.join(upload_dir, local_name)
+            index = 1
+            while os.path.exists(local_path):
+                stem, ext = os.path.splitext(local_name)
+                local_path = os.path.join(upload_dir, f"{stem}_{index}{ext}")
+                index += 1
 
-                with open(local_path, "wb") as f:
-                    while True:
-                        chunk = response.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        total_size += len(chunk)
-                        if total_size > max_bytes:
-                            raise ValueError(f"upload url file exceeds max size limit: {max_bytes}")
-                        f.write(chunk)
-        except (HTTPError, URLError, OSError, TimeoutError, ValueError) as e:
+            with open(local_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    total_size += len(chunk)
+                    if total_size > max_bytes:
+                        raise ValueError(f"upload url file exceeds max size limit: {max_bytes}")
+                    f.write(chunk)
+        except (requests.RequestException, OSError, TimeoutError, ValueError) as e:
             if local_path and os.path.exists(local_path):
                 try:
                     os.remove(local_path)
                 except OSError:
                     pass
-            logging.warning("Browser failed to fetch upload url. url=%s, error=%s", url, e)
+            logging.warning("Browser failed to fetch upload URL: %s", type(e).__name__)
             return None
+        finally:
+            if response is not None:
+                response.close()
+            session.close()
 
         if total_size <= 0:
             if local_path and os.path.exists(local_path):
@@ -260,7 +305,7 @@ class Browser(ComponentBase, ABC):
                     os.remove(local_path)
                 except OSError:
                     pass
-            logging.warning("Browser upload url returned empty content: %s", url)
+            logging.warning("Browser upload URL returned empty content")
             return None
 
         return {

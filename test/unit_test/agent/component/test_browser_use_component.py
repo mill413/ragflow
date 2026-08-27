@@ -14,10 +14,12 @@
 #  limitations under the License.
 #
 
+import re
 import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import pytest
 
@@ -47,6 +49,12 @@ def _install_cv2_stub_if_unavailable():
 
 
 _install_cv2_stub_if_unavailable()
+
+# Importing agent.component discovers every tool module. scholarly 1.7.11 is
+# not Python 3.13-clean, and Browser tests do not exercise Google Scholar.
+scholarly_stub = types.ModuleType("scholarly")
+scholarly_stub.scholarly = SimpleNamespace()
+sys.modules["scholarly"] = scholarly_stub
 
 from agent.component import browser as browser_use_module  # noqa: E402
 
@@ -151,41 +159,125 @@ def test_extract_ids_does_not_split_http_url_by_comma():
     assert refs == ["https://example.com/download?name=a,b.txt"]
 
 
+class _FakeRequestsResponse:
+    def __init__(self, status_code=200, headers=None, data=b""):
+        self.status_code = status_code
+        self.headers = dict(headers or {})
+        self._data = data
+        self.closed = False
+
+    def iter_content(self, chunk_size=1024 * 1024):
+        for i in range(0, len(self._data), max(chunk_size, 1)):
+            yield self._data[i : i + chunk_size]
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise AssertionError(f"unexpected HTTP status: {self.status_code}")
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeRequestsSession:
+    def __init__(self, handler):
+        self.trust_env = True
+        self.closed = False
+        self.calls = []
+        self._handler = handler
+
+    def get(self, url, **kwargs):
+        self.calls.append(url)
+        return self._handler(url, **kwargs)
+
+    def close(self):
+        self.closed = True
+
+
+def _patch_requests_session(monkeypatch, handler):
+    import requests
+
+    created = []
+
+    def _factory():
+        session = _FakeRequestsSession(handler)
+        created.append(session)
+        return session
+
+    monkeypatch.setattr(requests, "Session", _factory)
+    return created
+
+
+def _allow_public_hosts(monkeypatch):
+    import common.ssrf_guard as ssrf
+
+    def _fake_assert(url):
+        host = urlparse(url).hostname or ""
+        if host in {"example.com", "cdn.example.net"}:
+            return host, "93.184.216.34"
+        raise ValueError(f"blocked in test: {url}")
+
+    monkeypatch.setattr(ssrf, "assert_url_is_safe", _fake_assert)
+
+
 def test_prepare_upload_files_supports_http_url(monkeypatch, tmp_path):
     component = _build_component()
     component._param.upload_sources = "https://example.com/files/demo.txt"
-
-    class _FakeResponse:
-        def __init__(self):
-            self.headers = {"Content-Disposition": 'attachment; filename="remote_demo.txt"'}
-            self._data = b"hello from url"
-            self._pos = 0
-
-        def read(self, size=-1):
-            if size <= 0:
-                chunk = self._data[self._pos :]
-                self._pos = len(self._data)
-                return chunk
-            chunk = self._data[self._pos : self._pos + size]
-            self._pos += len(chunk)
-            return chunk
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            return False
-
-    monkeypatch.setattr(browser_use_module, "urlopen", lambda *_args, **_kwargs: _FakeResponse())
+    _allow_public_hosts(monkeypatch)
+    sessions = _patch_requests_session(
+        monkeypatch,
+        lambda _url, **_kwargs: _FakeRequestsResponse(
+            headers={"Content-Disposition": 'attachment; filename="remote_demo.txt"'},
+            data=b"hello from url",
+        ),
+    )
 
     prepared = component._prepare_upload_files(str(tmp_path))
 
     assert len(prepared) == 1
-    assert prepared[0]["file_id"] == ""
     assert prepared[0]["name"] == "remote_demo.txt"
-    assert prepared[0]["source_url"] == "https://example.com/files/demo.txt"
-    assert Path(prepared[0]["local_path"]).exists()
     assert Path(prepared[0]["local_path"]).read_bytes() == b"hello from url"
+    assert sessions[0].trust_env is False
+    assert sessions[0].closed is True
+
+
+def test_extract_url_filename_sanitizes_encoded_traversal():
+    name = browser_use_module.Browser._extract_url_filename(
+        "https://example.com/%2e%2e%2f..%2fetc%2fpasswd",
+        {"Content-Disposition": "attachment; filename*=UTF-8''..%2f..%2fowned.txt"},
+    )
+
+    assert name == "owned.txt"
+    assert re.fullmatch(
+        r"url_file_[0-9a-f]{8}\.bin",
+        browser_use_module.Browser._extract_url_filename("https://example.com/%2e%2e%2f", {}),
+    )
+
+
+def test_prepare_upload_url_rejects_private_addresses(monkeypatch, tmp_path):
+    component = _build_component()
+    calls = []
+    sessions = _patch_requests_session(monkeypatch, lambda url, **_kwargs: calls.append(url))
+
+    for url in ("http://127.0.0.1/admin", "http://169.254.169.254/latest/meta-data/", "http://10.1.2.3/internal"):
+        assert component._prepare_upload_url_file(url, str(tmp_path)) is None
+
+    assert calls == []
+    assert all(session.closed for session in sessions)
+
+
+def test_prepare_upload_url_revalidates_redirects(monkeypatch, tmp_path):
+    component = _build_component()
+    _allow_public_hosts(monkeypatch)
+    calls = []
+
+    def _redirect(url, **_kwargs):
+        calls.append(url)
+        return _FakeRequestsResponse(status_code=302, headers={"Location": "http://169.254.169.254/latest/meta-data/"})
+
+    _patch_requests_session(monkeypatch, _redirect)
+
+    assert component._prepare_upload_url_file("https://example.com/file.bin", str(tmp_path)) is None
+    assert calls == ["https://example.com/file.bin"]
 
 
 def test_prepare_upload_files_rejects_file_from_another_workspace(monkeypatch, tmp_path):
