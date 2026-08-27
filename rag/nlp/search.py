@@ -644,7 +644,8 @@ class Dealer:
                 # with locally computed term similarity using the user's
                 # weight. Chunk vectors stay in the index.
                 knn_scores = await self._knn_scores(sres, idx_names, kb_ids)
-                sim, tsim, vsim = self.rerank_with_knn(
+                sim, tsim, vsim = await thread_pool_exec(
+                    self.rerank_with_knn,
                     sres,
                     question,
                     knn_scores,
