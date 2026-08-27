@@ -88,6 +88,8 @@ async def create_container(name: str, language: SupportLanguage) -> bool:
         "--runtime=runsc",
         "--name",
         name,
+        "--network",
+        (os.getenv("SANDBOX_CONTAINER_NETWORK") or "").strip() or "none",
         "--read-only",
         "--tmpfs",
         "/workspace:rw,exec,size=100M,uid=65534,gid=65534",
@@ -136,7 +138,7 @@ async def create_container(name: str, language: SupportLanguage) -> bool:
 
         return await container_is_running(name)
     except Exception as e:
-        logger.error(f"❌ Container creation exception {name}: {str(e)}")
+        logger.error(f"❌ Container creation exception {name}: {e!s}")
         return False
 
 
@@ -148,7 +150,7 @@ async def recreate_container(name: str, language: SupportLanguage) -> bool:
 
         return await create_container(name, language)
     except Exception as e:
-        logger.error(f"❌ Container {name} recreation failed: {str(e)}")
+        logger.error(f"❌ Container {name} recreation failed: {e!s}")
         return False
 
 

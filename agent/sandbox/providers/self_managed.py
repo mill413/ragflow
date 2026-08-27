@@ -45,6 +45,7 @@ class SelfManagedProvider(SandboxProvider):
         self.timeout: int = 30
         self.max_retries: int = 3
         self.pool_size: int = 3
+        self.api_token: str = ""
         self._initialized: bool = False
 
     def initialize(self, config: Dict[str, Any]) -> bool:
@@ -65,6 +66,7 @@ class SelfManagedProvider(SandboxProvider):
         self.timeout = config.get("timeout", 30)
         self.max_retries = config.get("max_retries", 3)
         self.pool_size = config.get("executor_manager_pool_size", config.get("pool_size", 3))
+        self.api_token = str(config.get("api_token") or os.getenv("SANDBOX_EXECUTOR_MANAGER_API_TOKEN", "") or "").strip()
 
         # Validate endpoint is accessible
         if not self.health_check():
@@ -141,11 +143,14 @@ class SelfManagedProvider(SandboxProvider):
 
         url = f"{self.endpoint}/run"
         exec_timeout = timeout or self.timeout
+        headers = {"Content-Type": "application/json"}
+        if self.api_token:
+            headers["Authorization"] = f"Bearer {self.api_token}"
 
         start_time = time.time()
 
         try:
-            response = requests.post(url, json=payload, timeout=exec_timeout, headers={"Content-Type": "application/json"})
+            response = requests.post(url, json=payload, timeout=exec_timeout, headers=headers)
 
             execution_time = time.time() - start_time
 
@@ -240,6 +245,17 @@ class SelfManagedProvider(SandboxProvider):
                 "scope": "runtime",
                 "readonly": False,
             },
+            "api_token": {
+                "type": "string",
+                "required": False,
+                "label": "Executor Manager API Token",
+                "secret": True,
+                "placeholder": "Defaults to SANDBOX_EXECUTOR_MANAGER_API_TOKEN",
+                "default": "",
+                "description": "Shared secret used to authenticate RAGFlow to the executor manager.",
+                "scope": "runtime",
+                "readonly": False,
+            },
             "timeout": {
                 "type": "integer",
                 "required": False,
@@ -306,6 +322,15 @@ class SelfManagedProvider(SandboxProvider):
                 "label": "Enable Seccomp",
                 "default": os.getenv("SANDBOX_ENABLE_SECCOMP", "false").lower() == "true",
                 "description": "Whether sandbox-executor-manager starts containers with seccomp enabled.",
+                "scope": "deployment",
+                "readonly": True,
+            },
+            "container_network": {
+                "type": "string",
+                "required": False,
+                "label": "Container Network",
+                "default": os.getenv("SANDBOX_CONTAINER_NETWORK", "none"),
+                "description": "Docker network for sandbox containers. Defaults to none.",
                 "scope": "deployment",
                 "readonly": True,
             },

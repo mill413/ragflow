@@ -17,6 +17,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from services.auth import log_authentication_startup_state
 from util import format_timeout_duration, parse_timeout_duration
 
 from core.container import init_containers, teardown_containers
@@ -28,7 +29,7 @@ TIMEOUT = parse_timeout_duration(os.getenv("SANDBOX_TIMEOUT", "10s"))
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Asynchronous lifecycle management"""
-    size = int(os.getenv("SANDBOX_EXECUTOR_MANAGER_POOL_SIZE", 1))
+    size = int(os.getenv("SANDBOX_EXECUTOR_MANAGER_POOL_SIZE", "1"))
 
     success_count, total_task_count = await init_containers(size)
     logger.info(f"\n📊 Container pool initialization complete: {success_count}/{total_task_count} available")
@@ -40,4 +41,5 @@ async def _lifespan(app: FastAPI):
 
 def init():
     logger.info(f"Global timeout: {format_timeout_duration(TIMEOUT)}")
+    log_authentication_startup_state()
     return _lifespan

@@ -45,6 +45,7 @@ services:
       MYSQL_HOST: mysql
       MINIO_HOST: minio
       REDIS_HOST: redis
+      SANDBOX_EXECUTOR_MANAGER_API_TOKEN: ${SANDBOX_EXECUTOR_MANAGER_API_TOKEN:-}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - ${SVR_WEB_HTTP_PORT:-80}:80
@@ -74,7 +75,7 @@ services:
       - ragflow
 
   mysql:
-    image: mysql:8.0.39
+    image: mysql:8.0.40
     env_file: .env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-infini_rag_flow}
@@ -254,8 +255,13 @@ services:
       SANDBOX_ENABLE_SECCOMP: ${SANDBOX_ENABLE_SECCOMP:-false}
       SANDBOX_MAX_MEMORY: ${SANDBOX_MAX_MEMORY:-256m}
       SANDBOX_TIMEOUT: ${SANDBOX_TIMEOUT:-10s}
+      SANDBOX_EXECUTOR_MANAGER_API_TOKEN: ${SANDBOX_EXECUTOR_MANAGER_API_TOKEN:-}
+      SANDBOX_EXECUTOR_MANAGER_ALLOW_UNAUTHENTICATED: ${SANDBOX_EXECUTOR_MANAGER_ALLOW_UNAUTHENTICATED:-false}
+      SANDBOX_CONTAINER_NETWORK: ${SANDBOX_CONTAINER_NETWORK:-none}
+      SANDBOX_RUN_PREAUTH_RATE_LIMIT: ${SANDBOX_RUN_PREAUTH_RATE_LIMIT:-30/minute}
+      SANDBOX_RUN_RATE_LIMIT: ${SANDBOX_RUN_RATE_LIMIT:-120/minute}
     ports:
-      - ${SANDBOX_EXECUTOR_MANAGER_PORT:-9385}:9385
+      - 127.0.0.1:${SANDBOX_EXECUTOR_MANAGER_PORT:-9385}:9385
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     security_opt:

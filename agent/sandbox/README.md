@@ -140,6 +140,22 @@ make logs                                 # With Make
 
 The RAGFlow sandbox is designed to balance security and usability, offering solid protection without compromising developer experience.
 
+### Executor authentication and network isolation
+
+Set the same strong random token for RAGFlow and the executor manager:
+
+```dotenv
+SANDBOX_EXECUTOR_MANAGER_API_TOKEN=replace-with-a-strong-random-secret
+```
+
+`POST /run` fails closed with HTTP 503 when the token is absent. The executor
+port is bound to loopback on the host, requests are rate-limited, and runner
+containers use `--network none` by default. Set `SANDBOX_CONTAINER_NETWORK=bridge`
+only when executed code explicitly requires outbound access.
+
+`SANDBOX_EXECUTOR_MANAGER_ALLOW_UNAUTHENTICATED=true` restores the legacy open
+endpoint for emergency compatibility, but should not be used in production.
+
 ### ✅ gVisor Isolation
 
 At its core, we use [gVisor](https://gvisor.dev/docs/architecture_guide/security/), a user-space kernel, to isolate code execution from the host system. gVisor intercepts and restricts syscalls, offering robust protection against container escapes and privilege escalations.

@@ -12,7 +12,8 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-#
+import os
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from models.enums import ResultStatus
@@ -21,12 +22,15 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+RUN_RATE_LIMIT = os.getenv("SANDBOX_RUN_RATE_LIMIT", "120/minute")
+
 limiter = Limiter(key_func=get_remote_address)
 
 
 async def rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, RateLimitExceeded):
         return JSONResponse(
+            status_code=429,
             content=CodeExecutionResult(
                 status=ResultStatus.PROGRAM_RUNNER_ERROR,
                 stdout="",
