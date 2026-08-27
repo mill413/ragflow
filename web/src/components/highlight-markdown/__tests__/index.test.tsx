@@ -39,8 +39,12 @@ import { HighLightMarkdownRehypePlugins } from '..';
 
 describe('HighLightMarkdown security pipeline', () => {
   it('sanitizes the parsed tree between raw HTML parsing and KaTeX', () => {
+    const sanitizePlugin = HighLightMarkdownRehypePlugins[1] as [
+      unknown,
+      unknown,
+    ];
     expect(HighLightMarkdownRehypePlugins[0]).toBe(mockRehypeRaw);
-    expect(HighLightMarkdownRehypePlugins[1][0]).toBe(mockRehypeSanitize);
+    expect(sanitizePlugin[0]).toBe(mockRehypeSanitize);
     expect(HighLightMarkdownRehypePlugins[2]).toBe(mockRehypeKatex);
   });
 
