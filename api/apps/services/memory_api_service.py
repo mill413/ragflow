@@ -305,6 +305,12 @@ async def list_memory(filter_params: dict, keywords: str, page: int = 1, page_si
     if not WorkspaceAccessService.is_superuser(current_user.id):
         filter_dict["accessible_user_id"] = current_user.id
     allowed_tenant_ids = _joined_tenant_ids(current_user.id)
+    memory_ids = _split_filter_values(filter_params.get("ids"))
+    if memory_ids:
+        accessible_memory_ids = [memory.id for memory in _filter_accessible_memories(memory_ids)]
+        filter_dict["ids"] = accessible_memory_ids
+        if not accessible_memory_ids:
+            return {"memory_list": [], "total_count": 0}
     tenant_ids = _split_filter_values(filter_params.get("tenant_id") or filter_params.get("owner_ids"))
     if tenant_ids:
         filter_dict["tenant_id"] = [tenant_id for tenant_id in tenant_ids if tenant_id in allowed_tenant_ids]

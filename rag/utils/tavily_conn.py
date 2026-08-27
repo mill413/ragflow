@@ -14,9 +14,13 @@
 #  limitations under the License.
 #
 import logging
+
 from tavily import TavilyClient
+
 from common.misc_utils import get_uuid
 from rag.nlp import rag_tokenizer
+
+logger = logging.getLogger(__name__)
 
 
 class Tavily:
@@ -28,14 +32,14 @@ class Tavily:
             response = self.tavily_client.search(query=query, search_depth="advanced", max_results=6)
             return [{"url": res["url"], "title": res["title"], "content": res["content"], "score": res["score"]} for res in response["results"]]
         except Exception as e:
-            logging.exception(e)
+            # Provider exceptions may contain query text or credentials.
+            logger.error("Tavily search failed: %s", type(e).__name__)
 
         return []
 
     def retrieve_chunks(self, question):
         chunks = []
         aggs = []
-        logging.info("[Tavily]Q: " + question)
         for r in self.search(question):
             id = get_uuid()
             chunks.append(
@@ -57,5 +61,5 @@ class Tavily:
                 }
             )
             aggs.append({"doc_name": r["title"], "doc_id": id, "count": 1, "url": r["url"]})
-            logging.info("[Tavily]R: " + r["content"][:128] + "...")
+        logger.info("Tavily search returned %d chunks", len(chunks))
         return {"chunks": chunks, "doc_aggs": aggs}
