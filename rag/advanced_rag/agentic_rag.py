@@ -80,6 +80,7 @@ class RAGTools:
         user_defined_prompts: dict | None = None,
         do_refer: bool | None = True,
         thinking_mode: str = "medium",
+        system_prompt: str = "",
     ):
         self.tenant_ids = tenant_ids
         self.chat_mdl = chat_mdl.clone()
@@ -110,6 +111,7 @@ class RAGTools:
         self.user_defined_prompts = user_defined_prompts or {}
         self.kbinfos = {"chunks": [], "doc_aggs": []}
         self.do_refer = do_refer
+        self.system_prompt = system_prompt or ""
         # Citation pool shared with the final-answer node: the graph publishes
         # the chunks it actually used here (in the SAME order the answer's
         # ``[ID:n]`` markers index), so the caller can resolve references.
