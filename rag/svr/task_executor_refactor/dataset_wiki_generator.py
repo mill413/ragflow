@@ -112,6 +112,62 @@ def _parser_config_compilation_template_ids(parser_config, tenant_id: str) -> li
     return template_ids
 
 
+def _pipeline_compiler_llm_id(pipeline_id: str) -> str | None:
+    """Return the chat model configured on a pipeline Compiler component."""
+    pipeline_id = (pipeline_id or "").strip()
+    if not pipeline_id:
+        return None
+    from api.db.services.canvas_service import UserCanvasService
+
+    ok, canvas = UserCanvasService.get_by_id(pipeline_id)
+    if not ok or not canvas:
+        return None
+    dsl = getattr(canvas, "dsl", None)
+    if isinstance(dsl, str):
+        try:
+            dsl = json.loads(dsl)
+        except Exception:
+            return None
+    if not isinstance(dsl, dict) or not isinstance(dsl.get("components"), dict):
+        return None
+    for component in dsl["components"].values():
+        if not isinstance(component, dict):
+            continue
+        obj = component.get("obj") if isinstance(component.get("obj"), dict) else {}
+        component_name = obj.get("component_name") or component.get("component_name") or component.get("name")
+        if not isinstance(component_name, str) or component_name.lower() != "compiler":
+            continue
+        candidates = [
+            obj.get("params") if isinstance(obj.get("params"), dict) else {},
+            obj,
+            component.get("params") if isinstance(component.get("params"), dict) else {},
+            component,
+        ]
+        for candidate in candidates:
+            llm_id = candidate.get("llm_id")
+            if isinstance(llm_id, str) and llm_id.strip():
+                return llm_id.strip()
+        return None
+    return None
+
+
+def _validate_wiki_eligible_docs(eligible: list[tuple[dict, str]]) -> dict[str, str]:
+    template_ids = {template_id for _, template_id in eligible}
+    if len(template_ids) > 1:
+        raise ValueError("Eligible Wiki documents must use the same template")
+    pipeline_chat_llm_ids: dict[str, str] = {}
+    for doc, _ in eligible:
+        doc_id = str(doc.get("id") or "")
+        pipeline_id = str(doc.get("pipeline_id") or "").strip()
+        if not pipeline_id:
+            raise ValueError(f"Wiki document {doc_id} must use a pipeline")
+        llm_id = _pipeline_compiler_llm_id(pipeline_id)
+        if not llm_id:
+            raise ValueError(f"Wiki document {doc_id} pipeline Compiler must configure an LLM")
+        pipeline_chat_llm_ids[doc_id] = llm_id
+    return pipeline_chat_llm_ids
+
+
 def _wiki_topic_from_page(page: Dict, fallback: str = "") -> str:
     for key in ("topic", "title", "page_type"):
         value = page.get(key)
@@ -643,10 +699,7 @@ async def run_wiki(
     from api.db.services.knowledgebase_service import KnowledgebaseService
     from api.db.services.compilation_template_service import CompilationTemplateService
     from api.db.services.llm_service import LLMBundle
-    from api.db.joint_services.tenant_model_service import (
-        get_tenant_default_model_by_type,
-        resolve_model_config,
-    )
+    from api.db.joint_services.tenant_model_service import resolve_model_config
     from api.apps.restful_apis.chunk_api import _compilation_template_kind
 
     progress = ctx.progress_cb
@@ -689,6 +742,7 @@ async def run_wiki(
     if not eligible:
         progress(1.0, "No documents are configured for wiki compilation.")
         return
+    pipeline_chat_llm_ids = _validate_wiki_eligible_docs(eligible)
 
     # 3. Resolve chat models. MAP is per-(doc, template) so each pair
     # uses its template's own ``llm_id``. REDUCE / PLAN / REFINE are
@@ -696,31 +750,12 @@ async def run_wiki(
     # template's ``llm_id`` as the canonical KB chat model.
     llm_bundle_cache: dict[str, LLMBundle] = {}
 
-    def _bundle_for(llm_id: str | None) -> LLMBundle:
-        key = (llm_id or "").strip() or "__tenant_default__"
+    def _bundle_for(llm_id: str) -> LLMBundle:
+        key = llm_id.strip()
         cached = llm_bundle_cache.get(key)
         if cached is not None:
             return cached
-        try:
-            if key == "__tenant_default__":
-                cfg = get_tenant_default_model_by_type(ctx.tenant_id, LLMType.CHAT)
-            else:
-                cfg = resolve_model_config(
-                    ctx.tenant_id,
-                    LLMType.CHAT,
-                    key,
-                )
-        except Exception:
-            logging.exception(
-                "wiki: chat model resolution failed for llm_id=%s (kb=%s); falling back to tenant default",
-                key,
-                ctx.kb_id,
-            )
-            cfg = get_tenant_default_model_by_type(ctx.tenant_id, LLMType.CHAT)
-            key = "__tenant_default__"
-            cached = llm_bundle_cache.get(key)
-            if cached is not None:
-                return cached
+        cfg = resolve_model_config(ctx.tenant_id, LLMType.CHAT, key)
         bundle = LLMBundle(ctx.tenant_id, cfg, lang=ctx.language)
         llm_bundle_cache[key] = bundle
         return bundle
@@ -770,12 +805,12 @@ async def run_wiki(
             continue
         parser_cfg = template.get("config") or {}
 
-        map_llm_id = (parser_cfg.get("llm_id") or "").strip() if isinstance(parser_cfg, dict) else ""
+        map_llm_id = pipeline_chat_llm_ids[str(doc_id)]
         map_chat_mdl = _bundle_for(map_llm_id)
         if kb_chat_llm_id is None:
             # First eligible template wins — canonical for KB-wide
             # REDUCE/PLAN/REFINE further down.
-            kb_chat_llm_id = map_llm_id or None
+            kb_chat_llm_id = map_llm_id
             tmpl_example = parser_cfg.get("example") if isinstance(parser_cfg, dict) else None
             if isinstance(tmpl_example, str) and tmpl_example.strip():
                 kb_writer_example = tmpl_example
@@ -847,6 +882,8 @@ async def run_wiki(
     # input_hash gate (REDUCE keys off the MAP-state hash, PLAN off
     # REDUCE's hash, REFINE off PLAN's hash) so re-runs without an
     # upstream delta short-circuit at the cache layer.
+    if not kb_chat_llm_id:
+        raise ValueError("Wiki compilation requires an ingestion pipeline Compiler with an LLM configured")
     kb_chat_mdl = _bundle_for(kb_chat_llm_id)
     try:
         progress(0.65, "Reducing extracts KB-wide...")

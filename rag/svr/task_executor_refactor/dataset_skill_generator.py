@@ -347,31 +347,15 @@ async def run_corpus2skill(
     # much lives under ``api.db.services``.
     from api.db.services.document_service import DocumentService
     from api.db.services.llm_service import LLMBundle
-    from api.db.joint_services.tenant_model_service import (
-        get_tenant_default_model_by_type,
-    )
+    from api.db.joint_services.tenant_model_service import resolve_model_config
     from rag.advanced_rag.knowlege_compile.raptor import (
         RecursiveAbstractiveProcessing4TreeOrganizedRetrieval as Raptor,
     )
+    from rag.svr.task_executor_refactor.dataset_wiki_generator import _pipeline_compiler_llm_id
 
     progress = ctx.progress_cb
     progress(0.0, "skill: loading documents")
 
-    # ---- Phase 0: chat model + RAPTOR instance for summarization/clustering.
-    chat_model_config = get_tenant_default_model_by_type(ctx.tenant_id, LLMType.CHAT)
-    chat_mdl = LLMBundle(ctx.tenant_id, chat_model_config, lang=ctx.language)
-
-    raptor = Raptor(
-        max_cluster=128,
-        llm_model=chat_mdl,
-        embd_model=embedding_model,
-        prompt="Please write a concise summary of the following texts:\n{cluster_content}",
-        max_token=256,
-        threshold=0.1,
-        max_errors=3,
-    )
-
-    # ---- Phase 1: per-doc summaries.
     all_docs, _ = await thread_pool_exec(
         DocumentService.get_by_kb_id,
         kb_id=ctx.kb_id,
@@ -389,6 +373,39 @@ async def run_corpus2skill(
         progress(1.0, "skill: no documents in KB")
         return
 
+    # ---- Phase 0: use each document pipeline's Compiler LLM. The first
+    # document's model owns KB-wide clustering summaries deterministically.
+    chat_models: dict[str, LLMBundle] = {}
+    raptors: dict[str, Raptor] = {}
+    doc_llm_ids: dict[str, str] = {}
+    for doc in eligible_docs:
+        doc_id = str(doc["id"])
+        pipeline_id = str(doc.get("pipeline_id") or "").strip()
+        if not pipeline_id:
+            raise ValueError(f"Skill document {doc_id} must use a pipeline")
+        llm_id = _pipeline_compiler_llm_id(pipeline_id)
+        if not llm_id:
+            raise ValueError(f"Skill document {doc_id} pipeline Compiler must configure an LLM")
+        doc_llm_ids[doc_id] = llm_id
+        if llm_id in chat_models:
+            continue
+        chat_model_config = resolve_model_config(ctx.tenant_id, LLMType.CHAT, llm_id)
+        chat_models[llm_id] = LLMBundle(ctx.tenant_id, chat_model_config, lang=ctx.language)
+        raptors[llm_id] = Raptor(
+            max_cluster=128,
+            llm_model=chat_models[llm_id],
+            embd_model=embedding_model,
+            prompt="Please write a concise summary of the following texts:\n{cluster_content}",
+            max_token=256,
+            threshold=0.1,
+            max_errors=3,
+        )
+    first_llm_id = doc_llm_ids[str(eligible_docs[0]["id"])]
+    chat_mdl = chat_models[first_llm_id]
+    raptor = raptors[first_llm_id]
+
+    # ---- Phase 1: per-doc summaries.
+
     # Phase-1 gate: bail before spinning up N per-doc summarizations.
     if ctx.has_canceled_func(ctx.id):
         progress(-1, "skill: task has been canceled")
@@ -401,10 +418,11 @@ async def run_corpus2skill(
     async def _summarize_doc(d: Dict) -> Optional[SkillNode]:
         async with doc_sem:
             try:
+                llm_id = doc_llm_ids[str(d["id"])]
                 return await doc_summary_for_skill(
                     d["id"],
-                    raptor,
-                    chat_mdl,
+                    raptors[llm_id],
+                    chat_models[llm_id],
                     ctx,
                     load_chunks_for_doc,
                 )

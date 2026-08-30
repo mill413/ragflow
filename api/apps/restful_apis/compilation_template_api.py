@@ -53,7 +53,6 @@ def list_builtin_templates() -> Response:
                 }
                 for template in CompilationTemplateService.load_builtins_from_files()
             ]
-        templates = CompilationTemplateService.fill_default_llm_for_templates(templates, workspace_id)
         return get_json_result(data=templates)
     except Exception as exc:
         return server_error_response(exc)
