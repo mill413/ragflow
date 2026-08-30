@@ -45,7 +45,7 @@ env:
   # 并同时在 ragflow.api.args 中启用 --init-superuser。
   # DEFAULT_SUPERUSER_NICKNAME: "admin"
   # DEFAULT_SUPERUSER_EMAIL: "admin@ragflow.io"
-  # DEFAULT_SUPERUSER_PASSWORD: "admin"
+  # DEFAULT_SUPERUSER_PASSWORD: "replace-with-a-strong-random-password"
 
   # 此 Chart 使用的文档引擎。
   DOC_ENGINE: elasticsearch

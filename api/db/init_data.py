@@ -41,10 +41,12 @@ from api.common.base64 import encode_to_base64
 
 DEFAULT_SUPERUSER_NICKNAME = os.getenv("DEFAULT_SUPERUSER_NICKNAME", "admin")
 DEFAULT_SUPERUSER_EMAIL = os.getenv("DEFAULT_SUPERUSER_EMAIL", "admin@ragflow.io")
-DEFAULT_SUPERUSER_PASSWORD = os.getenv("DEFAULT_SUPERUSER_PASSWORD", "admin")
+DEFAULT_SUPERUSER_PASSWORD = os.getenv("DEFAULT_SUPERUSER_PASSWORD")
 
 
 def init_superuser(nickname=DEFAULT_SUPERUSER_NICKNAME, email=DEFAULT_SUPERUSER_EMAIL, password=DEFAULT_SUPERUSER_PASSWORD, role=UserTenantRole.OWNER):
+    if not password:
+        raise RuntimeError("DEFAULT_SUPERUSER_PASSWORD must be set when --init-superuser is enabled")
     if UserService.query(email=email):
         logging.info("User with email %s already exists, skipping initialization.", email)
         return
