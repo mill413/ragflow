@@ -43,6 +43,11 @@ from common import settings
 from common.misc_utils import thread_pool_exec
 from common.token_utils import num_tokens_from_string
 from rag.advanced_rag.agentic_rag_graph import _strip_think_stream
+from rag.advanced_rag.harness.tools.search import (
+    _resolve_rerank_candidates,
+    _resolve_top_k,
+    _setting,
+)
 from rag.app.tag import label_question
 from rag.llm.tool_decorator import tool
 from rag.prompts.generator import (
@@ -81,8 +86,18 @@ class RAGTools:
         do_refer: bool | None = True,
         thinking_mode: str = "medium",
         system_prompt: str = "",
+        similarity_threshold: float | None = None,
+        vector_similarity_weight: float | None = None,
+        top_n: int | None = None,
+        rerank_candidates_count: int | None = None,
+        top_k: int | None = None,
     ):
         self.tenant_ids = tenant_ids
+        self.similarity_threshold = similarity_threshold
+        self.vector_similarity_weight = vector_similarity_weight
+        self.top_n = top_n
+        self.rerank_candidates_count = rerank_candidates_count
+        self.top_k = top_k
         self.chat_mdl = chat_mdl.clone()
         self.embed_mdl = embed_mdl
         self.thinking_mode = thinking_mode
@@ -355,8 +370,8 @@ class RAGTools:
         question: str,
         keywords: str | list = "",
         doc_scope: List[str] | None = None,
-        top_n: int = 6,
-        similarity_threshold: float = 0.2,
+        top_n: int | None = None,
+        similarity_threshold: float | None = None,
         using_embedding: bool = False,
     ) -> dict[str, list]:
         """Retrieve chunks from the unstructured KBs for one question.
@@ -369,6 +384,12 @@ class RAGTools:
             return {"chunks": [], "doc_aggs": []}
         if isinstance(keywords, list):
             keywords = ",".join(keywords)
+        if top_n is None:
+            top_n = int(_setting(self, "top_n", 6))
+        if similarity_threshold is None:
+            similarity_threshold = float(
+                _setting(self, "similarity_threshold", 0.2),
+            )
         logging.info(f"@retrieve: {question}@{keywords}")
 
         if doc_scope:
@@ -389,7 +410,13 @@ class RAGTools:
             question = question + " " + search_terms
 
         embd_mdl = self.embed_mdl if using_embedding else None
-        vector_weight = 0.7 if embd_mdl else 0
+        vector_weight = (
+            float(_setting(self, "vector_similarity_weight", 0.7))
+            if embd_mdl
+            else 0
+        )
+        knn_top_k = _resolve_top_k(self)
+        rerank_candidates_count = _resolve_rerank_candidates(self, top_n)
         kbinfos = await settings.retriever.retrieval(
             question,
             embd_mdl,
@@ -399,10 +426,12 @@ class RAGTools:
             top_n,
             similarity_threshold,
             vector_similarity_weight=vector_weight,
+            knn_top_k=knn_top_k,
             aggs=True,
             highlight=True,
             doc_ids=doc_scope,
             rank_feature=label_question(question, self.kbs),
+            rerank_candidates_count=rerank_candidates_count,
         )
         if not kbinfos:
             return {"chunks": [], "doc_aggs": []}

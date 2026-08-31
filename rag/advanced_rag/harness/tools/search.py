@@ -150,6 +150,39 @@ def _narrow_by_keywords(chunks: list[dict], keywords: str) -> list[dict]:
     return out
 
 
+_DEFAULT_SIMILARITY_THRESHOLD = 0.2
+_DEFAULT_HYBRID_VECTOR_WEIGHT = 0.3
+_DEFAULT_TOP_N = 12
+_DEFAULT_RERANK_CANDIDATES = 64
+_DEFAULT_TOP_K = 1024
+
+
+def _setting(tools, name: str, default):
+    value = getattr(tools, name, None)
+    return default if value is None else value
+
+
+def _resolve_top_n(tools, top_n: int | None) -> int:
+    return top_n if top_n is not None else int(_setting(tools, "top_n", _DEFAULT_TOP_N))
+
+
+def _resolve_top_k(tools) -> int:
+    return int(_setting(tools, "top_k", _DEFAULT_TOP_K))
+
+
+def _resolve_rerank_candidates(tools, top_n: int) -> int:
+    return max(
+        int(
+            _setting(
+                tools,
+                "rerank_candidates_count",
+                _DEFAULT_RERANK_CANDIDATES,
+            ),
+        ),
+        top_n,
+    )
+
+
 def _search_cache_key(effective_query: str, target_ids, top_n: int, doc_scope) -> tuple:
     """Key a retrieval by what actually determines its result.
 
@@ -179,7 +212,8 @@ def _normalize(kbinfos: dict, tenant_ids: list[str] | str | None) -> dict:
     return kbinfos
 
 
-async def hybrid_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int = 12, doc_scope: list[str] | None = None, keywords: str = "") -> dict:
+async def hybrid_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int | None = None, doc_scope: list[str] | None = None, keywords: str = "") -> dict:
+    top_n = _resolve_top_n(tools, top_n)
     if not tools.kb_ids and not kb_ids:
         return {"chunks": [], "doc_aggs": []}
     target_ids = kb_ids or tools.kb_ids
@@ -200,7 +234,26 @@ async def hybrid_search(tools, query: str, kb_ids: list[str] | None = None, top_
         return cached
 
     embd_mdl = tools.embed_mdl
-    vector_weight = 0.3 if embd_mdl else 0
+    vector_weight = (
+        float(
+            _setting(
+                tools,
+                "vector_similarity_weight",
+                _DEFAULT_HYBRID_VECTOR_WEIGHT,
+            ),
+        )
+        if embd_mdl
+        else 0
+    )
+    similarity_threshold = float(
+        _setting(
+            tools,
+            "similarity_threshold",
+            _DEFAULT_SIMILARITY_THRESHOLD,
+        ),
+    )
+    knn_top_k = _resolve_top_k(tools)
+    rerank_candidates_count = _resolve_rerank_candidates(tools, top_n)
 
     kbinfos = await settings.retriever.retrieval(
         effective_query,
@@ -209,11 +262,13 @@ async def hybrid_search(tools, query: str, kb_ids: list[str] | None = None, top_
         target_ids,
         1,
         top_n,
-        0.2,
+        similarity_threshold,
         vector_similarity_weight=vector_weight,
+        knn_top_k=knn_top_k,
         aggs=True,
         highlight=False,
         doc_ids=doc_scope,
+        rerank_candidates_count=rerank_candidates_count,
     )
     kbinfos = _normalize(kbinfos, tools.tenant_ids)
     if keywords:
@@ -225,7 +280,8 @@ async def hybrid_search(tools, query: str, kb_ids: list[str] | None = None, top_
     return kbinfos
 
 
-async def vector_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int = 12, keywords: str = "") -> dict:
+async def vector_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int | None = None, keywords: str = "", doc_scope: list[str] | None = None) -> dict:
+    top_n = _resolve_top_n(tools, top_n)
     if not tools.embed_mdl:
         _LOG.warning("vector_search: no embed_mdl available")
         return {"chunks": [], "doc_aggs": []}
@@ -233,6 +289,10 @@ async def vector_search(tools, query: str, kb_ids: list[str] | None = None, top_
     _LOG.info(f'[Vector search] Searching by meaning for "{query}" (keywords: {keywords})')
     effective_query = f"{query} {keywords}".strip() if keywords else query
     target_ids = kb_ids or tools.kb_ids
+    if hasattr(tools, "scoped_doc_ids"):
+        doc_scope = tools.scoped_doc_ids(doc_scope)
+    knn_top_k = _resolve_top_k(tools)
+    rerank_candidates_count = _resolve_rerank_candidates(tools, top_n)
     kbinfos = await settings.retriever.retrieval(
         effective_query,
         tools.embed_mdl,
@@ -242,8 +302,11 @@ async def vector_search(tools, query: str, kb_ids: list[str] | None = None, top_
         top_n,
         0.2,
         vector_similarity_weight=1.0,
+        knn_top_k=knn_top_k,
         aggs=False,
         highlight=False,
+        doc_ids=doc_scope,
+        rerank_candidates_count=rerank_candidates_count,
     )
     kbinfos = _normalize(kbinfos, tools.tenant_ids)
     if keywords:
@@ -253,10 +316,15 @@ async def vector_search(tools, query: str, kb_ids: list[str] | None = None, top_
     return kbinfos
 
 
-async def bm25_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int = 12, keywords: str = "") -> dict:
+async def bm25_search(tools, query: str, kb_ids: list[str] | None = None, top_n: int | None = None, keywords: str = "", doc_scope: list[str] | None = None) -> dict:
+    top_n = _resolve_top_n(tools, top_n)
     _LOG.info(f'[BM25 search] Searching by keyword for "{query}" (keywords: {keywords})')
     target_ids = kb_ids or tools.kb_ids
     effective_query = f"{query} {keywords}".strip() if keywords else query
+    if hasattr(tools, "scoped_doc_ids"):
+        doc_scope = tools.scoped_doc_ids(doc_scope)
+    knn_top_k = _resolve_top_k(tools)
+    rerank_candidates_count = _resolve_rerank_candidates(tools, top_n)
     kbinfos = await settings.retriever.retrieval(
         effective_query,
         None,
@@ -266,8 +334,11 @@ async def bm25_search(tools, query: str, kb_ids: list[str] | None = None, top_n:
         top_n,
         0.0,
         vector_similarity_weight=0,
+        knn_top_k=knn_top_k,
         aggs=False,
         highlight=False,
+        doc_ids=doc_scope,
+        rerank_candidates_count=rerank_candidates_count,
     )
     kbinfos = _normalize(kbinfos, tools.tenant_ids)
     if keywords:
