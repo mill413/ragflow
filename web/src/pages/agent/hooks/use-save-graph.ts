@@ -3,6 +3,7 @@ import {
   useResetAgent,
   useSetAgent,
 } from '@/hooks/use-agent-request';
+import message from '@/components/ui/message';
 import {
   GlobalVariableType,
   RAGFlowNodeType,
@@ -10,8 +11,10 @@ import {
 import { formatDate } from '@/utils/date';
 import { useDebounceEffect } from 'ahooks';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import useGraphStore from '../store';
+import { getEmptyMessageNodeNames } from '../utils';
 import { useBuildDslData } from './use-build-dsl';
 
 export const useSaveGraph = (showMessage: boolean = true) => {
@@ -19,6 +22,7 @@ export const useSaveGraph = (showMessage: boolean = true) => {
   const { setAgent, loading } = useSetAgent(showMessage);
   const { id } = useParams();
   const { buildDslData } = useBuildDslData();
+  const { t } = useTranslation();
 
   const saveGraph = useCallback(
     async (
@@ -28,6 +32,17 @@ export const useSaveGraph = (showMessage: boolean = true) => {
       },
       release?: boolean,
     ) => {
+      if (showMessage) {
+        const emptyMessageNodeNames = getEmptyMessageNodeNames(
+          currentNodes ?? useGraphStore.getState().nodes,
+        );
+        if (emptyMessageNodeNames.length > 0) {
+          message.warning(
+            `${emptyMessageNodeNames.join(', ')}: ${t('flow.messageMsg')}`,
+          );
+        }
+      }
+
       const params: Record<string, any> = {
         id,
         title: data.title,
@@ -40,7 +55,7 @@ export const useSaveGraph = (showMessage: boolean = true) => {
 
       return setAgent(params);
     },
-    [setAgent, data, id, buildDslData],
+    [setAgent, data, id, buildDslData, showMessage, t],
   );
 
   return { saveGraph, loading };
