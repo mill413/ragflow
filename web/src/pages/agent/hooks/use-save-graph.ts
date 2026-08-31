@@ -14,7 +14,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import useGraphStore from '../store';
-import { getEmptyMessageNodeNames } from '../utils';
+import { findAgentNodeWithoutModel } from '../utils/agent-node-model';
+import { getEmptyMessageNodeNames } from '../utils/message-node';
 import { useBuildDslData } from './use-build-dsl';
 
 export const useSaveGraph = (showMessage: boolean = true) => {
@@ -32,10 +33,21 @@ export const useSaveGraph = (showMessage: boolean = true) => {
       },
       release?: boolean,
     ) => {
+      const nodes = currentNodes ?? useGraphStore.getState().nodes;
+      const agentWithoutModel = findAgentNodeWithoutModel(nodes);
+      if (agentWithoutModel) {
+        if (showMessage) {
+          message.warning(
+            t('flow.agentModelMissing', {
+              name: agentWithoutModel.data?.name,
+            }),
+          );
+        }
+        return;
+      }
+
       if (showMessage) {
-        const emptyMessageNodeNames = getEmptyMessageNodeNames(
-          currentNodes ?? useGraphStore.getState().nodes,
-        );
+        const emptyMessageNodeNames = getEmptyMessageNodeNames(nodes);
         if (emptyMessageNodeNames.length > 0) {
           message.warning(
             `${emptyMessageNodeNames.join(', ')}: ${t('flow.messageMsg')}`,

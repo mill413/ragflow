@@ -2856,6 +2856,7 @@ NER：使用 spaCy NER 和基于规则的关键词提取来抽取实体和关系
       parserDescription: '从文件中提取原始文本和结构以供下游处理。',
       tokenizer: '分词器',
       tokenizerRequired: '请先添加Tokenizer节点',
+      agentModelMissing: '无法保存：“{{name}}” 未选择模型，请先选择',
       tokenizerDescription:
         '根据所选的搜索方法，将文本转换为所需的数据结构（例如，用于嵌入搜索的向量嵌入）。',
       tokenChunker: '按 Token 分块',
