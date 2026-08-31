@@ -93,8 +93,8 @@ task_exe(){
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting task_executor.py for task $task_id (Attempt $((retry_count+1)))"
-        LD_PRELOAD=$JEMALLOC_PATH $PY rag/svr/task_executor.py -i "$task_id"
-        EXIT_CODE=$?
+        EXIT_CODE=0
+        LD_PRELOAD=$JEMALLOC_PATH $PY rag/svr/task_executor.py -i "$task_id" || EXIT_CODE=$?
         if [ $EXIT_CODE -eq 0 ]; then
             echo "task_executor.py for task $task_id exited successfully."
             break
@@ -118,8 +118,8 @@ run_server(){
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting $server_name (Attempt $((retry_count+1)))"
-        "${server_cmd[@]}"
-        EXIT_CODE=$?
+        EXIT_CODE=0
+        "${server_cmd[@]}" || EXIT_CODE=$?
         if [ $EXIT_CODE -eq 0 ]; then
             echo "$server_name exited successfully."
             break
@@ -143,8 +143,8 @@ run_admin_server(){
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting $server_name (Attempt $((retry_count+1)))"
-        "${server_cmd[@]}"
-        EXIT_CODE=$?
+        EXIT_CODE=0
+        "${server_cmd[@]}" || EXIT_CODE=$?
         if [ $EXIT_CODE -eq 0 ]; then
             echo "$server_name exited successfully."
             break
@@ -165,8 +165,8 @@ run_data_sync(){
     local retry_count=0
     while ! $STOP && [ $retry_count -lt $MAX_RETRIES ]; do
         echo "Starting sync_data_source.py (Attempt $((retry_count+1)))"
-        $PY rag/svr/sync_data_source.py
-        EXIT_CODE=$?
+        EXIT_CODE=0
+        $PY rag/svr/sync_data_source.py || EXIT_CODE=$?
         if [ $EXIT_CODE -eq 0 ]; then
             echo "sync_data_source.py exited successfully."
             break
