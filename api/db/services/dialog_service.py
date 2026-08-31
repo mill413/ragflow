@@ -1904,6 +1904,18 @@ async def rag_agent(dialog, messages, stream=True, **kwargs):
             yield ans
         return
     kbs, embd_mdl, rerank_mdl, chat_mdl, tts_mdl = get_models(dialog)
+
+    # Agentic RAG requires the outer model to call the bound retrieval tool.
+    # Fall back to the regular grounded RAG path when tool calling is absent.
+    if not getattr(chat_mdl, "is_tools", False):
+        logging.info("LLM does not support tool calls; falling back to regular RAG chat")
+        fallback_kwargs = dict(kwargs)
+        if isinstance(fallback_kwargs.get("doc_ids"), list):
+            fallback_kwargs["doc_ids"] = ",".join(str(doc_id) for doc_id in fallback_kwargs["doc_ids"] if doc_id)
+        async for ans in async_chat(dialog, messages, stream, **fallback_kwargs):
+            yield ans
+        return
+
     use_web_search = _should_use_web_search(prompt_config, kwargs.get("internet"))
     logging.debug("web_search kb=%s configured=%s internet=%r enabled=%s", bool(dialog.kb_ids), has_web_search_provider(prompt_config), kwargs.get("internet"), use_web_search)
     tenant_ids = list(set([kb.tenant_id for kb in kbs]))
