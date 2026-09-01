@@ -2,7 +2,41 @@ import { AgentFormContext } from '@/pages/agent/context';
 import { Operator } from '@/pages/agent/constant';
 import useGraphStore from '@/pages/agent/store';
 import { act, renderHook } from '@testing-library/react';
+import React from 'react';
 import { useUpdateAgentNodeTools } from './use-update-tools';
+
+const mockReactRuntime = React;
+(globalThis as any).React = mockReactRuntime;
+
+jest.mock('@/locales/config', () => ({
+  __esModule: true,
+  default: { t: (key: string) => key },
+  DEFAULT_LANGUAGE_CODE: 'en',
+}));
+
+jest.mock('@/pages/agent/constant', () => ({
+  Operator: new Proxy({}, { get: (_target, key) => String(key) }),
+  NodeHandleId: new Proxy({}, { get: (_target, key) => String(key) }),
+  SwitchElseTo: 'switch_else',
+}));
+
+jest.mock('@/pages/agent/store', () => {
+  let state: any = { nodes: [], edges: [] };
+  const actions = {
+    generateAgentToolId: (value: string) => `${value}:0`,
+    updateNodeForm: (nodeId: string, value: unknown, path: string[]) => {
+      const node = state.nodes.find((item: any) => item.id === nodeId);
+      if (node && path[0] === 'tools') node.data.form.tools = value;
+    },
+  };
+  const useStore: any = (selector: (value: any) => unknown) =>
+    selector({ ...state, ...actions });
+  useStore.setState = (next: any) => {
+    state = { ...state, ...next };
+  };
+  useStore.getState = () => ({ ...state, ...actions });
+  return { __esModule: true, default: useStore };
+});
 
 // The initial-values hook pulls in the whole operator-params catalog; the
 // params payload is irrelevant to duplicate-guard behavior.
@@ -35,10 +69,10 @@ function seedStore(tools: Tool[]) {
 // so a toggle re-reads the tools written by the previous toggle.
 function Wrapper({ children }: any) {
   const node = useGraphStore((s) => s.nodes.find((n) => n.id === 'agent:0'));
-  return (
-    <AgentFormContext.Provider value={node as any}>
-      {children}
-    </AgentFormContext.Provider>
+  return React.createElement(
+    AgentFormContext.Provider,
+    { value: node as any },
+    children,
   );
 }
 

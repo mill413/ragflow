@@ -50,8 +50,8 @@ export function useBeforeDelete() {
       });
 
     // Delete the agent and tool nodes downstream of the agent node
-    if (nodes.some(agentPredicate)) {
-      nodes.filter(agentPredicate).forEach((node) => {
+    if (toBeDeletedNodes.some(agentPredicate)) {
+      toBeDeletedNodes.filter(agentPredicate).forEach((node) => {
         const { downstreamAgentAndToolNodeIds } =
           deleteAllDownstreamAgentsAndTool(node.id, graphEdges);
 

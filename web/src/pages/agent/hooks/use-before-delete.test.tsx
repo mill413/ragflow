@@ -1,12 +1,60 @@
 import { act, renderHook } from '@testing-library/react';
-import { Edge } from '@xyflow/react';
 import { NodeHandleId, Operator } from '../constant';
 import useGraphStore from '../store';
 import { useBeforeDelete } from './use-before-delete';
 
+type Edge = import('@xyflow/react').Edge;
+
+jest.mock('@/locales/config', () => ({
+  __esModule: true,
+  default: { t: (key: string) => key },
+  DEFAULT_LANGUAGE_CODE: 'en',
+}));
+
+jest.mock('../constant', () => ({
+  Operator: new Proxy({}, { get: (_target, key) => String(key) }),
+  NodeHandleId: new Proxy({}, { get: (_target, key) => String(key) }),
+  SwitchElseTo: 'switch_else',
+}));
+
+jest.mock('../store', () => {
+  let state: any = { nodes: [], edges: [] };
+  const actions = {
+    getOperatorTypeFromId: (id: string) =>
+      state.nodes.find((node: any) => node.id === id)?.data?.label,
+    getNode: (id: string) =>
+      state.nodes.find((node: any) => node.id === id),
+  };
+  const useStore: any = (selector: (value: any) => unknown) =>
+    selector({ ...state, ...actions });
+  useStore.setState = (next: any) => {
+    state = { ...state, ...next };
+  };
+  useStore.getState = () => ({ ...state, ...actions });
+
+  const collectDeletionNodeIds = (nodes: any[], _edges: any[], rootId: string) => {
+    const ids = [rootId];
+    for (let index = 0; index < ids.length; index += 1) {
+      const current = ids[index];
+      nodes
+        .filter((node) => node.parentId === current)
+        .forEach((node) => {
+          if (!ids.includes(node.id)) ids.push(node.id);
+        });
+    }
+    return ids;
+  };
+
+  return {
+    __esModule: true,
+    default: useStore,
+    collectDeletionNodeIds,
+  };
+});
+
 const createNode = (
   id: string,
-  label: Operator,
+  label: any,
   options: Record<string, unknown> = {},
 ) => ({
   id,
