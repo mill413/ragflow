@@ -21,6 +21,13 @@ describe('getWebhookTraceStatus', () => {
 
     expect(
       getWebhookTraceStatus({
+        events: [{ event: 'finished', success: true }],
+        finished: true,
+      }),
+    ).toEqual({ status: 'success' });
+
+    expect(
+      getWebhookTraceStatus({
         events: [],
         finished: true,
       }),

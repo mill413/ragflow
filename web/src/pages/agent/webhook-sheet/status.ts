@@ -31,8 +31,10 @@ export const getWebhookTraceStatus = (
   const finishedEvent = [...events]
     .reverse()
     .find((event) => event.event === 'finished');
+  const finishedSuccessfully =
+    finishedEvent?.data?.success ?? finishedEvent?.success;
 
-  if (failureEvent || finishedEvent?.data?.success !== true) {
+  if (failureEvent || finishedSuccessfully !== true) {
     return {
       status: 'fail',
       message: getFailureMessage(failureEvent),
