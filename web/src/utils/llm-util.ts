@@ -46,14 +46,28 @@ export function buildModelValue(model: {
 /** Parse "modelName@instanceName@providerName" */
 export function parseModelValue(val: string) {
   if (!val) return null;
-  const firstAt = val.indexOf('@');
   const lastAt = val.lastIndexOf('@');
-  if (firstAt === -1 || firstAt === lastAt) return null;
+  if (lastAt === -1) return null;
+  const secondLastAt = val.lastIndexOf('@', lastAt - 1);
+  if (secondLastAt === -1) {
+    return {
+      model_name: val.substring(0, lastAt),
+      model_instance: 'default',
+      model_provider: val.substring(lastAt + 1),
+    };
+  }
   return {
-    model_name: val.substring(0, firstAt),
-    model_instance: val.substring(firstAt + 1, lastAt),
+    model_name: val.substring(0, secondLastAt),
+    model_instance: val.substring(secondLastAt + 1, lastAt),
     model_provider: val.substring(lastAt + 1),
   };
+}
+
+export function getEmbeddingBaseName(
+  embeddingModel?: string | null,
+): string {
+  if (!embeddingModel) return '';
+  return parseModelValue(embeddingModel)?.model_name ?? embeddingModel;
 }
 
 // Extract model name and factory ID from a model UUID

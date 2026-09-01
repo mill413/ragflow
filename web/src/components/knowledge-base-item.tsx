@@ -5,6 +5,7 @@ import {
 } from '@/hooks/use-knowledge-request';
 import { IDataset } from '@/interfaces/database/dataset';
 import { useBuildQueryVariableOptions } from '@/pages/agent/hooks/use-get-begin-query';
+import { getEmbeddingBaseName } from '@/utils/llm-util';
 import { useDebounce } from 'ahooks';
 import { toLower } from 'lodash';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
@@ -60,9 +61,11 @@ export function useDisableDifferenceEmbeddingDataset(
     );
   }, [datasetListOrigin, selectedDatasets]);
 
-  const selectedEmbedId = useMemo(() => {
+  const selectedEmbedBaseName = useMemo(() => {
     const data = datasetList?.find((item) => item.id === datasetId?.[0]);
-    return data?.embedding_model ?? '';
+    return getEmbeddingBaseName(
+      data?.embedding_model_name || data?.embedding_model,
+    );
   }, [datasetId, datasetList]);
 
   const nextOptions = useMemo(() => {
@@ -92,10 +95,13 @@ export function useDisableDifferenceEmbeddingDataset(
         disabled:
           item.chunk_count === 0 ||
           item.chunk_method === DocumentParserType.Tag ||
-          (selectedEmbedId !== '' && item.embedding_model !== selectedEmbedId),
+          (selectedEmbedBaseName !== '' &&
+            getEmbeddingBaseName(
+              item.embedding_model_name || item.embedding_model,
+            ) !== selectedEmbedBaseName),
       };
     });
-  }, [datasetList, selectedEmbedId]);
+  }, [datasetList, selectedEmbedBaseName]);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearchString(value);
