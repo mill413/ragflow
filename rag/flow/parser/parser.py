@@ -20,24 +20,26 @@ import random
 import re
 from functools import partial
 
-from litellm import logging
 import numpy as np
+from litellm import logging
 from PIL import Image
 
-from api.db.services.file2document_service import File2DocumentService
-from api.db.services.file_service import FileService
-from api.db.services.llm_service import LLMBundle
 from api.db.joint_services.tenant_model_service import (
     ensure_mineru_from_env,
     ensure_opendataloader_from_env,
     ensure_paddleocr_from_env,
+    get_composite_model_name_by_id,
     get_first_provider_model_name,
-    resolve_model_config,
     get_tenant_default_model_by_type,
+    resolve_model_config,
 )
+from api.db.services.file2document_service import File2DocumentService
+from api.db.services.file_service import FileService
+from api.db.services.llm_service import LLMBundle
 from common import settings
 from common.constants import LLMType
 from common.misc_utils import get_uuid, thread_pool_exec
+from common.parser_config_utils import resolve_parser_model_reference
 from deepdoc.parser import ExcelParser, HtmlParser, TxtParser
 from deepdoc.parser.docling_parser import DoclingParser
 from deepdoc.parser.pdf_parser import PlainParser, RAGFlowPdfParser, VisionParser
@@ -52,8 +54,8 @@ from rag.flow.parser.pdf_chunk_metadata import (
 from rag.flow.parser.schema import ParserFromUpstream
 from rag.flow.parser.utils import (
     enhance_media_sections_with_vision,
-    extract_word_outlines,
     extract_docx_header_footer_texts,
+    extract_word_outlines,
     remove_header_footer_docx_sections,
     remove_header_footer_html_blob,
     remove_toc,
@@ -339,24 +341,8 @@ class Parser(ProcessBase):
 
         # Normalize parser selection and optional provider-specific model name.
         raw_parse_method = conf.get("parse_method", "")
-        parser_model_name = None
-        parse_method = raw_parse_method
+        parse_method, parser_model_name = resolve_parser_model_reference(raw_parse_method, get_composite_model_name_by_id)
         parse_method = parse_method or ""
-        if isinstance(raw_parse_method, str):
-            lowered = raw_parse_method.lower()
-            if lowered.endswith("@mineru"):
-                parser_model_name = raw_parse_method
-                parse_method = "MinerU"
-            elif lowered.endswith("@paddleocr"):
-                parser_model_name = raw_parse_method
-                parse_method = "PaddleOCR"
-            elif lowered.endswith("@somark"):
-                # Keep the full 3-segment ``<llm_name>@<instance_name>@<provider>``
-                # form produced by the new Tenant LLM Provider UI (#14595);
-                # ``resolve_model_config`` -> ``split_model_name``
-                # downstream requires all three segments.
-                parser_model_name = raw_parse_method
-                parse_method = "SoMark"
 
         # DeepDOC returns structured page boxes directly.
         if parse_method.lower() == "deepdoc":

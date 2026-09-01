@@ -39,12 +39,12 @@ from pathlib import Path
 
 import pytest
 
+from common import parser_config_utils
 from common.parser_config_utils import (
     MINERU_OPTION_KEYS,
     has_mineru_options,
     normalize_layout_recognizer,
 )
-
 
 # --------------------------------------------------------------------------- #
 # has_mineru_options
@@ -104,6 +104,21 @@ def test_normalize_layout_recognizer_passes_stale_uuid_through():
     silently broken."""
     stale_uuid = "06d85f8e819111f1995ef33d60f3a479"
     assert normalize_layout_recognizer(stale_uuid) == (stale_uuid, None)
+
+
+def test_resolve_parser_model_reference_maps_tenant_model_id_to_mineru():
+    model_id = "ac693a468cb711f1a099b70e6206f363"
+    calls = []
+
+    def resolve(reference):
+        calls.append(reference)
+        return "mineru-model@default@MinerU"
+
+    assert parser_config_utils.resolve_parser_model_reference(model_id, resolve) == (
+        "MinerU",
+        "mineru-model@default@MinerU",
+    )
+    assert calls == [model_id]
 
 
 # --------------------------------------------------------------------------- #
@@ -186,6 +201,7 @@ def naive_module():
             MarkdownParser=_Parser,
             PdfParser_module=_Parser,
             TxtParser=_Parser,
+            WpsParser=_Parser,
             RAGFlowPdfParser=_Parser,
             PlainParser=_Parser,
             VisionParser=_Parser,
@@ -216,7 +232,8 @@ def naive_module():
               extract_embed_file=lambda *a, **k: None,
               extract_links_from_pdf=lambda *a, **k: [],
               extract_links_from_docx=lambda *a, **k: [],
-              extract_html=lambda *a, **k: (None, None))
+              extract_html=lambda *a, **k: (None, None),
+              is_docx_package=lambda *_a, **_k: True)
 
         _stub("rag.nlp",
               num_tokens_from_string=lambda s: len((s or "").split()),
