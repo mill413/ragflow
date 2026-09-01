@@ -831,7 +831,7 @@ async def async_chat(dialog, messages, stream=True, **kwargs):
     # Attachments (text or images) are context the model can still answer
     # from, so the configured fallback must not eat the request before the
     # images reach the model.
-    if _empty_response_applies(knowledges, text_attachments_content, image_attachments, image_files) and prompt_config.get("empty_response"):
+    if _empty_response_applies(knowledges, attachments_, image_attachments, image_files) and prompt_config.get("empty_response"):
         empty_res = prompt_config["empty_response"]
         yield {"answer": empty_res, "reference": {}, "prompt": "", "audio_binary": None, "final": False}
         yield {"answer": empty_res, "reference": kbinfos, "prompt": "\n\n### Query:\n%s" % " ".join(questions), "audio_binary": tts(tts_mdl, empty_res), "final": True}
