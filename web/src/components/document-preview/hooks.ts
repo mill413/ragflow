@@ -82,24 +82,6 @@ export const useGetDocumentUrl = (isAgent: boolean) => {
   return url;
 };
 
-export const useCatchError = (api: string) => {
-  const [error, setError] = useState('');
-  const fetchDocument = useCallback(async () => {
-    const ret = await axios.get(api);
-    const { data } = ret;
-    if (!(data instanceof ArrayBuffer) && data.code !== 0) {
-      setError(data.message);
-    }
-    return ret;
-  }, [api]);
-
-  useEffect(() => {
-    fetchDocument();
-  }, [fetchDocument]);
-
-  return { fetchDocument, error };
-};
-
 export const useFetchDocument = () => {
   const fetchDocument = useCallback(async (api: string) => {
     const ret = await axios.get(api, {
@@ -118,7 +100,6 @@ export const useFetchExcel = (filePath: string) => {
   const [status, setStatus] = useState(true);
   const { fetchDocument } = useFetchDocument();
   const containerRef = useRef<HTMLDivElement>(null);
-  const { error } = useCatchError(filePath);
 
   const fetchDocumentAsync = useCallback(async () => {
     let myExcelPreviewer;
@@ -143,7 +124,7 @@ export const useFetchExcel = (filePath: string) => {
     fetchDocumentAsync();
   }, [fetchDocumentAsync]);
 
-  return { status, containerRef, error };
+  return { status, containerRef };
 };
 
 export const useCatchDocumentError = (url: string) => {
