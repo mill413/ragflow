@@ -12,7 +12,6 @@ import { Operator } from '@/pages/agent/constant';
 import OperatorIcon from '@/pages/agent/operator-icon';
 import { t } from 'i18next';
 import { lowerFirst } from 'lodash';
-import { LucidePlus } from 'lucide-react';
 import { PropsWithChildren, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOwnerTenantId } from '@/pages/agent/context';
@@ -71,13 +70,7 @@ function ToolCommandItem({
 }: ToolCommandItemProps & PropsWithChildren) {
   return (
     <CommandItem className="cursor-pointer" onSelect={() => toggleOption(id)}>
-      {id === Operator.Retrieval ? (
-        <span>
-          <LucidePlus className="size-4" />
-        </span>
-      ) : (
-        <Checkbox checked={isSelected} />
-      )}
+      <Checkbox checked={isSelected} />
       {children}
     </CommandItem>
   );
