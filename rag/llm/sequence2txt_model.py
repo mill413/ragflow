@@ -22,7 +22,7 @@ import struct
 from abc import ABC
 import tempfile
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import ClassVar
 from urllib.parse import urlparse
 
@@ -31,6 +31,8 @@ from openai import OpenAI
 from openai.lib.azure import AzureOpenAI
 
 from common.token_utils import num_tokens_from_string
+
+logger = logging.getLogger(__name__)
 from rag.utils.url_utils import append_api_path, ensure_v1
 
 
