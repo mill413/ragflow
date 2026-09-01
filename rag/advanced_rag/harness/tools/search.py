@@ -108,6 +108,18 @@ def _narrow_content(content: str, kwds: list[str]) -> str | None:
     return "..." + _highlight_keywords(narrowed, kwds) + "..."
 
 
+def _is_table_content(content: str) -> bool:
+    """Return whether content contains an HTML or Markdown table.
+
+    Table chunks must remain whole after retrieval: answer-bearing rows often
+    sit in the middle or tail and keyword-window narrowing can hide them.
+    """
+    text = str(content or "")
+    if "<table" in text.lower() or "<tr" in text.lower() or "<td" in text.lower():
+        return True
+    return sum(1 for line in text.splitlines() if line.count("|") >= 2) >= 3
+
+
 def _highlight_keywords(text: str, kwds: list[str]) -> str:
     terms = sorted({kw for kw in kwds if kw}, key=len, reverse=True)
     if not terms:
@@ -133,7 +145,11 @@ def _narrow_by_keywords(chunks: list[dict], keywords: str) -> list[dict]:
             _kwds.append(kwds[i] + " " + kwds[i + 1])
         kwds = _kwds
 
-    scored = [(ck, _narrow_content(ck.get("content_with_weight") or ck.get("content") or "", kwds)) for ck in chunks]
+    scored = []
+    for ck in chunks:
+        content = ck.get("content_with_weight") or ck.get("content") or ""
+        narrowed = "..." + _highlight_keywords(content, kwds) + "..." if _is_table_content(content) else _narrow_content(content, kwds)
+        scored.append((ck, narrowed))
     out: list[dict] = []
     dedup: set[str] = set()
     for ck, nc in scored:

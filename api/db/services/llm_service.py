@@ -545,6 +545,14 @@ class LLMBundle(LLM4Tenant):
                 raise
             if total_tokens:
                 logging.info("LLMBundle.async_chat_streamly used_tokens: %d", total_tokens)
+            split = getattr(self.mdl, "last_usage", None) or {}
+            prompt_tokens = int(split.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(split.get("completion_tokens", 0) or 0)
+            self.mdl.last_usage = {
+                "prompt_tokens": prompt_tokens if prompt_tokens + completion_tokens == total_tokens else 0,
+                "completion_tokens": completion_tokens if prompt_tokens + completion_tokens == total_tokens else 0,
+                "total_tokens": total_tokens,
+            }
             usage_details = self._report_usage(total_tokens)
             if generation:
                 generation.update(output={"output": ans}, usage_details=usage_details)
@@ -592,6 +600,14 @@ class LLMBundle(LLM4Tenant):
                 raise
             if total_tokens:
                 logging.info("LLMBundle.async_chat_streamly_delta used_tokens: %d", total_tokens)
+            split = getattr(self.mdl, "last_usage", None) or {}
+            prompt_tokens = int(split.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(split.get("completion_tokens", 0) or 0)
+            self.mdl.last_usage = {
+                "prompt_tokens": prompt_tokens if prompt_tokens + completion_tokens == total_tokens else 0,
+                "completion_tokens": completion_tokens if prompt_tokens + completion_tokens == total_tokens else 0,
+                "total_tokens": total_tokens,
+            }
             usage_details = self._report_usage(total_tokens)
             if generation:
                 generation.update(output={"output": ans}, usage_details=usage_details)

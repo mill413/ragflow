@@ -215,3 +215,19 @@ async def test_ragtools_retrieve_keeps_its_own_defaults_when_unconfigured(monkey
     assert rec.args[6] == 0.2
     assert rec.kwargs["vector_similarity_weight"] == 0.7
     assert rec.kwargs["knn_top_k"] == 1024
+
+
+def test_keyword_narrowing_keeps_markdown_tables_whole():
+    table = "| rank | athlete |\n| --- | --- |\n| 1 | Alice |\n| 19 | Bob |"
+    chunks = [{"content": table, "content_with_weight": table}]
+
+    narrowed = search_tools._narrow_by_keywords(chunks, "question terms absent from table")
+
+    assert len(narrowed) == 1
+    assert "| 19 | Bob |" in narrowed[0]["content_with_weight"]
+
+
+def test_keyword_narrowing_still_drops_unmatched_prose():
+    chunks = [{"content": "Unrelated prose.", "content_with_weight": "Unrelated prose."}]
+
+    assert search_tools._narrow_by_keywords(chunks, "missing keyword") == []

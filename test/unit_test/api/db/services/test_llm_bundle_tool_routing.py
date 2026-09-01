@@ -102,3 +102,33 @@ def test_model_without_tool_support_still_works():
 def test_model_implementing_neither_raises():
     with pytest.raises(RuntimeError, match="async_chat"):
         _chat(_bundle(object()))
+
+
+class _StreamingModel:
+    is_tools = False
+
+    def __init__(self, split=None):
+        self._split = split
+        self.last_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    async def async_chat_streamly(self, system, history, gen_conf, **kwargs):
+        yield "answer"
+        if self._split is not None:
+            self.last_usage = self._split
+        yield 7
+
+
+async def test_streaming_total_is_preserved_for_phase_accounting():
+    mdl = _StreamingModel()
+    bundle = _bundle(mdl)
+
+    assert [item async for item in bundle.async_chat_streamly("system", [], {})] == ["answer"]
+    assert mdl.last_usage == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 7}
+
+
+async def test_streaming_delta_preserves_consistent_provider_split():
+    mdl = _StreamingModel({"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7})
+    bundle = _bundle(mdl)
+
+    assert [item async for item in bundle.async_chat_streamly_delta("system", [], {})] == ["answer"]
+    assert mdl.last_usage == {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
