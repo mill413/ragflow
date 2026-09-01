@@ -35,7 +35,7 @@ from api.db.services.workspace_service import WorkspaceAccessService
 from api.db.services.workspace_parser_service import WorkspaceParserService
 from api.utils.api_utils import deep_merge, get_parser_config, remap_dictionary_keys, verify_embedding_availability
 from common import settings
-from common.constants import PAGERANK_FLD, FileSource, LLMType, RetCode, StatusEnum, TaskStatus
+from common.constants import PAGERANK_FLD, FileSource, LLMType, StatusEnum, TaskStatus
 from common.misc_utils import thread_pool_exec
 
 _VALID_INDEX_TYPES = {"graph", "raptor", "mindmap", "artifact", "skill"}
