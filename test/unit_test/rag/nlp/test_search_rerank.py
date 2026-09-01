@@ -22,16 +22,22 @@ the ``docs`` strings handed to the reranker model. These tests pin which chunk
 fields end up in that list.
 """
 
+import sys
+import types
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-# `rag.nlp.query` imports `rag.utils.redis_conn`, which imports `common.settings`,
-# which imports `rag.utils.redis_conn` back. That cycle only resolves when
-# `common.settings` is initialised first -- which is what the API server and task
-# executor do at startup, so importing it here reproduces the runtime order.
-import common.settings  # noqa: F401
+# Keep this unit isolated from native tokenizers and configured doc stores.
+_fake_query = types.ModuleType("rag.nlp.query")
+_fake_query.FulltextQueryer = type("FulltextQueryer", (), {})
+sys.modules.setdefault("rag.nlp.query", _fake_query)
+sys.modules.setdefault(
+    "rag.nlp.rag_tokenizer",
+    types.ModuleType("rag.nlp.rag_tokenizer"),
+)
+sys.modules.setdefault("common.settings", types.ModuleType("common.settings"))
 
 from rag.nlp.search import Dealer
 
