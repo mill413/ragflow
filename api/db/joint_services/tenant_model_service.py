@@ -13,15 +13,19 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 #
-import logging
-import os
 import enum
 import json
+import logging
+import os
+
+from api.db.services.shared_model_service import SharedModelService
+from api.db.services.tenant_llm_service import TenantService
+from api.db.services.tenant_model_instance_service import TenantModelInstanceService
+from api.db.services.tenant_model_provider_service import TenantModelProviderService
+from api.db.services.tenant_model_service import TenantModelService
+from api.utils.model_utils import calculate_model_type, get_model_type_human
 from common import settings
 from common.constants import (
-    ActiveStatusEnum,
-    LLMType,
-    ModelTypeBinary,
     MINERU_DEFAULT_CONFIG,
     MINERU_ENV_KEYS,
     OPENDATALOADER_DEFAULT_CONFIG,
@@ -30,13 +34,10 @@ from common.constants import (
     PADDLEOCR_ENV_KEYS,
     SOMARK_DEFAULT_CONFIG,
     SOMARK_ENV_KEYS,
+    ActiveStatusEnum,
+    LLMType,
+    ModelTypeBinary,
 )
-from api.db.services.tenant_llm_service import TenantService
-from api.db.services.tenant_model_provider_service import TenantModelProviderService
-from api.db.services.tenant_model_instance_service import TenantModelInstanceService
-from api.db.services.tenant_model_service import TenantModelService
-from api.db.services.shared_model_service import SharedModelService
-from api.utils.model_utils import calculate_model_type, get_model_type_human
 
 logger = logging.getLogger(__name__)
 
@@ -525,6 +526,20 @@ def get_model_type_by_id(model_id: str):
     if not exist:
         raise LookupError(f"TenantModel id={model_id} not found.")
     return get_model_type_human(model_obj.model_type)
+
+
+def get_composite_model_name_by_id(model_id: str) -> str:
+    """Convert a TenantModel id to ``model@instance@provider``."""
+    exist, model_obj = TenantModelService.get_by_id(model_id)
+    if not exist:
+        raise LookupError(f"TenantModel id={model_id} not found.")
+    ok, instance_obj = TenantModelInstanceService.get_by_id(model_obj.instance_id)
+    if not ok:
+        raise LookupError(f"Instance id={model_obj.instance_id} not found for model id={model_id}.")
+    ok, provider_obj = TenantModelProviderService.get_by_id(model_obj.provider_id)
+    if not ok:
+        raise LookupError(f"Provider id={model_obj.provider_id} not found for model id={model_id}.")
+    return f"{model_obj.model_name}@{instance_obj.instance_name}@{provider_obj.provider_name}"
 
 
 def resolve_model_type(tenant_id: str, model_ref: str):
