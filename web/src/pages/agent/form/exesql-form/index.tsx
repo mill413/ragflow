@@ -109,7 +109,6 @@ export function ExeSQLFormWidgets({ loading }: { loading: boolean }) {
                 {...field}
                 min={MinPort}
                 max={MaxPort}
-                integer
                 className="w-full"
               ></NumberInput>
             </FormControl>
@@ -142,7 +141,6 @@ export function ExeSQLFormWidgets({ loading }: { loading: boolean }) {
                 {...field}
                 min={MinMaxRecords}
                 max={MaxMaxRecords}
-                integer
                 className="w-full"
               ></NumberInput>
             </FormControl>

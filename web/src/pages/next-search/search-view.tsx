@@ -196,7 +196,9 @@ export default function SearchingView({
                 </div>
                 <div className="w-44">
                   <TopSelect
-                    max={searchData.search_config.rerank_candidates_count ?? 100}
+                    max={
+                      searchData.search_config.rerank_candidates_count ?? 100
+                    }
                     value={pageSize}
                     onChange={handleTopChange}
                   ></TopSelect>
@@ -340,7 +342,7 @@ export default function SearchingView({
           visible={visible}
           hideModal={hideModal}
           documentId={documentId}
-          chunk={selectedChunk}
+          chunk={selectedChunk as any}
         ></PdfDrawer>
       )}
     </section>
